@@ -1,0 +1,476 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.joins
+
+import java.util.concurrent.TimeUnit.NANOSECONDS
+import java.util.Optional
+
+import com.huawei.boostkit.spark.ColumnarPluginConfig
+import com.huawei.boostkit.spark.Constant.IS_SKIP_VERIFY_EXP
+import com.huawei.boostkit.spark.expression.OmniExpressionAdaptor
+import com.huawei.boostkit.spark.expression.OmniExpressionAdaptor.{checkOmniJsonWhiteList, isSimpleColumn, isSimpleColumnForAll}
+import com.huawei.boostkit.spark.util.OmniAdaptorUtil
+import com.huawei.boostkit.spark.util.OmniAdaptorUtil.{getExprIdForProjectList, getIndexArray, getProjectListIndex,pruneOutput, reorderOutputVecs, transColBatchToOmniVecs}
+import nova.hetu.omniruntime.`type`.DataType
+import nova.hetu.omniruntime.constants.JoinType._
+import nova.hetu.omniruntime.operator.config.{OperatorConfig, OverflowConfig, SpillConfig}
+import nova.hetu.omniruntime.operator.join.{OmniSmjBufferedTableWithExprOperatorFactory, OmniSmjStreamedTableWithExprOperatorFactory}
+import nova.hetu.omniruntime.vector.{BooleanVec, Decimal128Vec, DoubleVec, IntVec, LongVec, VarcharVec, Vec, VecBatch, ShortVec}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.util.{MergeIterator, SparkMemoryUtils}
+import org.apache.spark.sql.execution.vectorized.OmniColumnVector
+import org.apache.spark.sql.vectorized.ColumnarBatch
+
+/**
+ * Performs a sort merge join of two child relations.
+ */
+case class ColumnarSortMergeJoinExec(
+    leftKeys: Seq[Expression],
+    rightKeys: Seq[Expression],
+    joinType: JoinType,
+    condition: Option[Expression],
+    left: SparkPlan,
+    right: SparkPlan,
+    isSkewJoin: Boolean = false,
+    projectList: Seq[NamedExpression] = Seq.empty)
+  extends ShuffledJoin with CodegenSupport {
+
+  override def supportsColumnar: Boolean = true
+
+  override def supportCodegen: Boolean = false
+
+  override def nodeName: String = {
+    if (isSkewJoin) "OmniColumnarSortMergeJoin(skew=true)" else "OmniColumnarSortMergeJoin"
+  }
+
+  override protected def withNewChildrenInternal(newLeft: SparkPlan,
+                                                 newRight: SparkPlan):
+    ColumnarSortMergeJoinExec = copy(left = newLeft, right = newRight)
+
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    if (isSkewJoin) {
+      UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
+    } else {
+      super.requiredChildDistribution
+    }
+  }
+
+  override def outputOrdering: Seq[SortOrder] = joinType match {
+    case _: InnerLike =>
+      val leftKeyOrdering = getKeyOrdering(leftKeys, left.outputOrdering)
+      val rightKeyOrdering = getKeyOrdering(rightKeys, right.outputOrdering)
+      leftKeyOrdering.zip(rightKeyOrdering).map { case (lKey, rKey) =>
+        val sameOrderExpressions = ExpressionSet(lKey.sameOrderExpressions ++ rKey.children)
+        SortOrder(lKey.child, Ascending, sameOrderExpressions.toSeq)
+      }
+    case LeftOuter => getKeyOrdering(leftKeys, left.outputOrdering)
+    case RightOuter => getKeyOrdering(rightKeys, right.outputOrdering)
+    case FullOuter => Nil
+    case LeftExistence(_) => getKeyOrdering(leftKeys, left.outputOrdering)
+    case x =>
+      throw new IllegalArgumentException(
+        s"${getClass.getSimpleName} should not take $x as the JoinType")
+  }
+
+  private def getKeyOrdering(keys: Seq[Expression], childOutputOrdering: Seq[SortOrder])
+    : Seq[SortOrder] = {
+    val requiredOrdering = requiredOrders(keys)
+    if (SortOrder.orderingSatisfies(childOutputOrdering, requiredOrdering)) {
+      keys.zip(childOutputOrdering).map { case (key, childOrder) =>
+        val sameOrderExpressionSet = ExpressionSet(childOrder.children) - key
+        SortOrder(key, Ascending, sameOrderExpressionSet.toSeq)
+      }
+    } else {
+      requiredOrdering
+    }
+  }
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
+
+  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
+    keys.map(SortOrder(_, Ascending))
+  }
+
+  override def output : Seq[Attribute] = {
+    if (projectList.nonEmpty) {
+      projectList.map(_.toAttribute)
+    } else {
+      super[ShuffledJoin].output
+    }
+  }
+
+  override def needCopyResult: Boolean = true
+
+  val SMJ_NEED_ADD_STREAM_TBL_DATA = 2
+  val SMJ_NEED_ADD_BUFFERED_TBL_DATA = 3
+  val SCAN_FINISH = 4
+
+  val RES_INIT = 0
+  val SMJ_FETCH_JOIN_DATA = 5
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "streamedAddInputTime" ->
+      SQLMetrics.createTimingMetric(sparkContext, "time in omni streamed addInput"),
+    "streamedCodegenTime" ->
+      SQLMetrics.createTimingMetric(sparkContext, "time in omni streamed codegen"),
+    "bufferedAddInputTime" ->
+      SQLMetrics.createTimingMetric(sparkContext, "time in omni buffered addInput"),
+    "bufferedCodegenTime" ->
+      SQLMetrics.createTimingMetric(sparkContext, "time in omni buffered codegen"),
+    "getOutputTime" ->
+      SQLMetrics.createTimingMetric(sparkContext, "time in omni buffered getOutput"),
+    "numOutputVecBatches" ->
+      SQLMetrics.createMetric(sparkContext, "number of output vecBatches"),
+    "numMergedVecBatches" -> SQLMetrics.createMetric(sparkContext, "number of merged vecBatches"),
+    "numStreamVecBatches" -> SQLMetrics.createMetric(sparkContext, "number of streamed vecBatches"),
+    "numBufferVecBatches" -> SQLMetrics.createMetric(sparkContext, "number of buffered vecBatches")
+  )
+
+  override def verboseStringWithOperatorId(): String = {
+    val joinCondStr = if (condition.isDefined) {
+      s"${condition.get}${condition.get.dataType}"
+    } else "None"
+    
+    s"""
+       |$formattedNodeName
+       |$simpleStringWithNodeId
+       |${ExplainUtils.generateFieldString("Stream input", left.output ++ left.output.map(_.dataType))}
+       |${ExplainUtils.generateFieldString("Buffer input", right.output ++ right.output.map(_.dataType))}
+       |${ExplainUtils.generateFieldString("Left keys", leftKeys ++ leftKeys.map(_.dataType))}
+       |${ExplainUtils.generateFieldString("Right keys", rightKeys ++ rightKeys.map(_.dataType))}
+       |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
+       |${ExplainUtils.generateFieldString("Project List", projectList ++ projectList.map(_.dataType))}
+       |${ExplainUtils.generateFieldString("Output", output ++ output.map(_.dataType))}
+       |Condition : $condition
+       |""".stripMargin
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = {
+     throw new UnsupportedOperationException(s"This operator doesn't support doExecute.")
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+     throw new UnsupportedOperationException(s"This operator doesn't support doProduce.")
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    left.execute() :: right.execute() :: Nil
+  }
+
+  def buildCheck(): Unit = {
+    joinType match {
+      case Inner | LeftOuter | FullOuter | LeftSemi | LeftAnti =>
+      // SMJ join support Inner | LeftOuter | FullOuter | LeftSemi | LeftAnti
+      case _ =>
+        throw new UnsupportedOperationException(s"Join-type[${joinType}] is not supported " +
+          s"in ${this.nodeName}")
+    }
+
+    val streamedTypes = new Array[DataType](left.output.size)
+    left.output.zipWithIndex.foreach { case (attr, i) =>
+      streamedTypes(i) = OmniExpressionAdaptor.sparkTypeToOmniType(attr.dataType, attr.metadata)
+    }
+    val streamOutputExprIdMap = OmniExpressionAdaptor.getExprIdMap(left.output.map(_.toAttribute))
+    val streamedKeyColsExp: Array[AnyRef] = leftKeys.map { x =>
+      OmniExpressionAdaptor.rewriteToOmniJsonExpressionLiteral(x, streamOutputExprIdMap)
+    }.toArray
+
+    val bufferedTypes = new Array[DataType](right.output.size)
+    right.output.zipWithIndex.foreach { case (attr, i) =>
+      bufferedTypes(i) = OmniExpressionAdaptor.sparkTypeToOmniType(attr.dataType, attr.metadata)
+    }
+    val bufferOutputExprIdMap = OmniExpressionAdaptor.getExprIdMap(right.output.map(_.toAttribute))
+    val bufferedKeyColsExp: Array[AnyRef] = rightKeys.map { x =>
+      OmniExpressionAdaptor.rewriteToOmniJsonExpressionLiteral(x, bufferOutputExprIdMap)
+    }.toArray
+
+    if (!isSimpleColumnForAll(streamedKeyColsExp.map(expr => expr.toString))) {
+      checkOmniJsonWhiteList("", streamedKeyColsExp)
+    }
+
+    if (!isSimpleColumnForAll(bufferedKeyColsExp.map(expr => expr.toString))) {
+      checkOmniJsonWhiteList("", bufferedKeyColsExp)
+    }
+
+    condition match {
+      case Some(expr) =>
+        val filterExpr: String = OmniExpressionAdaptor.rewriteToOmniJsonExpressionLiteral(expr,
+          OmniExpressionAdaptor.getExprIdMap((left.output ++ right.output).map(_.toAttribute)))
+        if (!isSimpleColumn(filterExpr)) {
+          checkOmniJsonWhiteList(filterExpr, new Array[AnyRef](0))
+        }
+      case _ => null
+    }
+  }
+
+  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val numOutputRows = longMetric("numOutputRows")
+    val numOutputVecBatches= longMetric("numOutputVecBatches")
+    val numMergedVecBatches= longMetric("numMergedVecBatches")
+    val streamedAddInputTime = longMetric("streamedAddInputTime")
+    val streamedCodegenTime = longMetric("streamedCodegenTime")
+    val bufferedAddInputTime = longMetric("bufferedAddInputTime")
+    val bufferedCodegenTime = longMetric("bufferedCodegenTime")
+    val getOutputTime = longMetric("getOutputTime")
+    val streamVecBatches= longMetric("numStreamVecBatches")
+    val bufferVecBatches= longMetric("numBufferVecBatches")
+
+    val streamedTypes = new Array[DataType](left.output.size)
+    left.output.zipWithIndex.foreach { case (attr, i) =>
+      streamedTypes(i) = OmniExpressionAdaptor.sparkTypeToOmniType(attr.dataType, attr.metadata)
+    }
+    val streamOutputExprIdMap = OmniExpressionAdaptor.getExprIdMap(left.output.map(_.toAttribute))
+    val streamedKeyColsExp = leftKeys.map { x =>
+      OmniExpressionAdaptor.rewriteToOmniJsonExpressionLiteral(x, streamOutputExprIdMap)
+    }.toArray
+    val projectExprIdList = getExprIdForProjectList(projectList)
+    val streamedOutputChannel = getIndexArray(left.output, projectExprIdList)
+
+    val bufferedTypes = new Array[DataType](right.output.size)
+    right.output.zipWithIndex.foreach { case (attr, i) =>
+      bufferedTypes(i) = OmniExpressionAdaptor.sparkTypeToOmniType(attr.dataType, attr.metadata)
+    }
+    val bufferOutputExprIdMap = OmniExpressionAdaptor.getExprIdMap(right.output.map(_.toAttribute))
+    val bufferedKeyColsExp = rightKeys.map { x =>
+      OmniExpressionAdaptor.rewriteToOmniJsonExpressionLiteral(x, bufferOutputExprIdMap)
+    }.toArray
+    val bufferedOutputChannel: Array[Int] = joinType match {
+      case Inner | LeftOuter | FullOuter =>
+        getIndexArray(right.output, projectExprIdList)
+      case LeftExistence(_) =>
+        Array[Int]()
+      case x =>
+        throw new UnsupportedOperationException(s"ColumnSortMergeJoin Join-type[$x] is not supported!")
+    }
+
+    val filterString: String = condition match {
+      case Some(expr) =>
+        OmniExpressionAdaptor.rewriteToOmniJsonExpressionLiteral(expr,
+          OmniExpressionAdaptor.getExprIdMap((left.output ++ right.output).map(_.toAttribute)))
+      case _ => null
+    }
+    val prunedStreamOutput = pruneOutput(left.output, projectExprIdList)
+    val prunedBufferOutput = pruneOutput(right.output, projectExprIdList)
+    val projectListIndex = getProjectListIndex(projectExprIdList, prunedStreamOutput, prunedBufferOutput)
+
+    left.executeColumnar().zipPartitions(right.executeColumnar()) { (streamedIter, bufferedIter) =>
+      val filter: Optional[String] = Optional.ofNullable(filterString)
+      val startStreamedCodegen = System.nanoTime()
+      val lookupJoinType = OmniExpressionAdaptor.toOmniJoinType(joinType)
+      val streamedOpFactory = new OmniSmjStreamedTableWithExprOperatorFactory(streamedTypes,
+        streamedKeyColsExp, streamedOutputChannel, lookupJoinType, filter,
+        new OperatorConfig(SpillConfig.NONE,
+          new OverflowConfig(OmniAdaptorUtil.overflowConf()), IS_SKIP_VERIFY_EXP))
+
+      val streamedOp = streamedOpFactory.createOperator
+      streamedCodegenTime += NANOSECONDS.toMillis(System.nanoTime() - startStreamedCodegen)
+
+      val startBufferedCodegen = System.nanoTime()
+      val bufferedOpFactory = new OmniSmjBufferedTableWithExprOperatorFactory(bufferedTypes,
+        bufferedKeyColsExp, bufferedOutputChannel, streamedOpFactory,
+        new OperatorConfig(SpillConfig.NONE,
+          new OverflowConfig(OmniAdaptorUtil.overflowConf()), IS_SKIP_VERIFY_EXP))
+      val bufferedOp = bufferedOpFactory.createOperator
+      bufferedCodegenTime += NANOSECONDS.toMillis(System.nanoTime() - startBufferedCodegen)
+
+      // close operator
+      SparkMemoryUtils.addLeakSafeTaskCompletionListener[Unit](_ => {
+        streamedOp.close()
+        bufferedOp.close()
+        bufferedOpFactory.close()
+        streamedOpFactory.close()
+      })
+
+      val resultSchema = this.schema
+      val columnarConf: ColumnarPluginConfig = ColumnarPluginConfig.getSessionConf
+      val enableSortMergeJoinBatchMerge: Boolean = columnarConf.enableSortMergeJoinBatchMerge
+      val iterBatch = new Iterator[ColumnarBatch] {
+
+        var isFinished : Boolean = joinType match {
+          case Inner | LeftSemi => !streamedIter.hasNext || !bufferedIter.hasNext
+          case LeftOuter | LeftAnti => !streamedIter.hasNext
+          case FullOuter => !(streamedIter.hasNext || bufferedIter.hasNext)
+          case x =>
+            throw new UnsupportedOperationException(s"ColumnSortMergeJoin Join-type[$x] is not supported!")
+        }
+
+        var isStreamedFinished = false
+        var isBufferedFinished = false
+        var results: java.util.Iterator[VecBatch] = null
+        var flowControlCode: Int = SMJ_NEED_ADD_STREAM_TBL_DATA
+        var resCode: Int = RES_INIT
+
+        def checkAndClose() : Unit = {
+          while (streamedIter.hasNext) {
+            streamVecBatches+= 1
+            streamedIter.next().close()
+          }
+          while(bufferedIter.hasNext) {
+            bufferVecBatches+= 1
+            bufferedIter.next().close()
+          }
+        }
+
+        // FLOW_CONTROL_CODE has 3 values: 2,3,4
+        // 2-> add streamTable data
+        // 3-> add buffedTable data
+        // 4-> streamTable and buffedTable scan is finished
+        // RES_CODE has 2 values: 0,5
+        // 0-> init status code, it means no result to fetch
+        // 5-> operator produced result data, we should fetch data
+        def decodeOpStatus(code: Int): Unit = {
+          flowControlCode = code >> 16
+          resCode = code & 0xFFFF
+        }
+
+        override def hasNext: Boolean = {
+          if (isFinished) {
+            checkAndClose()
+            return false
+          }
+          if (results != null && results.hasNext) {
+            return true
+          }
+          // reset results and RES_CODE
+          results = null
+          resCode = RES_INIT
+          // add data until operator produce results or scan is finished
+          while (resCode == RES_INIT && flowControlCode != SCAN_FINISH){
+            if (flowControlCode == SMJ_NEED_ADD_STREAM_TBL_DATA) {
+              val startBuildStreamedInput = System.nanoTime()
+              if (!isStreamedFinished && streamedIter.hasNext) {
+                val batch = streamedIter.next()
+                streamVecBatches+= 1
+                val inputVecBatch = transColBatchToVecBatch(batch)
+                decodeOpStatus(streamedOp.addInput(inputVecBatch))
+              } else {
+                decodeOpStatus(streamedOp.addInput(createEofVecBatch(streamedTypes)))
+                isStreamedFinished = true
+              }
+              streamedAddInputTime +=
+                NANOSECONDS.toMillis(System.nanoTime() - startBuildStreamedInput)
+            } else {
+              val startBuildBufferedInput = System.nanoTime()
+              if (!isBufferedFinished && bufferedIter.hasNext) {
+                val batch = bufferedIter.next()
+                bufferVecBatches+= 1
+                val inputVecBatch = transColBatchToVecBatch(batch)
+                decodeOpStatus(bufferedOp.addInput(inputVecBatch))
+              } else {
+                decodeOpStatus(bufferedOp.addInput(createEofVecBatch(bufferedTypes)))
+                isBufferedFinished = true
+              }
+              bufferedAddInputTime +=
+                NANOSECONDS.toMillis(System.nanoTime() - startBuildBufferedInput)
+            }
+          }
+          if (resCode == SMJ_FETCH_JOIN_DATA) {
+            val startGetOutputTime = System.nanoTime()
+            results = bufferedOp.getOutput
+            val hasNext = results.hasNext
+            getOutputTime += NANOSECONDS.toMillis(System.nanoTime() - startGetOutputTime)
+            return hasNext
+          }
+
+          if (flowControlCode == SCAN_FINISH) {
+            isFinished = true
+            results = null
+            checkAndClose()
+            return false
+          }
+
+          throw new UnsupportedOperationException(s"Unknown return code ${flowControlCode},${resCode} ")
+        }
+
+        override def next(): ColumnarBatch = {
+          val startGetOutputTime = System.nanoTime()
+          val result = results.next()
+          getOutputTime += NANOSECONDS.toMillis(System.nanoTime() - startGetOutputTime)
+          val resultVecs = result.getVectors
+          val vecs = OmniColumnVector.allocateColumns(result.getRowCount, resultSchema, false)
+          if (projectList.nonEmpty) {
+            reorderOutputVecs(projectListIndex, resultVecs, vecs)
+          } else {
+            for (index <- output.indices) {
+              val v = vecs(index)
+              v.reset()
+              v.setVec(resultVecs(index))
+            }
+          }
+          numOutputVecBatches+= 1
+          numOutputRows += result.getRowCount
+          result.close()
+          new ColumnarBatch(vecs.toArray, result.getRowCount)
+        }
+
+        def createEofVecBatch(types: Array[DataType]): VecBatch = {
+          val vecs: Array[Vec] = new Array[Vec](types.length)
+          for (i <- types.indices) {
+            vecs(i) = types(i).getId match {
+              case DataType.DataTypeId.OMNI_INT | DataType.DataTypeId.OMNI_DATE32 =>
+                new IntVec(0)
+              case DataType.DataTypeId.OMNI_LONG | DataType.DataTypeId.OMNI_DECIMAL64 | DataType.DataTypeId.OMNI_TIMESTAMP =>
+                new LongVec(0)
+              case DataType.DataTypeId.OMNI_DOUBLE =>
+                new DoubleVec(0)
+              case DataType.DataTypeId.OMNI_BOOLEAN =>
+                new BooleanVec(0)
+              case DataType.DataTypeId.OMNI_CHAR | DataType.DataTypeId.OMNI_VARCHAR =>
+                new VarcharVec(0)
+              case DataType.DataTypeId.OMNI_DECIMAL128 =>
+                new Decimal128Vec(0)
+              case DataType.DataTypeId.OMNI_SHORT =>
+                new ShortVec(0)
+              case _ =>
+                throw new IllegalArgumentException(s"VecType [${types(i).getClass.getSimpleName}]" +
+                  s" is not supported in [${getClass.getSimpleName}] yet")
+            }
+          }
+          new VecBatch(vecs, 0)
+        }
+
+        def transColBatchToVecBatch(columnarBatch: ColumnarBatch): VecBatch = {
+          val input = transColBatchToOmniVecs(columnarBatch)
+          new VecBatch(input, columnarBatch.numRows())
+        }
+      }
+
+      if (enableSortMergeJoinBatchMerge) {
+        val mergeIterator = new MergeIterator(iterBatch, resultSchema, numMergedVecBatches)
+        SparkMemoryUtils.addLeakSafeTaskCompletionListener[Unit](_ => {
+          mergeIterator.close()
+        })
+        mergeIterator
+      } else {
+        iterBatch
+      }
+    }
+  }
+}
