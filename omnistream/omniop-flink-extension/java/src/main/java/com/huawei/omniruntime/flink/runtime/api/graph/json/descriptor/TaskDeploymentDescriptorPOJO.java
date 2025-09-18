@@ -21,7 +21,7 @@ import java.util.Objects;
  */
 
 public class TaskDeploymentDescriptorPOJO {
-    private JobIDPOJO jobId;Y1
+    private JobIDPOJO jobId;
     private List<ResultPartitionDeploymentDescriptorPOJO> producedPartitions;
     @JsonInclude(JsonInclude.Include.ALWAYS)
     private List<InputGateDeploymentDescriptorPOJO> inputGates;
