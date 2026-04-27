@@ -145,11 +145,6 @@ public class RemoteDataFetcher implements Runnable {
                         int bufferLength = bufferAndAvailability.buffer().getSize();
                         int sequenceNumber = bufferAndAvailability.getSequenceNumber();
                         if (!isBuffer) {
-                            if (dataType == Buffer.DataType.RECOVERY_COMPLETION) {
-                                LOG.info("!!!!!! Skipping recovery completion event for task: {}", taskName);
-                                remoteInputChannel.resumeConsumption();
-                                return true; // Skip recovery completion events
-                            }
                             ByteBuffer byteBuffer = ByteBuffer.allocateDirect(bufferLength);
                             byte[] heapArr = buffer.getMemorySegment().getArray();
                             byteBuffer.put(heapArr, buffer.getMemorySegmentOffset(), bufferLength);

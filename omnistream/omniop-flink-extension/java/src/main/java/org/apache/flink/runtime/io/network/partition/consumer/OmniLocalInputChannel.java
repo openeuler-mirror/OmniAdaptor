@@ -114,12 +114,6 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                     }
                     ByteBuffer byteBuffer = ByteBuffer.allocateDirect(length);
                     byte[] heapArr = memorySegment.getArray();
-                    if (heapArr.length >= 3 && heapArr[3] == 7) {
-                        if (ba.moreAvailable()) {
-                            doGetNextBuffer();
-                        }
-                        return;
-                    }
                     if (heapArr.length >= 3 && heapArr[3] == 8) {
                         getSubpartitionView().acknowledgeAllDataProcessed();
                     }
