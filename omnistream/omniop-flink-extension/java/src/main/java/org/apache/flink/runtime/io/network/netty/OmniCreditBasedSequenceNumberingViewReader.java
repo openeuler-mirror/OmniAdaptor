@@ -98,7 +98,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
      */
     public void initDirectBuffers() {
         // the init outputBuffer size  with an initial size of 128
-        // [ elementNum(default 10) * (elementAddress + elementLength+memoryType[vectorBatch:0,memorySegment:1])  10 * (8+4+4) = 160 powerOfTwo(160) = 256 ]
+        // [ elementNum(default 10) * (memorySegmentAddress+elementAddress + elementLength+memoryType[vectorBatch:0,memorySegment:1,event:2])  10 * (8+8+4+4) = 240 powerOfTwo(240) = 256 ]
         // in the future maybe we can change the size of outputBuffer dynamically,
         // but  for the vectorBatch data type scenario,
         // the fixed size of outputBuffer  is not a problem
@@ -400,10 +400,16 @@ public class OmniCreditBasedSequenceNumberingViewReader
     private InputChannel.BufferAndAvailability doGetNextBuffer() throws IOException {
         if (!bufferInfos.isEmpty()) {
             flushed = false;
-            BufferInfo bufferInfo = bufferInfos.remove(0);
-            if (bufferInfo.networkBuffer.isBuffer() && --numCreditsAvailable < 0) {
-                throw new IllegalStateException("no credit available");
+            BufferInfo bufferInfo = bufferInfos.get(0);
+            if (bufferInfo.networkBuffer.isBuffer()) {
+                if(numCreditsAvailable == 0){
+                    throw new IllegalStateException("no credit available");
+                }else {
+                    numCreditsAvailable--;
+                }
             }
+            //remove the element from bufferInfos
+            bufferInfos.remove(0);
             Buffer.DataType nextDataType = bufferInfos.size() > 0 ? Buffer.DataType.DATA_BUFFER : Buffer.DataType.NONE;
 
             return new InputChannel.BufferAndAvailability(
@@ -421,15 +427,13 @@ public class OmniCreditBasedSequenceNumberingViewReader
         outputBuffer.order(ByteOrder.LITTLE_ENDIAN);
         // decode the buffer
         for (int i = 0; i < readElementNum; i++) {
-            long address = outputBuffer.getLong();
+            long  nativeMemorySegmentAddress = outputBuffer.getLong();
+            long dataAddress = outputBuffer.getLong();
             int length = outputBuffer.getInt();
-            int memoryType = outputBuffer.getInt(); // 0 for vectorBatch, 1 for memorySegment
-            if (memoryType == 0) {
-                // vectorBatch
-                doDecodeVectorBatchBuffer(address, length);
-            } else if (memoryType == 1 || memoryType == 2) {
-                // memorySegment
-                doDecodeMemorySegmentBuffer(address, length, memoryType);
+            int memoryType = outputBuffer.getInt();
+            // 0 for vectorBatch, 1 for memorySegment 2 for event data
+            if (memoryType == 0 || memoryType == 1 || memoryType == 2) {
+                doDecodeVectorBatchBufferOrMemorySegmentBuffer(nativeMemorySegmentAddress,dataAddress, length,memoryType);
             } else {
                 LOG.error("Unknown memory type: {} for task: {} ## {}", memoryType,
                         taskName.substring(0, 15), subPartitionIndex);
@@ -438,60 +442,61 @@ public class OmniCreditBasedSequenceNumberingViewReader
         // reset the outputBuffer
         outputBuffer.clear();
     }
-    
-    
-    private void doDecodeVectorBatchBuffer(long address, int length) {
-        // this means this is an event
-        if (address == -1) {
-            int eventType = length;
-            AbstractEvent event = getEventById(eventType);
-            LOG.info("[{}###{}]----------------got a event with Event type: {} for natve ref {}",
-                    taskName.substring(0, 15), subPartitionIndex, event,
-                    nativeCreditBasedSequenceNumberingViewReaderRef);
-            
-            try {
-                ByteBuffer eventBuffer = EventSerializer.toSerializedEvent(event);
-                MemorySegment memorySegment = MemorySegmentFactory.wrap(eventBuffer.array());
-                NetworkBuffer buffer = new NetworkBuffer(memorySegment, FreeingBufferRecycler.INSTANCE,
-                        Buffer.DataType.EVENT_BUFFER);
-                buffer.setReaderIndex(0);
-                buffer.setSize(eventBuffer.remaining());
-                bufferInfos.add(new BufferInfo(buffer, address, length));
-            } catch (IOException e) {
-                LOG.error("{}", taskName, e);
-            }
-        } else {
-            ByteBuffer resultBuffer = MemoryUtils.wrapUnsafeMemoryWithByteBuffer(address, length);
-            resultBuffer.order(ByteOrder.BIG_ENDIAN);
-            MemorySegment memorySegment = MemorySegmentFactory.wrapOffHeapMemory(resultBuffer);
-            NativeBufferRecycler nativeBufferRecycler =
-                    NativeBufferRecycler.getInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
-            nativeBufferRecycler.registerMemorySegment(memorySegment, address);
-            
-            NetworkBuffer buffer = new NetworkBuffer(memorySegment, nativeBufferRecycler);
-            
-            buffer.setReaderIndex(0);
-            buffer.setSize(length);
-            bufferInfos.add(new BufferInfo(buffer, address, length));
-        }
-    }
 
-    private void doDecodeMemorySegmentBuffer(long address, int length,int memoryType) {
-        MemorySegment memorySegment = MemorySegmentFactory.wrapOffHeapMemory(
-                MemoryUtils.wrapUnsafeMemoryWithByteBuffer(address, length));
-        NativeBufferRecycler nativeBufferRecycler =
-                NativeNetworkBufferRecycler.getInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
-        nativeBufferRecycler.registerMemorySegment(memorySegment, address);
-        
+
+    private void doDecodeVectorBatchBufferOrMemorySegmentBuffer(long nativeMemorySegmentAddress,long dataAddress, int length,int memoryType) {
+        ByteBuffer resultBuffer = MemoryUtils.wrapUnsafeMemoryWithByteBuffer(dataAddress, length);
+        resultBuffer.order(ByteOrder.BIG_ENDIAN);
+        MemorySegment memorySegment = MemorySegmentFactory.wrapOffHeapMemory(resultBuffer);
+
+        NativeBufferRecycler nativeBufferRecycler  = null;
+        if(memoryType == 0) {
+            nativeBufferRecycler = NativeBufferRecycler.getInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
+        }else {
+            nativeBufferRecycler = NativeNetworkBufferRecycler.getInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
+        }
+        nativeBufferRecycler.registerMemorySegment(memorySegment, nativeMemorySegmentAddress);
+
         NetworkBuffer buffer = new NetworkBuffer(memorySegment, nativeBufferRecycler);
-        buffer.order(ByteOrder.BIG_ENDIAN);
         if(memoryType == 2) {
             buffer.setDataType(Buffer.DataType.EVENT_BUFFER);
         }
         buffer.setReaderIndex(0);
         buffer.setSize(length);
-        bufferInfos.add(new BufferInfo(buffer, address, length));
+        bufferInfos.add(new BufferInfo(buffer, dataAddress, length));
     }
+
+//    private void doDecodeVectorBatchBuffer(long nativeMemorySegmentAddress,long dataAddress, int length) {
+//            ByteBuffer resultBuffer = MemoryUtils.wrapUnsafeMemoryWithByteBuffer(dataAddress, length);
+//            resultBuffer.order(ByteOrder.BIG_ENDIAN);
+//            MemorySegment memorySegment = MemorySegmentFactory.wrapOffHeapMemory(resultBuffer);
+//            NativeBufferRecycler nativeBufferRecycler =
+//                    NativeBufferRecycler.getInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
+//            nativeBufferRecycler.registerMemorySegment(memorySegment, nativeMemorySegmentAddress);
+//
+//            NetworkBuffer buffer = new NetworkBuffer(memorySegment, nativeBufferRecycler);
+//
+//            buffer.setReaderIndex(0);
+//            buffer.setSize(length);
+//            bufferInfos.add(new BufferInfo(buffer, dataAddress, length));
+//    }
+//
+//    private void doDecodeMemorySegmentBuffer(long address, int length,int memoryType) {
+//        MemorySegment memorySegment = MemorySegmentFactory.wrapOffHeapMemory(
+//                MemoryUtils.wrapUnsafeMemoryWithByteBuffer(address, length));
+//        NativeBufferRecycler nativeBufferRecycler =
+//                NativeNetworkBufferRecycler.getInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
+//        nativeBufferRecycler.registerMemorySegment(memorySegment, address);
+//
+//        NetworkBuffer buffer = new NetworkBuffer(memorySegment, nativeBufferRecycler);
+//        buffer.order(ByteOrder.BIG_ENDIAN);
+//        if(memoryType == 2) {
+//            buffer.setDataType(Buffer.DataType.EVENT_BUFFER);
+//        }
+//        buffer.setReaderIndex(0);
+//        buffer.setSize(length);
+//        bufferInfos.add(new BufferInfo(buffer, address, length));
+//    }
 
     private AbstractEvent getEventById(int type) {
         if (type == 0) {
