@@ -308,7 +308,8 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                         createTransformationMeta(DEDUPLICATE_TRANSFORMATION, config),
                         operator,
                         rowTypeInfo,
-                        inputTransform.getParallelism());
+                        inputTransform.getParallelism(),
+                        false);
 
         final RowDataKeySelector selector =
                 KeySelectorUtil.getRowDataSelector(

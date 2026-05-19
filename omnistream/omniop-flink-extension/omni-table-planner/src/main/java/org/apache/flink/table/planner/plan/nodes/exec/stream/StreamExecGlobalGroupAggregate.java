@@ -333,7 +333,8 @@ public class StreamExecGlobalGroupAggregate extends StreamExecAggregateBase {
                         createTransformationMeta(GLOBAL_GROUP_AGGREGATE_TRANSFORMATION, config),
                         operator,
                         InternalTypeInfo.of(getOutputType()),
-                        inputTransform.getParallelism());
+                        inputTransform.getParallelism(),
+                        false);
 
         // set KeyType and Selector for state
         final RowDataKeySelector selector =
