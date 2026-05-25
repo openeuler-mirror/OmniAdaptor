@@ -142,6 +142,9 @@ public class RemoteDataFetcher implements Runnable {
                         // sent buffer to C++ side
                         boolean isBuffer = buffer.isBuffer();
                         int bufferType = isBuffer ? 0 : 1;
+                        if (bufferType == 1 && buffer.getDataType().isBlockingUpstream()) {
+                            bufferType++;
+                        }
                         int bufferLength = bufferAndAvailability.buffer().getSize();
                         int sequenceNumber = bufferAndAvailability.getSequenceNumber();
                         if (!isBuffer) {
