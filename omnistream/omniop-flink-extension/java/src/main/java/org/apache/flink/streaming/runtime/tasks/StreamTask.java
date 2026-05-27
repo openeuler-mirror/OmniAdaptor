@@ -95,6 +95,8 @@ import org.apache.flink.streaming.runtime.io.StreamInputProcessor;
 import org.apache.flink.streaming.runtime.io.checkpointing.BarrierAlignmentUtil;
 import org.apache.flink.streaming.runtime.io.checkpointing.CheckpointBarrierHandler;
 import org.apache.flink.streaming.runtime.partitioner.ConfigurableStreamPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.RebalancePartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.mailbox.GaugePeriodTimer;
@@ -491,6 +493,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
             this.subtaskCheckpointCoordinator =
                     new SubtaskCheckpointCoordinatorImpl(
+                            checkpointStorage,
                             checkpointStorageAccess,
                             getName(),
                             actionExecutor,
@@ -504,8 +507,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
                                             ExecutionCheckpointingOptions
                                                     .ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH),
                             this::prepareInputSnapshot,
+                            configuration.getMaxConcurrentCheckpoints(),
                             BarrierAlignmentUtil.createRegisterTimerCallback(
-                                    mainMailboxExecutor, systemTimerService));
+                                    mainMailboxExecutor, systemTimerService),
+                            configuration.getMaxSubtasksPerChannelStateFile());
             resourceCloser.registerCloseable(subtaskCheckpointCoordinator::close);
 
             // Register to stop all timers and threads. Should be closed first.
@@ -581,9 +586,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
         DataInputStatus status = inputProcessor.processInput();
         switch (status) {
             case MORE_AVAILABLE:
-                if (recordWriter.isAvailable()
-                        && (changelogWriterAvailabilityProvider == null
-                        || changelogWriterAvailabilityProvider.isAvailable())) {
+                if (taskIsAvailable()) {
                     return;
                 }
                 break;
@@ -1029,6 +1032,16 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
     public MailboxExecutorFactory getMailboxExecutorFactory() {
         return this.mailboxProcessor::getMailboxExecutor;
+    }
+
+    private boolean taskIsAvailable() {
+        return recordWriter.isAvailable()
+                && (changelogWriterAvailabilityProvider == null
+                        || changelogWriterAvailabilityProvider.isAvailable());
+    }
+
+    public CanEmitBatchOfRecordsChecker getCanEmitBatchOfRecords() {
+        return () -> !this.mailboxProcessor.hasMail() && taskIsAvailable();
     }
 
     public final boolean isRunning() {
@@ -1648,6 +1661,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
         int index = 0;
         for (NonChainedOutput streamOutput : outputsInOrder) {
+            replaceForwardPartitionerIfConsumerParallelismDoesNotMatch(
+                    environment, streamOutput, index);
             recordWriters.add(
                     createRecordWriter(
                             streamOutput,
@@ -1657,6 +1672,18 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
                             streamOutput.getBufferTimeout()));
         }
         return recordWriters;
+    }
+
+    private static void replaceForwardPartitionerIfConsumerParallelismDoesNotMatch(
+            Environment environment, NonChainedOutput streamOutput, int outputIndex) {
+        if (streamOutput.getPartitioner() instanceof ForwardPartitioner
+                && environment.getWriter(outputIndex).getNumberOfSubpartitions()
+                        != environment.getTaskInfo().getNumberOfParallelSubtasks()) {
+            LOG.debug(
+                    "Replacing forward partitioner with rebalance for {}",
+                    environment.getTaskInfo().getTaskNameWithSubtasks());
+            streamOutput.setPartitioner(new RebalancePartitioner<>());
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -1791,5 +1818,13 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
     @Override
     public final Environment getEnvironment() {
         return environment;
+    }
+
+    /** 
+     * Check whether records can be emitted in batch. 
+     */
+    @FunctionalInterface
+    public interface CanEmitBatchOfRecordsChecker {
+        boolean check();
     }
 }

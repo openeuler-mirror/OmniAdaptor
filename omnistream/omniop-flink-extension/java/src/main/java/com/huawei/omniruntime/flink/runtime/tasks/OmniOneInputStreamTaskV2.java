@@ -134,7 +134,8 @@ public class OmniOneInputStreamTaskV2<IN, OUT> extends OmniStreamTask<OUT, OneIn
                 omniStreamTaskRef,
                 omniInputProcessorRef,
                 this.getOutputBuffer(),
-                this.getOutputBufferStatus());
+                this.getOutputBufferStatus(),
+                getCanEmitBatchOfRecords());
     }
 
     private StreamTaskInput<IN> wrapWithSorted(StreamTaskInput<IN> input) {

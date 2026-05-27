@@ -30,6 +30,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
+import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriteRequestExecutorFactory;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.externalresource.ExternalResourceInfoProvider;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
@@ -40,6 +41,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.jobgraph.tasks.TaskOperatorEventGateway;
 import org.apache.flink.runtime.memory.MemoryManager;
+import org.apache.flink.runtime.memory.SharedResources;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.TaskStateManager;
@@ -74,6 +76,7 @@ public class OmniRuntimeEnvironment extends RuntimeEnvironment implements OmniEn
                                   Configuration taskConfiguration,
                                   UserCodeClassLoader userCodeClassLoader,
                                   MemoryManager memManager,
+                                  SharedResources sharedResources,
                                   IOManager ioManager,
                                   BroadcastVariableManager bcVarManager,
                                   TaskStateManager taskStateManager,
@@ -91,13 +94,14 @@ public class OmniRuntimeEnvironment extends RuntimeEnvironment implements OmniEn
                                   TaskMetricGroup metrics,
                                   Task containingTask,
                                   ExternalResourceInfoProvider externalResourceInfoProvider,
+                                  ChannelStateWriteRequestExecutorFactory channelStateExecutorFactory,
                                   OmniShuffleEnvironment omniShuffleEnvironment, long nativeTaskRef) {
         super(jobId, jobVertexId, executionId, executionConfig, taskInfo, jobConfiguration, taskConfiguration,
-                userCodeClassLoader, memManager, ioManager, bcVarManager, taskStateManager, aggregateManager,
+                userCodeClassLoader, memManager, sharedResources, ioManager, bcVarManager, taskStateManager, aggregateManager,
                 accumulatorRegistry, kvStateRegistry, splitProvider, distCacheEntries, writers, inputGates,
                 taskEventDispatcher, checkpointResponder, operatorEventGateway, taskManagerInfo, metrics,
                 containingTask,
-                externalResourceInfoProvider);
+                externalResourceInfoProvider, channelStateExecutorFactory);
         this.shuffleEnvironment = omniShuffleEnvironment;
         this.nativeTaskRef = nativeTaskRef;
         this.nativeEnvironmentRef = createNativeEnvironment(omniShuffleEnvironment.getNativeShuffleServiceRef());

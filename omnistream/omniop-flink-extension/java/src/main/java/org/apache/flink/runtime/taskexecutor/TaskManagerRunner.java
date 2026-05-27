@@ -72,6 +72,7 @@ import org.apache.flink.runtime.rpc.RpcSystemUtils;
 import org.apache.flink.runtime.rpc.RpcUtils;
 import org.apache.flink.runtime.security.SecurityConfiguration;
 import org.apache.flink.runtime.security.SecurityUtils;
+import org.apache.flink.runtime.security.token.DelegationTokenReceiverRepository;
 import org.apache.flink.runtime.state.changelog.StateChangelogStorageLoader;
 import org.apache.flink.runtime.taskmanager.MemoryLogger;
 import org.apache.flink.runtime.util.ConfigurationParserUtils;
@@ -254,6 +255,9 @@ public class TaskManagerRunner implements FatalErrorHandler {
             final ExternalResourceInfoProvider externalResourceInfoProvider =
                     ExternalResourceUtils.createStaticExternalResourceInfoProviderFromConfig(
                             configuration, pluginManager);
+            
+            final DelegationTokenReceiverRepository delegationTokenReceiverRepository =
+                    new DelegationTokenReceiverRepository(configuration, pluginManager);
 
             taskExecutorService =
                     taskExecutorServiceFactory.createTaskExecutor(
@@ -267,7 +271,8 @@ public class TaskManagerRunner implements FatalErrorHandler {
                             false,
                             externalResourceInfoProvider,
                             workingDirectory.unwrap(),
-                            this);
+                            this,
+                            delegationTokenReceiverRepository);
 
             handleUnexpectedTaskExecutorServiceTermination();
 
@@ -429,7 +434,7 @@ public class TaskManagerRunner implements FatalErrorHandler {
 
             if (metricRegistry != null) {
                 try {
-                    terminationFutures.add(metricRegistry.shutdown());
+                    terminationFutures.add(metricRegistry.closeAsync());
                 } catch (Exception e) {
                     exception = ExceptionUtils.firstOrSuppressed(e, exception);
                 }
@@ -444,7 +449,7 @@ public class TaskManagerRunner implements FatalErrorHandler {
             }
 
             if (rpcService != null) {
-                terminationFutures.add(rpcService.stopService());
+                terminationFutures.add(rpcService.closeAsync());
             }
 
             if (executor != null) {
@@ -648,7 +653,8 @@ public class TaskManagerRunner implements FatalErrorHandler {
             boolean localCommunicationOnly,
             ExternalResourceInfoProvider externalResourceInfoProvider,
             WorkingDirectory workingDirectory,
-            FatalErrorHandler fatalErrorHandler)
+            FatalErrorHandler fatalErrorHandler,
+            DelegationTokenReceiverRepository delegationTokenReceiverRepository)
             throws Exception {
         final TaskExecutor taskExecutor =
                 startTaskManager(
@@ -662,7 +668,8 @@ public class TaskManagerRunner implements FatalErrorHandler {
                         localCommunicationOnly,
                         externalResourceInfoProvider,
                         workingDirectory,
-                        fatalErrorHandler);
+                        fatalErrorHandler,
+                        delegationTokenReceiverRepository);
 
         return TaskExecutorToServiceAdapter.createFor(taskExecutor);
     }
@@ -695,7 +702,8 @@ public class TaskManagerRunner implements FatalErrorHandler {
             boolean localCommunicationOnly,
             ExternalResourceInfoProvider externalResourceInfoProvider,
             WorkingDirectory workingDirectory,
-            FatalErrorHandler fatalErrorHandler)
+            FatalErrorHandler fatalErrorHandler,
+            DelegationTokenReceiverRepository delegationTokenReceiverRepository)
             throws Exception {
         checkNotNull(configuration);
         checkNotNull(resourceID);
@@ -781,6 +789,7 @@ public class TaskManagerRunner implements FatalErrorHandler {
                 taskExecutorBlobService,
                 fatalErrorHandler,
                 new TaskExecutorPartitionTrackerImpl(taskManagerServices.getShuffleEnvironment()),
+                delegationTokenReceiverRepository,
                 omniTaskManagerServices);
     }
 
@@ -920,7 +929,8 @@ public class TaskManagerRunner implements FatalErrorHandler {
                 boolean localCommunicationOnly,
                 ExternalResourceInfoProvider externalResourceInfoProvider,
                 WorkingDirectory workingDirectory,
-                FatalErrorHandler fatalErrorHandler)
+                FatalErrorHandler fatalErrorHandler,
+                DelegationTokenReceiverRepository delegationTokenReceiverRepository)
                 throws Exception;
     }
 

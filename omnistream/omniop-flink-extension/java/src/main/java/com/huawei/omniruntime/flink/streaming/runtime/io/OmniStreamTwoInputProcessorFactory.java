@@ -53,6 +53,7 @@ import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import com.huawei.omniruntime.flink.runtime.tasks.OmniStreamTask;
 import org.apache.flink.streaming.runtime.tasks.OperatorChain;
+import org.apache.flink.streaming.runtime.tasks.StreamTask.CanEmitBatchOfRecordsChecker;
 import org.apache.flink.streaming.runtime.watermarkstatus.StatusWatermarkValve;
 import org.apache.flink.streaming.runtime.watermarkstatus.WatermarkStatus;
 import org.apache.flink.util.function.ThrowingConsumer;
@@ -90,7 +91,8 @@ public class OmniStreamTwoInputProcessorFactory extends StreamTwoInputProcessorF
             TaskInfo taskInfo,
             long leftProcessorRef,
             long rightProcessorRef,
-            OmniStreamTask omniStreamTask) {
+            OmniStreamTask omniStreamTask,
+            CanEmitBatchOfRecordsChecker canEmitBatchOfRecordsChecker) {
 
         checkNotNull(operatorChain);
 
@@ -109,7 +111,8 @@ public class OmniStreamTwoInputProcessorFactory extends StreamTwoInputProcessorF
                         omniStreamTask.getOmniStreamTaskRef(),
                         leftProcessorRef,
                         omniStreamTask.getOutputBuffer(),
-                        omniStreamTask.getOutputBufferStatus());
+                        omniStreamTask.getOutputBufferStatus(),
+                        canEmitBatchOfRecordsChecker);
 
         TypeSerializer<IN2> typeSerializer2 = streamConfig.getTypeSerializerIn(1, userClassloader);
         StreamTaskInput<IN2> input2 =
@@ -125,7 +128,8 @@ public class OmniStreamTwoInputProcessorFactory extends StreamTwoInputProcessorF
                         omniStreamTask.getOmniStreamTaskRef(),
                         rightProcessorRef,
                         omniStreamTask.getOutputBuffer(),
-                        omniStreamTask.getOutputBufferStatus());
+                        omniStreamTask.getOutputBufferStatus(),
+                        canEmitBatchOfRecordsChecker);
 
 
         InputSelectable inputSelectable =

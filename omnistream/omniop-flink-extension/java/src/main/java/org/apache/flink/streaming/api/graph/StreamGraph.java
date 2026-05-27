@@ -104,7 +104,6 @@ public class StreamGraph implements Pipeline {
     private Map<Integer, StreamNode> streamNodes;
     private Set<Integer> sources;
     private Set<Integer> sinks;
-    private Set<Integer> expandedSinks;
     private Map<Integer, Tuple2<Integer, OutputTag>> virtualSideOutputNodes;
     private Map<Integer, Tuple3<Integer, StreamPartitioner<?>, StreamExchangeMode>>
             virtualPartitionNodes;
@@ -128,6 +127,10 @@ public class StreamGraph implements Pipeline {
 
     private final List<JobStatusHook> jobStatusHooks = new ArrayList<>();
 
+    private boolean dynamic;
+
+    private boolean autoParallelismEnabled;
+
     public StreamGraph(
             ExecutionConfig executionConfig,
             CheckpointConfig checkpointConfig,
@@ -149,7 +152,6 @@ public class StreamGraph implements Pipeline {
         iterationSourceSinkPairs = new HashSet<>();
         sources = new HashSet<>();
         sinks = new HashSet<>();
-        expandedSinks = new HashSet<>();
         slotSharingGroupResources = new HashMap<>();
     }
 
@@ -367,16 +369,6 @@ public class StreamGraph implements Pipeline {
                     vertexID, ((OutputFormatOperatorFactory) operatorFactory).getOutputFormat());
         }
         sinks.add(vertexID);
-    }
-
-    /**
-     * Register expanded sink nodes. These nodes should also be treated as sinks. But we do not add
-     * them into {@link #sinks} to avoid messing up the json plan.
-     *
-     * @param nodeIds sink nodes to register
-     */
-    public void registerExpandedSinks(Collection<Integer> nodeIds) {
-        expandedSinks.addAll(nodeIds);
     }
 
     public <IN, OUT> void addOperator(
@@ -696,9 +688,7 @@ public class StreamGraph implements Pipeline {
         if (partitioner == null
                 && upstreamNode.getParallelism() == downstreamNode.getParallelism()) {
             partitioner =
-                    executionConfig.isDynamicGraph()
-                            ? new ForwardForUnspecifiedPartitioner<>()
-                            : new ForwardPartitioner<>();
+                    dynamic ? new ForwardForUnspecifiedPartitioner<>() : new ForwardPartitioner<>();
         } else if (partitioner == null) {
             partitioner = new RebalancePartitioner<Object>();
         }
@@ -756,6 +746,20 @@ public class StreamGraph implements Pipeline {
         if (getStreamNode(vertexID) != null) {
             getStreamNode(vertexID).setParallelism(parallelism);
         }
+    }
+
+    public boolean isDynamic() {
+        return dynamic;
+    }
+
+    public void setParallelism(Integer vertexId, int parallelism, boolean parallelismConfigured) {
+        if (getStreamNode(vertexId) != null) {
+            getStreamNode(vertexId).setParallelism(parallelism, parallelismConfigured);
+        }
+    }
+
+    public void setDynamic(boolean dynamic) {
+        this.dynamic = dynamic;
     }
 
     public void setMaxParallelism(int vertexID, int maxParallelism) {
@@ -895,10 +899,6 @@ public class StreamGraph implements Pipeline {
 
     public Collection<Integer> getSinkIDs() {
         return sinks;
-    }
-
-    public Collection<Integer> getExpandedSinkIds() {
-        return expandedSinks;
     }
 
     public Collection<StreamNode> getStreamNodes() {
@@ -1041,6 +1041,14 @@ public class StreamGraph implements Pipeline {
         return jobType;
     }
 
+    public boolean isAutoParallelismEnabled() {
+        return autoParallelismEnabled;
+    }
+
+    public void setAutoParallelismEnabled(boolean autoParallelismEnabled) {
+        this.autoParallelismEnabled = autoParallelismEnabled;
+    }
+
     public PipelineOptions.VertexDescriptionMode getVertexDescriptionMode() {
         return descriptionMode;
     }
@@ -1067,5 +1075,13 @@ public class StreamGraph implements Pipeline {
 
     public List<JobStatusHook> getJobStatusHooks() {
         return this.jobStatusHooks;
+    }
+
+    public void setSupportsConcurrentExecutionAttempts(
+            Integer vertexId, boolean supportsConcurrentExecutionAttempts) {
+        final StreamNode streamNode = getStreamNode(vertexId);
+        if (streamNode != null) {
+            streamNode.setSupportsConcurrentExecutionAttempts(supportsConcurrentExecutionAttempts);
+        }
     }
 }
