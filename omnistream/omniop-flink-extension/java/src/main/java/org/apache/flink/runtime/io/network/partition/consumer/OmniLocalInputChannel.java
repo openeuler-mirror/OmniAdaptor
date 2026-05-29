@@ -102,6 +102,9 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                 int bufferType = ba.buffer().isBuffer() ? 0 : 1; // 0 for Buffer, 1 for Event, underline only
                 if (bufferType == 1 && readOnlySlicedNetworkBuffer.getDataType().isBlockingUpstream()) {
                     bufferType++;
+                    if (readOnlySlicedNetworkBuffer.getDataType().toString() == "ALIGNED_CHECKPOINT_BARRIER") {
+                        bufferType++;;
+                    }
                 }
                 MemorySegment memorySegment = readOnlySlicedNetworkBuffer.getMemorySegment();
                 int readIndex = readOnlySlicedNetworkBuffer.readerIndex();

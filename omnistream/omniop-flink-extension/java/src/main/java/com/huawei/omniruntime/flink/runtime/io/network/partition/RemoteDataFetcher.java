@@ -144,6 +144,9 @@ public class RemoteDataFetcher implements Runnable {
                         int bufferType = isBuffer ? 0 : 1;
                         if (bufferType == 1 && buffer.getDataType().isBlockingUpstream()) {
                             bufferType++;
+                            if (buffer.getDataType().toString() == "ALIGNED_CHECKPOINT_BARRIER") {
+                                bufferType++;
+                            }
                         }
                         int bufferLength = bufferAndAvailability.buffer().getSize();
                         int sequenceNumber = bufferAndAvailability.getSequenceNumber();
