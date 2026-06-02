@@ -209,10 +209,12 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
         env.clean(function);
 
         final int parallelism;
+        boolean parallelismConfigured = false;
         if (function instanceof ParallelSourceFunction) {
             parallelism = env.getParallelism();
         } else {
             parallelism = 1;
+            parallelismConfigured = true;
         }
 
         final Boundedness boundedness;
@@ -224,7 +226,12 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
 
         final StreamSource<RowData, ?> sourceOperator = new StreamSource<>(function, !isBounded);
         return new LegacySourceTransformation<>(
-                operatorName, sourceOperator, outputTypeInfo, parallelism, boundedness);
+                operatorName,
+                sourceOperator,
+                outputTypeInfo,
+                parallelism,
+                boundedness,
+                parallelismConfigured);
     }
 
     /**

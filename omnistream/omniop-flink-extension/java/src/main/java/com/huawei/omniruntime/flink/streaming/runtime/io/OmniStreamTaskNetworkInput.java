@@ -46,6 +46,7 @@ import org.apache.flink.streaming.runtime.io.StreamTaskInput;
 import org.apache.flink.streaming.runtime.io.checkpointing.CheckpointedInputGate;
 import org.apache.flink.streaming.runtime.streamrecord.StreamElement;
 import org.apache.flink.streaming.runtime.watermarkstatus.StatusWatermarkValve;
+import org.apache.flink.streaming.runtime.tasks.StreamTask.CanEmitBatchOfRecordsChecker;
 import org.apache.flink.streaming.runtime.watermarkstatus.WatermarkStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -142,13 +143,15 @@ public final class OmniStreamTaskNetworkInput<T>
             long omniStreamTaskRef,
             long omniInputProcessorRef,
             ByteBuffer outputBuffer,
-            ByteBuffer outputBufferStatus) {
+            ByteBuffer outputBufferStatus,
+            CanEmitBatchOfRecordsChecker canEmitBatchOfRecords) {
         super(
                 checkpointedInputGate,
                 inputSerializer,
                 statusWatermarkValve,
                 inputIndex,
-                getRecordDeserializers(checkpointedInputGate, ioManager)
+                getRecordDeserializers(checkpointedInputGate, ioManager),
+                canEmitBatchOfRecords
         );
         this.outputBuffer = outputBuffer;
         this.outputBufferStatus = outputBufferStatus;

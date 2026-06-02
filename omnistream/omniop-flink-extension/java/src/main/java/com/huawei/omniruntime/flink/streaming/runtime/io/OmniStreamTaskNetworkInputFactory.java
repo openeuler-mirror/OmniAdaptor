@@ -34,6 +34,7 @@ import org.apache.flink.streaming.runtime.io.StreamTaskNetworkInput;
 import org.apache.flink.streaming.runtime.io.checkpointing.CheckpointedInputGate;
 import org.apache.flink.streaming.runtime.io.recovery.RescalingStreamTaskNetworkInput;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
+import org.apache.flink.streaming.runtime.tasks.StreamTask.CanEmitBatchOfRecordsChecker;
 import org.apache.flink.streaming.runtime.watermarkstatus.StatusWatermarkValve;
 
 import java.nio.ByteBuffer;
@@ -57,7 +58,8 @@ public class OmniStreamTaskNetworkInputFactory {
             long omniStreamTaskRef,
             long omniInputProcessorRef,
             ByteBuffer outputBuffer,
-            ByteBuffer outputBufferStatus) {
+            ByteBuffer outputBufferStatus,
+            CanEmitBatchOfRecordsChecker canEmitBatchOfRecordsChecker) {
         return inflightDataRescalingDescriptor.equals(
                 InflightDataRescalingDescriptor.NO_RESCALE)
                 ? new OmniStreamTaskNetworkInput<>(
@@ -69,7 +71,8 @@ public class OmniStreamTaskNetworkInputFactory {
                 omniStreamTaskRef,
                 omniInputProcessorRef,
                 outputBuffer,
-                outputBufferStatus)
+                outputBufferStatus,
+                canEmitBatchOfRecordsChecker)
                 : new RescalingStreamTaskNetworkInput<>(
                 checkpointedInputGate,
                 inputSerializer,
@@ -78,6 +81,7 @@ public class OmniStreamTaskNetworkInputFactory {
                 inputIndex,
                 inflightDataRescalingDescriptor,
                 gatePartitioners,
-                taskInfo);
+                taskInfo,
+                canEmitBatchOfRecordsChecker);
     }
 }

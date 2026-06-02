@@ -245,7 +245,8 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
                 createTransformationMeta(CALC_TRANSFORMATION, config),
                 substituteStreamOperator,
                 InternalTypeInfo.of(getOutputType()),
-                inputTransform.getParallelism());
+                inputTransform.getParallelism(),
+                false);
         localTimeZone = TableConfigUtils.getLocalTimeZone(config);
         String oldDescription = transformation.getDescription();
         transformation.setDescription(getExtraDescription(oldDescription, inputTransform));

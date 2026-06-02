@@ -50,6 +50,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.CheckpointStoreUtil;
+import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriteRequestExecutorFactory;
 import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriter;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
@@ -87,6 +88,7 @@ import org.apache.flink.runtime.jobgraph.tasks.TaskInvokable;
 import org.apache.flink.runtime.jobgraph.tasks.TaskOperatorEventGateway;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.memory.OpaqueMemoryResource;
+import org.apache.flink.runtime.memory.SharedResources;
 import org.apache.flink.runtime.metrics.groups.InternalOperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorEvent;
@@ -241,7 +243,7 @@ public class OmniTask extends Task {
     public OmniTask(JobInformation jobInformation, TaskInformation taskInformation,
                     ExecutionAttemptID executionAttemptID, AllocationID slotAllocationId,
                     List<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
-                    List<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors, MemoryManager memManager,
+                    List<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors, MemoryManager memManager, SharedResources sharedResources,
                     IOManager ioManager, ShuffleEnvironment<?, ?> shuffleEnvironment, KvStateService kvStateService,
                     BroadcastVariableManager bcVarManager, TaskEventDispatcher taskEventDispatcher,
                     ExternalResourceInfoProvider externalResourceInfoProvider, TaskStateManager taskStateManager,
@@ -249,14 +251,14 @@ public class OmniTask extends Task {
                     CheckpointResponder checkpointResponder, TaskOperatorEventGateway operatorCoordinatorEventGateway,
                     GlobalAggregateManager aggregateManager, LibraryCacheManager.ClassLoaderHandle classLoaderHandle,
                     FileCache fileCache, TaskManagerRuntimeInfo taskManagerConfig, @Nonnull TaskMetricGroup metricGroup,
-                    PartitionProducerStateChecker partitionProducerStateChecker, Executor executor,Map<ExecutionAttemptID,OmniTaskReferenceCounter> taskSlotTable,
+                    PartitionProducerStateChecker partitionProducerStateChecker, Executor executor, ChannelStateWriteRequestExecutorFactory channelStateExecutorFactory, Map<ExecutionAttemptID,OmniTaskReferenceCounter> taskSlotTable,
                     TaskStateManagerWrapper taskStateManagerWrapper, TaskOperatorGatewayWrapper taskOperatorGatewayWrapper) {
         super(jobInformation, taskInformation, executionAttemptID, slotAllocationId,
-                resultPartitionDeploymentDescriptors, inputGateDeploymentDescriptors, memManager, ioManager,
+                resultPartitionDeploymentDescriptors, inputGateDeploymentDescriptors, memManager, sharedResources, ioManager,
                 shuffleEnvironment, kvStateService, bcVarManager, taskEventDispatcher, externalResourceInfoProvider,
                 taskStateManager, taskManagerActions, inputSplitProvider, checkpointResponder,
                 operatorCoordinatorEventGateway, aggregateManager, classLoaderHandle, fileCache, taskManagerConfig,
-                metricGroup, partitionProducerStateChecker, executor);
+                metricGroup, partitionProducerStateChecker, executor, channelStateExecutorFactory);
         this.__taskInformation = taskInformation;
         this.__jobInformation = jobInformation;
         this.jobType = JobType.NULL;
@@ -494,11 +496,11 @@ public class OmniTask extends Task {
         TaskKvStateRegistry kvStateRegistry = kvStateService.createKvStateTaskRegistry(jobId, getJobVertexId());
 
         Environment env = new RuntimeEnvironment(jobId, vertexId, executionId, executionConfig, taskInfo,
-                jobConfiguration, taskConfiguration, userCodeClassLoader, memoryManager, ioManager,
+                jobConfiguration, taskConfiguration, userCodeClassLoader, memoryManager, sharedResources, ioManager,
                 broadcastVariableManager, taskStateManager, aggregateManager, accumulatorRegistry, kvStateRegistry,
                 inputSplitProvider, distributedCacheEntries, partitionWriters, inputGates, taskEventDispatcher,
                 checkpointResponder, operatorCoordinatorEventGateway, taskManagerConfig, metrics, this,
-                externalResourceInfoProvider);
+                externalResourceInfoProvider, channelStateExecutorFactory);
 
         // Save it so that OmniTaskWrapper can get env for checkpointing
         checkpointingEnv = (RuntimeEnvironment) env;

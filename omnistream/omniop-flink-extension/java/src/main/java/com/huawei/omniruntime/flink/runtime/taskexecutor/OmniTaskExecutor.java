@@ -44,6 +44,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.contrib.streaming.state.RocksDBMemoryConfiguration;
+import org.apache.flink.contrib.streaming.state.RocksDBMemoryControllerUtils.RocksDBMemoryFactory;
 import org.apache.flink.contrib.streaming.state.RocksDBOperationUtils;
 import org.apache.flink.contrib.streaming.state.RocksDBSharedResources;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
@@ -56,6 +57,7 @@ import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
+import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.execution.librarycache.LibraryCacheManager;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.JobInformation;
@@ -77,6 +79,7 @@ import org.apache.flink.runtime.metrics.groups.TaskManagerMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcService;
+import org.apache.flink.runtime.security.token.DelegationTokenReceiverRepository;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.TaskLocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
@@ -172,6 +175,9 @@ public class OmniTaskExecutor extends TaskExecutor {
     private OmniTaskManagerServices omniTaskManagerServices;
     private Map<ExecutionAttemptID, OmniTaskReferenceCounter> taskMap = new ConcurrentHashMap<>();
 
+    /** Factory for Write Buffer Manager and Block Cache. */
+    private RocksDBMemoryFactory rocksDBMemoryFactory;
+
     public OmniTaskExecutor(RpcService rpcService,
                             TaskManagerConfiguration taskManagerConfiguration,
                             HighAvailabilityServices haServices,
@@ -183,16 +189,18 @@ public class OmniTaskExecutor extends TaskExecutor {
                             TaskExecutorBlobService taskExecutorBlobService,
                             FatalErrorHandler fatalErrorHandler,
                             TaskExecutorPartitionTracker partitionTracker,
+                            DelegationTokenReceiverRepository delegationTokenReceiverRepository,
                             OmniTaskManagerServices omniTaskManagerServices) {
         super(rpcService, taskManagerConfiguration, haServices, taskExecutorServices, externalResourceInfoProvider,
                 heartbeatServices, taskManagerMetricGroup, metricQueryServiceAddress, taskExecutorBlobService,
-                fatalErrorHandler, partitionTracker);
+                fatalErrorHandler, partitionTracker, delegationTokenReceiverRepository);
 
         String taskExecutorConfig = convertTaskExecutorToJson();
         log.info("TaskExecutorConfig: " + taskExecutorConfig);
         nativeTaskExecutorReference = createNativeTaskExecutor(taskExecutorConfig,
                 omniTaskManagerServices.getNativeOmniTaskManagerServicesAddress());
         log.info("nativeTaskExecutorReference: " + nativeTaskExecutorReference);
+        this.rocksDBMemoryFactory = RocksDBMemoryFactory.DEFAULT;
     }
 
     private static UserCodeClassLoader createUserCodeClassloader(
@@ -493,12 +501,12 @@ public class OmniTaskExecutor extends TaskExecutor {
         OmniTask task =
                 new OmniTask(taskParam.jobInformation, taskParam.taskInformation, taskParam.tdd.getExecutionAttemptId(),
                         taskParam.tdd.getAllocationId(), taskParam.tdd.getProducedPartitions(), taskParam.tdd.getInputGates(),
-                        memoryManager, taskExecutorServices.getIOManager(), taskExecutorServices.getShuffleEnvironment(),
+                        memoryManager, sharedResources, taskExecutorServices.getIOManager(), taskExecutorServices.getShuffleEnvironment(),
                         taskExecutorServices.getKvStateService(), taskExecutorServices.getBroadcastVariableManager(),
                         taskExecutorServices.getTaskEventDispatcher(), externalResourceInfoProvider, taskStateManager,
                         taskManagerActions, inputSplitProvider, checkpointResponder, taskOperatorEventGateway,
                         aggregateManager, classLoaderHandle, fileCache, taskManagerConfiguration, taskMetricGroup,
-                        partitionStateChecker, getRpcService().getScheduledExecutor(), taskMap,
+                        partitionStateChecker, getRpcService().getScheduledExecutor(), channelStateExecutorFactoryManager.getOrCreateExecutorFactory(taskParam.tdd.getJobId()), taskMap,
                         taskStateManagerWrapper,taskOperatorGatewayWrapper);
         taskStateManagerWrapper.setOmniTask(task);
         taskMetricGroup.gauge(MetricNames.IS_BACK_PRESSURED, task::isBackPressured);
@@ -676,6 +684,7 @@ public class OmniTaskExecutor extends TaskExecutor {
 
 
     private OpaqueMemoryResource<RocksDBSharedResources> allocateNativeRocksDBSharedResources(
+            Environment env,
             TaskInformationPOJO taskInformationPOJO,
             ClassLoader cl,
             MemoryManager memoryManager,
@@ -689,9 +698,10 @@ public class OmniTaskExecutor extends TaskExecutor {
         OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources =
                 RocksDBOperationUtils.allocateSharedCachesIfConfigured(
                         rocksDBMemoryConfiguration,
-                        memoryManager,
+                        env,
                         taskInformationPOJO.getStateBackendManagedMemoryFraction(),
-                        LOG
+                        LOG,
+                        rocksDBMemoryFactory
                 );
 
         if (rocksDBSharedResources == null) {

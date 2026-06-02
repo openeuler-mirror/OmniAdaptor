@@ -22,6 +22,7 @@
 package org.apache.flink.api.dag;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.functions.InvalidTypesException;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.operators.SlotSharingGroup;
@@ -112,6 +113,11 @@ public abstract class Transformation<T> {
 
     // This is used to assign a unique ID to every Transformation
     private static final AtomicInteger ID_COUNTER = new AtomicInteger(0);
+
+    // If true, the parallelism of the transformation is explicitly set and should be respected.
+    // Otherwise the parallelism can be changed at runtime.
+    private boolean parallelismConfigured;
+
     protected final int id;
 
     /**
@@ -137,6 +143,8 @@ public abstract class Transformation<T> {
     protected boolean typeUsed;
     protected long bufferTimeout = -1;
     private int parallelism;
+
+    private int hintParallelism;
 
     /**
      * The maximum parallelism for this stream transformation. It defines the upper limit for
@@ -177,11 +185,31 @@ public abstract class Transformation<T> {
      * @param parallelism The parallelism of this {@code Transformation}
      */
     public Transformation(String name, TypeInformation<T> outputType, int parallelism) {
+        this(name, outputType, parallelism, true);
+    }
+
+    /**
+     * Creates a new {@code Transformation} with the given name, output type and parallelism.
+     *
+     * @param name The name of the {@code Transformation}, this will be shown in Visualizations and
+     *     the Log
+     * @param outputType The output type of this {@code Transformation}
+     * @param parallelism The parallelism of this {@code Transformation}
+     * @param parallelismConfigured If true, the parallelism of the transformation is explicitly set
+     *     and should be respected. Otherwise the parallelism can be changed at runtime.
+     */
+    public Transformation(
+            String name,
+            TypeInformation<T> outputType,
+            int parallelism,
+            boolean parallelismConfigured) {
         this.id = getNewNodeId();
         this.name = Preconditions.checkNotNull(name);
         this.outputType = outputType;
         this.parallelism = parallelism;
         this.slotSharingGroup = Optional.empty();
+        this.parallelismConfigured =
+                parallelismConfigured && parallelism != ExecutionConfig.PARALLELISM_DEFAULT;
     }
 
     public static int getNewNodeId() {
@@ -230,14 +258,35 @@ public abstract class Transformation<T> {
         return parallelism;
     }
 
+    /** Returns the hintParallelism of this {@code Transformation}. */
+    public int getHintParallelism() {
+        return hintParallelism;
+    }
+
     /**
      * Sets the parallelism of this {@code Transformation}.
      *
      * @param parallelism The new parallelism to set on this {@code Transformation}.
      */
     public void setParallelism(int parallelism) {
+        setParallelism(parallelism, true);
+    }
+
+    public void setParallelism(int parallelism, boolean parallelismConfigured) {
         OperatorValidationUtils.validateParallelism(parallelism);
         this.parallelism = parallelism;
+        this.parallelismConfigured =
+                parallelismConfigured && parallelism != ExecutionConfig.PARALLELISM_DEFAULT;
+    }
+
+    public void setHintParallelism(int parallelism, int hintParallelism) {
+        OperatorValidationUtils.validateParallelism(hintParallelism);
+        this.hintParallelism = hintParallelism;
+        setParallelism(parallelism, true);
+    }
+
+    public boolean isParallelismConfigured() {
+        return parallelismConfigured;
     }
 
     /**

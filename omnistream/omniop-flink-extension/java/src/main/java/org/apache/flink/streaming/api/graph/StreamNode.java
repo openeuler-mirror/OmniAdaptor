@@ -29,6 +29,7 @@ import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.Function;
 import org.apache.flink.api.common.io.InputFormat;
@@ -121,6 +122,10 @@ public class StreamNode {
     private
     @Nullable
     IntermediateDataSetID consumeClusterDatasetId;
+
+    private boolean supportsConcurrentExecutionAttempts = true;
+
+    private boolean parallelismConfigured = false;
 
     @VisibleForTesting
     public StreamNode(
@@ -478,7 +483,13 @@ public class StreamNode {
     }
 
     public void setParallelism(Integer parallelism) {
+        setParallelism(parallelism, true);
+    }
+
+    void setParallelism(Integer parallelism, boolean parallelismConfigured) {
         this.parallelism = parallelism;
+        this.parallelismConfigured =
+                parallelismConfigured && parallelism != ExecutionConfig.PARALLELISM_DEFAULT;
     }
 
     /**
@@ -700,6 +711,10 @@ public class StreamNode {
         }
     }
 
+    boolean isParallelismConfigured() {
+        return parallelismConfigured;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -727,5 +742,14 @@ public class StreamNode {
             @Nullable
             IntermediateDataSetID consumeClusterDatasetId) {
         this.consumeClusterDatasetId = consumeClusterDatasetId;
+    }
+
+    public boolean isSupportsConcurrentExecutionAttempts() {
+        return supportsConcurrentExecutionAttempts;
+    }
+
+    public void setSupportsConcurrentExecutionAttempts(
+            boolean supportsConcurrentExecutionAttempts) {
+        this.supportsConcurrentExecutionAttempts = supportsConcurrentExecutionAttempts;
     }
 }

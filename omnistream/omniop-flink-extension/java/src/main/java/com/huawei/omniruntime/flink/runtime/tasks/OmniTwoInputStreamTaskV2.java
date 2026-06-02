@@ -164,7 +164,8 @@ public class OmniTwoInputStreamTaskV2<IN1, IN2, OUT> extends OmniStreamTask<OUT,
                 getEnvironment().getTaskInfo(),
                 leftProcessorRef,
                 rightProcessorRef,
-                this);
+                this,
+                getCanEmitBatchOfRecords());
     }
 
     protected Optional<CheckpointBarrierHandler> getCheckpointBarrierHandler() {

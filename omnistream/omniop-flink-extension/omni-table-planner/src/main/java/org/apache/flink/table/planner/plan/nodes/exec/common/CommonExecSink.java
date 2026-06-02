@@ -315,7 +315,8 @@ public abstract class CommonExecSink extends ExecNodeBase<Object>
                             config),
                     constraintEnforcer,
                     getInputTypeInfo(),
-                    inputTransform.getParallelism());
+                    inputTransform.getParallelism(),
+                    false);
         } else {
             // there are no not-null fields, just skip adding the enforcer operator
             return inputTransform;
@@ -503,7 +504,8 @@ public abstract class CommonExecSink extends ExecNodeBase<Object>
                                 config),
                         operator,
                         inputTransform.getOutputType(),
-                        sinkParallelism);
+                        sinkParallelism,
+                        false);
         RowDataKeySelector keySelector =
                 KeySelectorUtil.getRowDataSelector(
                         classLoader, primaryKeys, InternalTypeInfo.of(physicalRowType));
@@ -659,7 +661,8 @@ public abstract class CommonExecSink extends ExecNodeBase<Object>
                         config),
                 new StreamRecordTimestampInserter(rowtimeFieldIndex),
                 inputTransform.getOutputType(),
-                sinkParallelism);
+                sinkParallelism,
+                false);
         transformation.setDescription(getStreamRecordTimestampInserterExtraDescription(rowtimeFieldIndex));
         return transformation;
     }
