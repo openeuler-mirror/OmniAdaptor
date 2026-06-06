@@ -126,6 +126,8 @@ public class StreamConfig implements Serializable {
 
     private static final String USE_OMNI_ENABLED = "useomni";
 
+    private static final String SPLIT_WATERMARK = "splitWatermark";
+
     private static final String JOB_TYPE = "jobType";
 
     private static final String TASK_TYPE = "taskType";
@@ -581,6 +583,14 @@ public class StreamConfig implements Serializable {
 
     public void setUseOmniEnabled(boolean enabled) {
         config.setBoolean(USE_OMNI_ENABLED, enabled);
+    }
+
+    public boolean isSplitWatermark() {
+        return config.getBoolean(SPLIT_WATERMARK, false);
+    }
+
+    public void setSplitWatermark(boolean enabled) {
+        config.setBoolean(SPLIT_WATERMARK, enabled);
     }
 
     public void setJobType(int jobType) {

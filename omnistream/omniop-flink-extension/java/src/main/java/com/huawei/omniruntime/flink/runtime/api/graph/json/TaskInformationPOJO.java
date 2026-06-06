@@ -68,6 +68,7 @@ public class TaskInformationPOJO {
     private long stateBackendManagedMemorySize;
     private long cacheAddr;
     private long writeBufferManagerAddr;
+    private boolean splitWatermark = false;
     private String priorityQueueStateType = "";
 
     private int taskType;
@@ -178,6 +179,14 @@ public class TaskInformationPOJO {
         } catch (IOException ex) {
             LOG.warn("get tmpWorkingDirectory from taskManagerConfiguration error", ex);
         }
+    }
+
+    public boolean getSplitWatermark() {
+        return splitWatermark;
+    }
+
+    public void setSplitWatermark(boolean splitWatermark) {
+        this.splitWatermark = splitWatermark;
     }
 
     // Getters and setters

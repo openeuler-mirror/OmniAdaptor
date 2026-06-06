@@ -616,7 +616,10 @@ public class StreamingJobGraphGenerator {
         }
 
         boolean validateRes = true;
+        boolean shouldDoSpiltWatermark = false;
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+            shouldDoSpiltWatermark = OmniGraphOverride.checkSplitWatermark(vertexEntry, this.chainInfos, shouldDoSpiltWatermark);
+            LOG.info(vertexEntry.toString() + " shouldDoSpiltWatermark : " + shouldDoSpiltWatermark);
             boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos, this.chainedConfigs, this.vertexConfigs, jobType);
             if (!vertexValidateRes && jobType.equals(JobType.SQL)) {
                 validateRes = false;

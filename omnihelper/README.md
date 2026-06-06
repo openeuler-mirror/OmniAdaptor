@@ -249,6 +249,44 @@ Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底
    pip install requests-kerberos
    ```
 
+准备Flink表结构信息。<br>为了提升类型识别的准确性，需导出Flink表结构至`resources/flink_table_schema.csv`，文件需包含三列：`table_name`（表名）、`field_name`（列名）、`field_type`（数据类型）。含逗号的类型需用双引号包裹。
+
+表结构导出示例：
+示例中数据表、字段，以及字段类型是nexmark的部分数据。
+```csv
+table_name,field_name,field_type
+datagen,event_type,int
+datagen,person,"ROW<id BIGINT, name VARCHAR, emailAddress VARCHAR, city VARCHAR>"
+datagen,auction,"ROW<id BIGINT, itemName VARCHAR, initialBid BIGINT, dateTime TIMESTAMP(3)>" 
+datagen,bid,"ROW<auction BIGINT,bidder BIGINT,price BIGINT,dateTime TIMESTAMP(3)>"
+```
+
+字段说明：
+    table_name为表名；field_name为列名；field_type为数据类型，支持基础类型和复杂类型。
+
+复杂类型说明：
+
+ROW 类型表示嵌套结构（子表）。
+例如：
+```csv
+datagen,auction,"ROW<id BIGINT,itemName VARCHAR>"
+```
+说明：
+    datagen为主表；auction为主表中的一个结构体字段；id和itemName为 auction结构体中的子字段。
+
+逻辑结构如下：
+
+    datagen
+    ├── event_type : int
+    ├── price      : double
+    ├── auction    : ROW
+    │   ├── id       : BIGINT
+    │   └── itemName : VARCHAR
+
+对于表达式中引用的嵌套字段，例如：
+
+    auction.id
+    auction.itemName
 
 ## 快速入门
 

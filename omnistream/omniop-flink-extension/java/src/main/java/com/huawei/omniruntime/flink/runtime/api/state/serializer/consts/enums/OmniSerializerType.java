@@ -9,6 +9,8 @@ import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.streaming.api.operators.TimerHeapInternalTimer;
 import org.apache.flink.streaming.api.operators.TimerSerializer;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.binary.BinaryRowData;
+import org.apache.flink.table.runtime.typeutils.BinaryRowDataSerializer;
 import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
 
 import java.math.BigDecimal;
@@ -48,6 +50,7 @@ public enum OmniSerializerType {
     TIMER(OmniSerializerCategory.TIMER, TimerHeapInternalTimer.class, TimerSerializer.class, 12),
     BYTE_PRIMITIVE_ARRAY(OmniSerializerCategory.PRIMITIVE_ARRAY, byte[].class, BytePrimitiveArraySerializer.class, 14),
     ROW(OmniSerializerCategory.ROW, RowData.class, RowDataSerializer.class, 15),
+    BINARY_ROW(OmniSerializerCategory.BINARY_ROW, BinaryRowData.class, BinaryRowDataSerializer.class, 16),
 
     UNKNOW(OmniSerializerCategory.UNKNOWN, null, null, 0);
 

@@ -88,6 +88,7 @@ public class OmniStateSerializerHelper {
                     }
                     continue;
                 }
+                LOG.debug("method : buildSerializerInfo -> stateTableName : {}, key : {}.", stateTableName, item.getKey());
                 StateDescriptor<?, ?> stateDescriptor = buildStateDescriptor(stateTableName, item.getKey(), item.getValue(), executionConfig, userCodeClassLoader);
                 if (null == stateDescriptor) {
                     continue;
@@ -249,7 +250,7 @@ public class OmniStateSerializerHelper {
                 }
                 OmniSerializerKey serializerKey = OmniSerializerKey.getBy(item.getKey());
                 if (null == serializerKey) {
-                    LOG.warn("method : buildSerializerJsonInfo -> key : {} undefined.", item.getKey());
+                    LOG.warn("method : buildSerializerInfo -> stateTableName : {}, key : {} undefined.", metaInfo.getName(), item.getKey());
                     continue;
                 }
                 if (null == item.getValue()) {
@@ -260,6 +261,7 @@ public class OmniStateSerializerHelper {
                     }
                     continue;
                 }
+                LOG.debug("method : buildSerializerJsonInfo -> stateTableName : {}, key : {}.", metaInfo.getName(), item.getKey());
                 OmniSerializerJsonInfo jsonInfo = buildJsonInfo(item.getValue().restoreSerializer());
                 if (null != jsonInfo) {
                     String key = OmniSerializerKey.STATE_SERIALIZER.equals(serializerKey.getMetaKey())

@@ -324,7 +324,12 @@ class TableSchemaReader:
         for table_name, columns in tables_to_process.items():
             for col_info in columns:
                 field_name = col_info["field_name"]
-                field_type = col_info["field_type"]
+                # 对于 ROW 类型，使用标准化后的类型（避免存储完整的 ROW 定义）
+                # 对于其他类型，使用原始类型保留精度信息（如 TIMESTAMP(3)）
+                if col_info["field_type"] == "ROW":
+                    field_type = col_info["field_type"]
+                else:
+                    field_type = col_info["original_type"]
 
                 # 构建表名.字段名格式的键（小写）
                 key = f"{table_name}.{field_name}".lower()
@@ -403,7 +408,8 @@ class TableSchemaReader:
                 if field["field_name"] == part:
                     # 进入下一层嵌套
                     nested = field.get("nested_fields", [])
-                    result_type = field["field_type"]
+                    # 优先使用原始类型，保留精度信息（如 TIMESTAMP(3)）
+                    result_type = field.get("original_type") or field["field_type"]
                     found = True
                     break
             # 某一级找不到，返回 unknown

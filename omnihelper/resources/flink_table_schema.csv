@@ -1,1 +1,5 @@
 table_name,field_name,field_type
+datagen,event_type,int
+datagen,person,"ROW<id BIGINT,name VARCHAR,emailAddress VARCHAR,city VARCHAR>"
+datagen,auction,"ROW<id BIGINT,itemName VARCHAR,initialBid BIGINT,dateTime TIMESTAMP(3)>"
+datagen,bid,"ROW<auction BIGINT,bidder BIGINT,price BIGINT,dateTime TIMESTAMP(3)>"

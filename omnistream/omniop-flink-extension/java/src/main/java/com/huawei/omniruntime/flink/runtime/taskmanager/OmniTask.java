@@ -390,7 +390,7 @@ public class OmniTask extends Task {
                 LOG.error("Error during closing rocksDBSharedResources of task {} ({}).", taskNameWithSubtask, executionId, t);
             }
 
-            deleteNativeTask(nativeTaskRef);
+            //待优化 deleteNativeTask(nativeTaskRef);
         }
     }
 

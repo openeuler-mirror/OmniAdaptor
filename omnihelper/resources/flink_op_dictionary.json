@@ -3,7 +3,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -12,18 +12,18 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
   "GroupAggregate": {
     "is_supported": true,
     "supported_list": [
-      "INTEGER",
+      "INT",
       "BIGINT",
       "VARCHAR(2147483647)"
     ],
@@ -32,7 +32,7 @@
   "LocalGroupAggregate": {
     "is_supported": true,
     "supported_list": [
-      "INTEGER",
+      "INT",
       "BIGINT",
       "VARCHAR(2147483647)"
     ],
@@ -41,7 +41,7 @@
   "GlobalGroupAggregate": {
     "is_supported": true,
     "supported_list": [
-      "INTEGER",
+      "INT",
       "BIGINT",
       "VARCHAR(2147483647)"
     ],
@@ -50,7 +50,7 @@
   "IncrementalGroupAggregate": {
     "is_supported": true,
     "supported_list": [
-      "INTEGER",
+      "INT",
       "BIGINT",
       "VARCHAR(2147483647)"
     ],
@@ -60,7 +60,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -69,11 +69,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -81,7 +81,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -90,11 +90,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -102,7 +102,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -111,11 +111,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -123,7 +123,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -132,11 +132,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -144,7 +144,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -153,11 +153,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -165,7 +165,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -174,11 +174,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -186,7 +186,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -195,11 +195,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -207,7 +207,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -216,11 +216,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -228,7 +228,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -237,11 +237,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -249,7 +249,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -258,11 +258,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -270,7 +270,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -279,11 +279,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -291,7 +291,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -300,18 +300,18 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
   "ConstraintEnforcer": {
     "is_supported": true,
     "supported_list": [
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -331,7 +331,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -339,11 +339,11 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -355,7 +355,7 @@
   "KafKa Source": {
     "is_supported": true,
     "supported_list": [
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -363,14 +363,14 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(0)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(1)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(0)",
+      "TIMESTAMP_LTZ(1)",
+      "TIMESTAMP_LTZ(2)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   },
@@ -378,7 +378,7 @@
     "is_supported": true,
     "supported_list": [
       "BOOLEAN",
-      "INTEGER",
+      "INT",
       "STRING",
       "BIGINT",
       "DECIMAL64",
@@ -387,14 +387,14 @@
       "VARCHAR(9)",
       "VARCHAR(2147483647)",
       "VARCHAR(2000)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(0)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(1)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
-      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(0)",
+      "TIMESTAMP_LTZ(1)",
+      "TIMESTAMP_LTZ(2)",
+      "TIMESTAMP_LTZ(3)"
     ],
     "not_supported_list": []
   }

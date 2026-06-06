@@ -47,14 +47,10 @@ import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.runtime.state.StreamCompressionDecorator;
 import org.apache.flink.runtime.state.SnappyStreamCompressionDecorator;
 import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
-import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle.Mode;
 import org.apache.flink.runtime.state.OperatorStateHandle.StateMetaInfo;
 import org.apache.flink.runtime.state.OperatorStreamStateHandle;
 import org.apache.flink.runtime.state.OperatorBackendSerializationProxy;
-import org.apache.flink.runtime.state.PartitionableListState;
-import org.apache.flink.runtime.state.BackendWritableBroadcastState;
-import org.apache.flink.runtime.state.OperatorStateRestoreOperation;
 import org.apache.flink.runtime.taskmanager.RuntimeEnvironment;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
@@ -309,6 +305,7 @@ public class OmniTaskWrapper {
 
     public void writeSavepointMetadata(CheckpointStreamWithResultProvider provider, String stateMetaInfoSnapshotsJson) throws Exception {
         try {
+            LOG.debug("method : writeSavepointMetadata -> stateMetaInfoSnapshotsJson : {}", stateMetaInfoSnapshotsJson);
             List<Map<String, Object>> stateMetaInfoMaps =
                     OBJECT_MAPPER.readValue(stateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {
                     });
@@ -374,6 +371,8 @@ public class OmniTaskWrapper {
                                       String operatorStateMetaInfoSnapshotsJson,
                                       String broadcastStateMetaInfoSnapshotsJson) throws IOException {
         try {
+            LOG.debug("method : writeOperatorMetaData -> operatorStateMetaInfoSnapshotsJson : {}", operatorStateMetaInfoSnapshotsJson);
+            LOG.debug("method : writeOperatorMetaData -> broadcastStateMetaInfoSnapshotsJson : {}", broadcastStateMetaInfoSnapshotsJson);
             List<Map<String, Object>> operatorStateMetaInfoMapList = JsonHelper.fromJson(operatorStateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {
             });
             List<Map<String, Object>> broadcastStateMetaInfoMapList = JsonHelper.fromJson(broadcastStateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {

@@ -188,6 +188,7 @@ class FlinkLogParser:
         1. 检查 --input-data 参数指定的路径
         2. 如果未指定，检查默认路径 resources/flink_table_schema.csv
         3. 如果都不存在，类型解析能力受限
+
         """
         csv_path = getattr(self.args, 'input_data', None)
         if not csv_path:

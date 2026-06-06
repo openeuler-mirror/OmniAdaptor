@@ -33,12 +33,12 @@ class FlinkExcelWriterWithStyle:
             {'main': 'Output', "column_width": 30},
             {'main': '出现频次', "column_width": 10},
             {'main': '运行时间(s)', "column_width": 15},
-            {'main': '输入数据量', "column_width": 15},
-            {'main': '输出数据量', "column_width": 15},
-            {'main': '表达式/内置函数名称', "column_width": 30},
+            {'main': '输入数据量(MB)', "column_width": 15},
+            {'main': '输出数据量(MB)', "column_width": 15},
+            {'main': '表达式/内置函数名称', "column_width": 30, "need_merged_column": self.DEFAULT_VALUE},
             {'main': 'Input', "column_width": 30},
             {'main': '嵌套内容', "column_width": 40},
-            {'main': '出现频次', "column_width": 10}
+            {'main': '出现频次', "column_width": 10, "need_merged_column": self.DEFAULT_VALUE}
         ]
         self.need_merged_column = []
 
@@ -94,6 +94,13 @@ class FlinkExcelWriterWithStyle:
 
                 # 合并 jobid、taskid 和状态列
                 # jobid独立合并，taskid受jobid控制，状态列受taskid控制
+                self.merge_cells_full(
+                    worksheet,
+                    start_row=3,
+                    independent_cols=[11],  # jobid独立合并
+                    linked_cols=[14],  # taskid和状态列联动合并
+                    control_cols=[11]  # taskid受jobid控制，状态受taskid控制
+                )
                 self.merge_cells_full(
                     worksheet,
                     start_row=3,
@@ -178,15 +185,6 @@ class FlinkExcelWriterWithStyle:
     def process_merge(self, ws, data_cache, start_row, max_row, cols, control_cols=None, is_linked=False):
         """
         通用列合并函数（独立列或受联动控制的列）
-
-        参数:
-            ws (Worksheet): openpyxl 工作表对象
-            data_cache (dict): {(row, col): value}，缓存的原始单元格数据，防止 merge 后变 None
-            start_row (int): 数据起始行（通常跳过表头）
-            max_row (int): 数据最大行
-            cols (list[int]): 需要合并的列列表
-            control_cols (list[int]): 联动列控制的列索引（仅 is_linked=True 时有效）
-            is_linked (bool): 是否受控制列联动（True: 仅在控制列值相同时合并）
         """
         control_cols = control_cols or []
 
@@ -194,27 +192,26 @@ class FlinkExcelWriterWithStyle:
             merge_start = start_row
             in_group = False
 
-            for row in range(start_row + 1, max_row + 1):
-                current = data_cache[(row, col)]
-                previous = data_cache[(row - 1, col)]
+            # 联动列：基于控制列的分组键
+            # 独立列：基于自身值的分组键
+            prev_group_key = None
 
-                # 判断是否属于同一组
-                if is_linked:
-                    control_same = all(
-                        data_cache[(row, c)] == data_cache[(row - 1, c)]
-                        for c in control_cols
-                    )
-                    same_group = control_same and current == previous and current not in [None, ""]
+            for row in range(start_row, max_row + 1):
+                if is_linked and control_cols:
+                    # 联动列：使用控制列的值作为分组键
+                    group_key = tuple(data_cache.get((row, c)) for c in control_cols)
                 else:
-                    same_group = current == previous and current not in [None, ""]
+                    # 独立列：使用自身的值作为分组键
+                    group_key = data_cache.get((row, col))
 
-                if same_group:
-                    in_group = True
-                    continue
-
-                # 断组处理：只有连续组才执行 merge
-                if in_group:
-                    if row - merge_start >= 1:
+                if prev_group_key is None:
+                    # 第一行，开始新组
+                    prev_group_key = group_key
+                    merge_start = row
+                    in_group = False
+                elif group_key != prev_group_key:
+                    # 分组键变化，合并上一组
+                    if row - 1 > merge_start:
                         ws.merge_cells(
                             start_row=merge_start, start_column=col,
                             end_row=row - 1, end_column=col
@@ -223,11 +220,16 @@ class FlinkExcelWriterWithStyle:
                         cell.alignment = self.center_alignment
                         cell.border = self.thin_border
 
-                merge_start = row
-                in_group = False
+                    # 开始新组
+                    prev_group_key = group_key
+                    merge_start = row
+                    in_group = False
+                else:
+                    # 同一组内
+                    in_group = True
 
-            # 处理最后一组连续值
-            if in_group and max_row - merge_start >= 1:
+            # 处理最后一组
+            if in_group and max_row > merge_start:
                 ws.merge_cells(
                     start_row=merge_start, start_column=col,
                     end_row=max_row, end_column=col

@@ -272,6 +272,22 @@ public final class OmniGraphOverride {
         }
     }
 
+    public static boolean checkSplitWatermark(Map.Entry<Integer, JobVertex> vertexEntry,
+                                           Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos,
+                                           boolean otherChainDoSplit) {
+        StreamConfig vertexConfig = new StreamConfig(vertexEntry.getValue().getConfiguration());
+        boolean nowChainDoSplit = false;
+        for (Integer key : chainInfos.keySet()) {
+            StreamingJobGraphGenerator.OperatorChainInfo chainInfo = chainInfos.get(key);
+            List<StreamNode> streamNodes = chainInfo.getAllChainedNodes();
+            for (StreamNode node : streamNodes) {
+                nowChainDoSplit = nowChainDoSplit || node.getOperatorName().contains("Window");
+            }
+            vertexConfig.setSplitWatermark(otherChainDoSplit || nowChainDoSplit);
+        }
+        return vertexConfig.isSplitWatermark();
+    }
+
     private static boolean checkDataStreamSupportTransferSerializer(TypeSerializer<?> typeSerializer) {
         if (typeSerializer == null) {
             return false;

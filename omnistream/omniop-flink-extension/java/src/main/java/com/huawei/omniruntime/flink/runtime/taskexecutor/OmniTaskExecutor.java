@@ -352,7 +352,7 @@ public class OmniTaskExecutor extends TaskExecutor {
             // task information pojo
             TaskInformationPOJO taskInformationPOJO = new TaskInformationPOJO(taskInformation,
                 codeClassLoader.asClassLoader(), task.getTaskInfo().getIndexOfThisSubtask(), taskManagerConfiguration, memoryManager);
-
+            taskInformationPOJO.setSplitWatermark(streamConfig.isSplitWatermark());
             // job information POJO
             JobInformationPOJO jobInformationPOJO = new JobInformationPOJO(
                 jobInformation, codeClassLoader.asClassLoader());

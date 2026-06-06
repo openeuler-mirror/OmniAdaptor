@@ -79,10 +79,12 @@ public class TimerTypeInfo<K, N> extends TypeInformation<TimerHeapInternalTimer<
         }
     }
 
+    @Override
     public int hashCode() {
         return 31 * this.keyTypeInfo.hashCode() + this.namespaceTypeInfo.hashCode();
     }
 
+    @Override
     public boolean canEqual(Object obj) {
         return obj != null && obj.getClass() == this.getClass();
     }

@@ -14,14 +14,26 @@ import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
 import org.apache.flink.runtime.state.LocalRecoveryDirectoryProviderImpl;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
+import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class OmniStateSerializerUtils {
     private static final Logger LOG = LoggerFactory.getLogger(OmniStateSerializerUtils.class);
+
+    public static RowType getRowType(LogicalType[] types) {
+        AtomicInteger i = new AtomicInteger();
+        List<RowType.RowField> fields = Arrays.stream(types)
+                .map(type-> new RowType.RowField("f" + i.getAndIncrement(), type, SC.EMPTY))
+                .collect(Collectors.toList());
+        return new RowType(fields);
+    }
 
     public static LocalRecoveryConfig parseLocalRecoveryConfig(String localRecoveryConfigStr) {
         LocalRecoveryConfig recoveryConfig = null;
