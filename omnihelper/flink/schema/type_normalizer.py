@@ -130,7 +130,7 @@ class TypeNormalizer:
             return "MULTISET"
 
         if type_str.upper().startswith("DECIMAL"):
-            return "DECIMAL"
+            return "DECIMAL128"
 
         if type_str.upper().startswith("VARCHAR"):
             return "VARCHAR"

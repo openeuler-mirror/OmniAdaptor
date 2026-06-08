@@ -901,7 +901,8 @@ class FunctionAnalyzer:
         input_types.append(source_type)
 
         if target_type_str:
-            normalized_target = re.sub(r'\([^)]*\)', '', target_type_str.strip()).upper()
+            from omnihelper.flink.schema.type_normalizer import TypeNormalizer
+            normalized_target = TypeNormalizer.normalize_type(target_type_str.strip())
             input_types.append(normalized_target)
 
         if has_unknown and not nested_content:
@@ -1000,16 +1001,20 @@ class FunctionAnalyzer:
                 if not input_types:
                     input_types, _ = self._resolve_func_param_types(func_name, expr, input_schema)
 
-                entry = {
-                    "func_name": func_name,
-                    "task_id": task_id,
-                    "input": input_types,
-                    "nested_content": expr,
-                    "times": func["times"] if i == 0 else ""
-                }
-                unsupported_types = func.get("unsupported_types", [])
-                if unsupported_types:
-                    entry["unsupported_types"] = unsupported_types
-                result.append(entry)
+                # 对每个表达式单独检查支持性
+                is_supported, unsupported_types = self.function_parser.is_func_type_supported(func_name, input_types)
+                
+                # 只有不支持的表达式才添加到结果中
+                if not is_supported:
+                    entry = {
+                        "func_name": func_name,
+                        "task_id": task_id,
+                        "input": input_types,
+                        "nested_content": expr,
+                        "times": func["times"] if i == 0 else ""
+                    }
+                    if unsupported_types:
+                        entry["unsupported_types"] = unsupported_types
+                    result.append(entry)
         
         return result

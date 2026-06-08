@@ -252,7 +252,7 @@
                 "BYTE",
                 "SHORT",
                 "INT",
-                "LONG",
+                "BIGINT",
                "DOUBLE",
                "DECIMAL64",
                "DECIMAL128"
@@ -262,17 +262,17 @@
                 "BYTE",
                 "SHORT",
                 "INT",
-                "LONG",
+                "BIGINT",
                "DOUBLE",
                "DECIMAL64",
                "DECIMAL128"
             ],
-            "LONG": [
+            "BIGINT": [
                 "VARCHAR",
                 "BYTE",
                 "SHORT",
                 "INT",
-                "LONG",
+                "BIGINT",
                "DOUBLE",
                "DECIMAL64",
                "DECIMAL128"
@@ -282,7 +282,7 @@
                 "BYTE",
                 "SHORT",
                 "INT",
-                "LONG",
+                "BIGINT",
                "DOUBLE",
                "DECIMAL64",
                "DECIMAL128"
@@ -296,7 +296,7 @@
                 "BYTE",
                 "SHORT",
                 "INT",
-                "LONG",
+                "BIGINT",
                "DOUBLE",
                "DECIMAL64",
                "DECIMAL128"
@@ -306,7 +306,7 @@
                 "BYTE",
                 "SHORT",
                 "INT",
-                "LONG",
+                "BIGINT",
                "DOUBLE",
                "DECIMAL64",
                "DECIMAL128"
@@ -316,7 +316,7 @@
                 "BYTE",
                 "SHORT",
                 "INT",
-                "LONG",
+                "BIGINT",
                "DOUBLE",
                "DECIMAL64",
                "DECIMAL128"
@@ -326,7 +326,7 @@
                 "BYTE",
                 "SHORT",
                 "INT",
-                "LONG",
+                "BIGINT",
                "DOUBLE",
                "DECIMAL64",
                "DECIMAL128",

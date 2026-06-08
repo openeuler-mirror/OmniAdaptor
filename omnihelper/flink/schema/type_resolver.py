@@ -71,26 +71,26 @@ NESTED_FUNCTION = "NESTED_FUNCTION"
 # OMNI 类型 ID 到类型名称的映射表
 # 该映射用于将 Flink 内部类型 ID 转换为可读的类型字符串
 OMNI_TYPE_ID_MAP = {
-    1: "INT",           # 整型
-    2: "BIGINT",        # 长整型
-    3: "DOUBLE",        # 双精度浮点型
-    4: "FLOAT",         # 单精度浮点型
-    5: "BOOLEAN",       # 布尔型
-    6: "TINYINT",       # 微型整型
-    7: "SMALLINT",      # 小型整型
-    8: "DATE",          # 日期类型
-    9: "TIME",          # 时间类型
-    10: "TIMESTAMP",    # 时间戳类型
-    11: "TIMESTAMP_LTZ",# 本地时区时间戳
-    12: "DECIMAL",      # 高精度小数
-    13: "BINARY",       # 二进制类型
-    14: "CHAR",         # 定长字符
-    15: "VARCHAR",      # 变长字符
-    16: "ARRAY",        # 数组类型
-    17: "MAP",          # 映射类型
-    18: "ROW",          # 行类型（嵌套结构）
-    19: "VARBINARY",    # 变长二进制
-    20: "MULTISET",     # 多重集合类型
+    1: "INT",  # 整型
+    2: "BIGINT",  # 长整型
+    3: "DOUBLE",  # 双精度浮点型
+    4: "FLOAT",  # 单精度浮点型
+    5: "BOOLEAN",  # 布尔型
+    6: "TINYINT",  # 微型整型
+    7: "SMALLINT",  # 小型整型
+    8: "DATE",  # 日期类型
+    9: "TIME",  # 时间类型
+    10: "TIMESTAMP",  # 时间戳类型
+    11: "TIMESTAMP_LTZ",  # 本地时区时间戳
+    12: "DECIMAL",  # 高精度小数
+    13: "BINARY",  # 二进制类型
+    14: "CHAR",  # 定长字符
+    15: "VARCHAR",  # 变长字符
+    16: "ARRAY",  # 数组类型
+    17: "MAP",  # 映射类型
+    18: "ROW",  # 行类型（嵌套结构）
+    19: "VARBINARY",  # 变长二进制
+    20: "MULTISET",  # 多重集合类型
 }
 
 # 字面量类型匹配模式列表
@@ -1092,12 +1092,36 @@ class FlinkTypeResolver:
             inner_expr = distinct_match.group(2).strip()
             return self.resolve_text_expr_type(inner_expr, input_schema, depth + 1, visited=visited)
 
-        # 优先级7：字段名查找（小写）
+        # 优先级7：带括号的表达式（如 (a + b), (event_type = 0)）
+        # 注意：只有当表达式真正以 '(' 开头时才处理
+        # 如果是 func_name(...) 格式，应该由函数调用处理
+        if expr_str.startswith("(") and expr_str.endswith(")"):
+            # 检查是否为最外层括号（处理嵌套括号）
+            depth_count = 0
+            is_outer_paren = True
+            for i, c in enumerate(expr_str):
+                if c == "(":
+                    depth_count += 1
+                elif c == ")":
+                    depth_count -= 1
+                # 如果在中间位置深度回到0，说明不是最外层括号
+                if i > 0 and i < len(expr_str) - 1 and depth_count == 0:
+                    is_outer_paren = False
+                    break
+            if is_outer_paren:
+                inner_expr = expr_str[1:-1].strip()
+                if inner_expr:
+                    # 递归解析内部表达式
+                    # 如果内部是函数调用，也继续递归解析
+                    # 函数调用会在递归中被正确处理
+                    return self.resolve_text_expr_type(inner_expr, input_schema, depth + 1, visited=visited)
+
+        # 优先级8：字段名查找（小写）
         name_lower = expr_str.lower()
         if name_lower in self.column_type:
             return self.column_type[name_lower]
 
-        # 优先级8：嵌套字段路径解析
+        # 优先级8.1：嵌套字段路径解析
         if "." in expr_str:
             nested_type = self._resolve_nested_field_path(expr_str)
             if nested_type and nested_type != UNKNOWN:
@@ -1119,7 +1143,12 @@ class FlinkTypeResolver:
         if comparison_type:
             return comparison_type
 
-        # 优先级11：函数调用
+        # 优先级11：算术表达式（+、-、*、/）
+        arithmetic_type = self._resolve_arithmetic_type(expr_str, input_schema, depth)
+        if arithmetic_type and arithmetic_type != UNKNOWN:
+            return arithmetic_type
+
+        # 优先级12：函数调用
         func_type = self._resolve_text_function_type(expr_str, input_schema, depth)
         if func_type and func_type != UNKNOWN:
             return func_type
@@ -1173,6 +1202,59 @@ class FlinkTypeResolver:
         right_type = self.resolve_text_expr_type(right, input_schema, depth + 1)
         if left_type != UNKNOWN or right_type != UNKNOWN:
             return "BOOLEAN"
+
+        return None
+
+    def _resolve_arithmetic_type(self, expr_str, input_schema, depth):
+        """
+        解析算术表达式的类型
+
+        参数说明:
+        :param expr_str: str，文本格式的算术表达式
+        :param input_schema: list，输入 schema
+        :param depth: int，当前递归深度
+        :return: str 或 None，算术表达式返回 BIGINT，无法解析返回 None
+
+        支持的算术运算符:
+        - +: 加法
+        - -: 减法
+        - *: 乘法
+        - /: 除法
+
+        解析逻辑:
+        1. 使用正则表达式匹配算术表达式模式
+        2. 提取左操作数、运算符和右操作数
+        3. 递归解析左右操作数的类型
+        4. 只要有一个操作数类型可解析，返回 BIGINT
+        5. 无法匹配或解析时返回 None
+
+        示例:
+        - "0.985 * bid" → BIGINT
+        - "price + 2" → BIGINT
+        - "quantity - 1" → BIGINT
+        """
+        # 使用正则表达式匹配算术表达式（避免匹配函数调用）
+        if re.match(r'^[a-zA-Z_]\w*\s*\(', expr_str.strip()):
+            return None
+
+        op_match = re.match(r'^(.+?)\s*([+\-*/])\s*(.+)$', expr_str.strip())
+        if not op_match:
+            return None
+
+        # 提取左右操作数和运算符
+        left = op_match.group(1).strip()
+        op = op_match.group(2)
+        right = op_match.group(3).strip()
+
+        # 空操作数检查
+        if not left or not right:
+            return None
+
+        # 递归解析左右操作数的类型
+        left_type = self.resolve_text_expr_type(left, input_schema, depth + 1)
+        right_type = self.resolve_text_expr_type(right, input_schema, depth + 1)
+        if left_type != UNKNOWN or right_type != UNKNOWN:
+            return "DECIMAL128"
 
         return None
 
@@ -1333,13 +1415,13 @@ class FlinkTypeResolver:
 
         解析流程:
         1. 提取函数参数部分
-        2. 按逗号分割参数（简单分割，不处理嵌套）
+        2. 使用 _split_function_args 分割参数（处理嵌套括号）
         3. 取第一个参数并去除首尾空白
         4. 递归解析第一个参数的类型
 
         设计考量:
         - 用于处理 ARGUMENT_TYPE 规则的函数
-        - 简单按逗号分割，适用于大多数场景
+        - 使用 _split_function_args 处理嵌套括号场景
 
         示例:
         upper(name) → 提取 "name" → VARCHAR
@@ -1349,8 +1431,12 @@ class FlinkTypeResolver:
         if not inner:
             return None
 
-        # 简单按逗号分割，取第一个参数
-        first_arg = inner.split(",")[0].strip()
+        # 使用 _split_function_args 分割参数（处理嵌套括号）
+        args = self._split_function_args(inner)
+        if not args:
+            return None
+
+        first_arg = args[0].strip()
         if not first_arg:
             return None
 

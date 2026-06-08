@@ -42,15 +42,19 @@ class FunctionSupportChecker:
         source_type = input_type[0]
         target_type = input_type[1]
 
+        # 对类型进行归一化处理
+        normalized_source = TypeNormalizer.normalize_type(source_type)
+        normalized_target = TypeNormalizer.normalize_type(target_type)
+
         if not self.cast_is_support_type:
             return True, []
 
-        if source_type not in self.cast_is_support_type:
+        if normalized_source not in self.cast_is_support_type:
             return False, [f"{source_type} -> {target_type} (source type not supported)"]
 
-        supported_targets = self.cast_is_support_type.get(source_type, [])
+        supported_targets = self.cast_is_support_type.get(normalized_source, [])
 
-        if target_type in supported_targets:
+        if normalized_target in supported_targets:
             return True, []
         else:
             return False, [f"{source_type} -> {target_type} (target type not supported)"]
@@ -70,6 +74,12 @@ class FunctionSupportChecker:
 
         if not self.func_support_map[func_name_lower]:
             return False, []
+
+        # CAST 函数使用白名单机制
+        if func_name_lower == "cast" and self.cast_is_support_type:
+            if param_types:
+                return self.check_cast_function(param_types)
+            return True, []
 
         is_supported_list = self.func_is_supported_types.get(func_name_lower, [])
 
