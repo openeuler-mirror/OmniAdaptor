@@ -551,7 +551,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
         resumeConsumption(nativeCreditBasedSequenceNumberingViewReaderRef);
 
         // When subPartition is blocked, the flusher thread may not notify data available, so we need to notify it manually.
-        firstDataAvailableNotification(nativeCreditBasedSequenceNumberingViewReaderRef);
+        startFirstDataAvailableNotificationThread();
     }
 
     /**
