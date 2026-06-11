@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,7 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
 
     private static final Logger LOG = LoggerFactory.getLogger(ValidateJoinOPStrategy.class);
     private static final Set<String> SUPPORT_JOIN_TYPE = new HashSet<>(Arrays.asList("InnerJoin", "LeftOuterJoin"));
+    private static final List<String> SUPPORT_JOIN_KEY_TYPES = Collections.singletonList("BIGINT");
 
     private static boolean nonEquiConditionCheck(Map<String, Object> condition, int inputSize) {
         checkState(condition.get("exprType") instanceof String);
@@ -69,10 +71,14 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
             return false;
         }
 
-        // Checks if key types are equal
+        // Checks if key types are equal and must be BIGINT
         for (int i = 0; i < leftJoinKey.size(); i++) {
             String leftType = leftInputTypes.get(leftJoinKey.get(i));
             String rightType = rightInputTypes.get(rightJoinKey.get(i));
+            if (!SUPPORT_JOIN_KEY_TYPES.contains(leftType)) {
+                LOG.warn("Join Key type must be BIGINT. leftType = {}", leftType);
+                return false;
+            }
             if (!leftType.equals(rightType)) {
                 LOG.warn("Join Key types are not equal. leftType = {}, rightType = {}", leftType, rightType);
                 return false;
@@ -80,17 +86,14 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
         }
 
         // Checks if inputSpec is allowed
-        if (operatorInfoMap.get("leftInputSpec").equals("JoinKeyContainsUniqueKey")) {
-            if (((ArrayList<Object>) operatorInfoMap.get("leftUniqueKeys")).size() == 0) {
-                LOG.warn("Left input should contain unique key, but no unique key index has been found");
-                return false;
-            }
+        if (!operatorInfoMap.get("leftInputSpec").equals("NoUniqueKey")) {
+            LOG.warn("leftInputSpec only supports NoUniqueKey");
+            return false;
         }
-        if (operatorInfoMap.get("rightInputSpec").equals("JoinKeyContainsUniqueKey")) {
-            if (((ArrayList<Object>) operatorInfoMap.get("rightUniqueKeys")).size() == 0) {
-                LOG.warn("Right input should contain unique key, but no unique key index has been found");
-                return false;
-            }
+
+        if (!operatorInfoMap.get("rightInputSpec").equals("NoUniqueKey")) {
+            LOG.warn("rightInputSpec only supports NoUniqueKey");
+            return false;
         }
 
         // Checks if condition is valid
