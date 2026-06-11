@@ -345,10 +345,10 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
             Duration size = ((TumblingWindowSpec) windowSpec).getSize();
             Duration offset = ((TumblingWindowSpec) windowSpec).getOffset();
             if (offset != null) {
-                jsonMap.put("offset",offset.toMillis());
+                jsonMap.put("windowOffset",offset.toMillis());
             }
             jsonMap.put("timeAttributeIndex",timeAttributeIndex);
-            jsonMap.put("size",size.toMillis());
+            jsonMap.put("windowSize",size.toMillis());
         } else if (windowSpec instanceof HoppingWindowSpec) {
             Duration size = ((HoppingWindowSpec) windowSpec).getSize();
             Duration slide = ((HoppingWindowSpec) windowSpec).getSlide();
@@ -361,11 +361,11 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
             }
             Duration offset = ((HoppingWindowSpec) windowSpec).getOffset();
             if (offset != null) {
-                jsonMap.put("offset",offset.toMillis());
+                jsonMap.put("windowOffset",offset.toMillis());
             }
             jsonMap.put("timeAttributeIndex",timeAttributeIndex);
-            jsonMap.put("size",size.toMillis());
-            jsonMap.put("slide",slide.toMillis());
+            jsonMap.put("windowSize",size.toMillis());
+            jsonMap.put("windowSlide",slide.toMillis());
         } else if (windowSpec instanceof CumulativeWindowSpec) {
             Duration maxSize = ((CumulativeWindowSpec) windowSpec).getMaxSize();
             Duration step = ((CumulativeWindowSpec) windowSpec).getStep();
@@ -378,7 +378,7 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
             }
             Duration offset = ((CumulativeWindowSpec) windowSpec).getOffset();
             if (offset != null) {
-                jsonMap.put("offset",offset.toMillis());
+                jsonMap.put("windowOffset",offset.toMillis());
             }
             jsonMap.put("timeAttributeIndex",timeAttributeIndex);
             jsonMap.put("maxSize",maxSize.toMillis());
