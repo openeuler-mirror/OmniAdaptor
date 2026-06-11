@@ -587,13 +587,6 @@ public class OmniTaskWrapper {
         return node;
     }
 
-    private static String summarizeStreamStateHandle(StreamStateHandle stateHandle) {
-        if (stateHandle == null) {
-            return "null";
-        }
-        return stateHandle.getClass().getSimpleName() + ",size=" + stateHandle.getStateSize();
-    }
-
     private OperatorStreamStateHandle deserializeOperatorStreamStateHandle(String metaStateHandleStr) {
         try {
             JsonNode rootNode = OBJECT_MAPPER.readTree(metaStateHandleStr);
@@ -621,7 +614,6 @@ public class OmniTaskWrapper {
                     }
                     JsonNode stateNode = partitionOffsetsNode.get(stateName);
                     if (stateNode == null || !stateNode.isObject()) {
-                        LOG.warn("[OS-operator-state] skip invalid operator state meta, stateName={}", stateName);
                         continue;
                     }
                     JsonNode offsetsNode = unwrapTypedArray(stateNode.get("offsets"));
@@ -639,16 +631,9 @@ public class OmniTaskWrapper {
                         StateMetaInfo metaInfo = new StateMetaInfo(
                                 offsets, Mode.valueOf(distributionModeNode.asText()));
                         stateMap.put(stateName, metaInfo);
-                    } else {
-                        LOG.warn("[OS-operator-state] skip incomplete operator state meta, stateName={}, node={}",
-                                stateName, stateNode);
                     }
                 }
-            } else {
-                LOG.warn("[OS-operator-state] OperatorStreamStateHandle has no stateNameToPartitionOffsets");
             }
-            LOG.info("[OS-operator-state] readOperatorMetaData deserialize handle, delegate={}, stateCount={}, states={}",
-                    summarizeStreamStateHandle(metaDataState), stateMap.size(), stateMap.keySet());
             return new OperatorStreamStateHandle(stateMap, metaDataState);
         } catch (Exception e) {
             throw new JsonHelper.JsonHelperException(
@@ -733,8 +718,6 @@ public class OmniTaskWrapper {
 
         try {
             // The readMetaData function
-            LOG.info("[OS-operator-state] readOperatorMetaData begin, delegate={}, jsonBytes={}",
-                    summarizeStreamStateHandle(metaStateHandle), metaStateHandleStr.length());
             inputStream = metaStateHandle.openInputStream();
             cancelStreamRegistry.registerCloseable(inputStream);
 
@@ -748,8 +731,6 @@ public class OmniTaskWrapper {
 
             List<StateMetaInfoSnapshot> broadcastStateMetaInfoSnapshots =
                 backendSerializationProxy.getBroadcastStateMetaInfoSnapshots();
-            LOG.info("[OS-operator-state] readOperatorMetaData done, operatorMetaCount={}, broadcastMetaCount={}",
-                    stateMetaInfoSnapshots.size(), broadcastStateMetaInfoSnapshots.size());
 
             List<Map<String, Object>> stateMetaInfoSnapshotList = new ArrayList<>(stateMetaInfoSnapshots.size());
             for (StateMetaInfoSnapshot metaInfo : stateMetaInfoSnapshots) {

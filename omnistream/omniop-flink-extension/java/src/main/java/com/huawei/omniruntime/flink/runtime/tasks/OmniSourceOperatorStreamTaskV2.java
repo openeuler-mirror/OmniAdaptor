@@ -231,10 +231,6 @@ public class OmniSourceOperatorStreamTaskV2<T> extends OmniStreamTask<T, SourceO
                 // TODO what kind of exception to throw
                 throw new RuntimeException(e.getMessage());
             }
-            if (evt instanceof AddSplitEvent || evt instanceof NoMoreSplitsEvent) {
-                LOG.info("[OS-source-event] dispatch via native mailbox, operatorId={}, eventType={}",
-                        operatorID, evt.getClass().getSimpleName());
-            }
             dispatchOperatorEvent(omniTaskRef, operatorID.toString(), desc);
         });
     }
