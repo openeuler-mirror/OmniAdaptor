@@ -101,11 +101,14 @@ public class RexNodeUtil {
         specialOperatorMap.put("JSON_VALUE", SpecialExprType.JSON_VALUE);
         specialOperatorMap.put("JSON_QUERY", SpecialExprType.JSON_QUERY);
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
+        specialOperatorMap.put("CURRENT_TIMESTAMP", SpecialExprType.CURRENT_TIMESTAMP);
+        specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
     }
 
     static {
         // Map UDF registration names to their corresponding SpecialExprType
         udfOperatorMap.put("jsontest", SpecialExprType.JSON_SPLIT);
+        udfOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
     }
 
     static {
@@ -194,7 +197,9 @@ public class RexNodeUtil {
         COALESCE,
         JSON_VALUE,
         JSON_QUERY,
-        JSON_SPLIT
+        JSON_SPLIT,
+        CURRENT_TIMESTAMP,
+        DATE_ADD
     }
 
 
@@ -370,6 +375,12 @@ public class RexNodeUtil {
                         LOG.info("The JSON_VALUE expression is {} ", rexCall.toString());
                         break;
                     case JSON_QUERY:
+                        if (operands.size() != 2 && operands.size() != 3 && operands.size() != 5) {
+                            LOG.warn("JSON_QUERY expects 2, 3, or 5 operands, but got {}", operands.size());
+                            jsonMap.put("exprType", "INVALID");
+                            break;
+                        }
+
                         jsonMap.put("exprType", "FUNCTION");
                         setDataType(rexCall, jsonMap, "returnType");
                         jsonMap.put("function_name", "json_query");
@@ -377,6 +388,36 @@ public class RexNodeUtil {
                         List<Map<String, Object>> queryArgs = new ArrayList<>();
                         queryArgs.add(buildJsonMap(operands.get(0)));
                         queryArgs.add(buildJsonMap(operands.get(1)));
+
+                        if (operands.size() > 2) {
+                            Map<String, Object> wrapperBehavior = parseJsonQueryWrapperOperand(operands.get(2));
+                            if (wrapperBehavior == null) {
+                                LOG.warn("Failed to parse JSON_QUERY wrapper behavior from operand {}", operands.get(2));
+                                jsonMap.put("exprType", "INVALID");
+                                break;
+                            }
+                            jsonMap.put("wrapperBehavior", wrapperBehavior);
+                        }
+
+                        if (operands.size() > 3) {
+                            Map<String, Object> emptyBehavior = parseJsonQueryBehaviorOperand(operands.get(3));
+                            if (emptyBehavior == null) {
+                                LOG.warn("Failed to parse JSON_QUERY empty behavior from operand {}", operands.get(3));
+                                jsonMap.put("exprType", "INVALID");
+                                break;
+                            }
+                            jsonMap.put("emptyBehavior", emptyBehavior);
+                        }
+
+                        if (operands.size() > 4) {
+                            Map<String, Object> errorBehavior = parseJsonQueryBehaviorOperand(operands.get(4));
+                            if (errorBehavior == null) {
+                                LOG.warn("Failed to parse JSON_QUERY error behavior from operand {}", operands.get(4));
+                                jsonMap.put("exprType", "INVALID");
+                                break;
+                            }
+                            jsonMap.put("errorBehavior", errorBehavior);
+                        }
 
                         jsonMap.put("arguments", queryArgs);
                         LOG.info("The JSON_QUERY expression is {} ", rexCall.toString());
@@ -606,6 +647,8 @@ public class RexNodeUtil {
                             argMap2.put("value", "%Y-%m-%d");
                         } else if ("HH:mm".equals(argMap2.get("value"))) {
                             argMap2.put("value", "%H:%M");
+                        } else if ("HH".equals(argMap2.get("value"))) {
+                            argMap2.put("value", "%H");
                         } else {
                             argMap2.put("value", "INVALID");
                         }
@@ -667,6 +710,38 @@ public class RexNodeUtil {
                         jsonMap.put("conditions", cond);
                         LOG.info("List is {}", cond.toString());
                         LOG.info("The expression is {} ", rexCall.toString());
+                        break;
+                    case CURRENT_TIMESTAMP:
+                        jsonMap.put("exprType", "FUNCTION");
+                        setDataType(rexCall, jsonMap, "returnType");
+                        jsonMap.put("function_name", "current_timestamp");
+                        List<Map<String, Object>> currentTimestampArgs = new ArrayList<>();
+                        if (operands.size() > 0) {
+                            for (int i = 0; i < operands.size(); i++) {
+                                currentTimestampArgs.add(buildJsonMap(operands.get(i)));
+                            }
+                        }
+                        jsonMap.put("arguments", currentTimestampArgs);
+                        LOG.info("The CURRENT_TIMESTAMP expression is {} ", rexCall.toString());
+                        break;
+                    case DATE_ADD:
+                        jsonMap.put("exprType", "FUNCTION");
+                        jsonMap.put("returnType", 2);
+                        jsonMap.put("function_name", "date_add_days");
+                        List<Map<String, Object>> dateAddArgs = new ArrayList<>();
+                        for (int i = 0; i < operands.size(); i++) {
+                            Map<String, Object> argMap = buildJsonMap(operands.get(i));
+                            if (i == 0) {
+                                SqlTypeName firstArgType = operands.get(0).getType().getSqlTypeName();
+                                if (firstArgType == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+                                        || SqlTypeName.DATETIME_TYPES.contains(firstArgType)) {
+                                    argMap.put("dataType", 2);
+                                }
+                            }
+                            dateAddArgs.add(argMap);
+                        }
+                        jsonMap.put("arguments", dateAddArgs);
+                        LOG.info("The DATE_ADD expression is {} ", rexCall.toString());
                         break;
                     default:
                         jsonMap.put("exprType", "INVALID");
@@ -769,5 +844,72 @@ public class RexNodeUtil {
             LOG.warn("Failed to parse behavior operands for {}: {}", behaviorKey, e.getMessage());
             return null;
         }
+    }
+
+    private static Map<String, Object> parseJsonQueryWrapperOperand(RexNode wrapperNode) {
+        String wrapperName = getSymbolLiteralName(wrapperNode);
+        if (wrapperName == null) {
+            return null;
+        }
+
+        Map<String, Object> wrapperMap = new LinkedHashMap<>();
+        if ("WITHOUT_ARRAY".equalsIgnoreCase(wrapperName)
+                || "WITH_CONDITIONAL_ARRAY".equalsIgnoreCase(wrapperName)
+                || "WITH_UNCONDITIONAL_ARRAY".equalsIgnoreCase(wrapperName)) {
+            wrapperMap.put("type", wrapperName.toUpperCase(Locale.ROOT));
+            return wrapperMap;
+        }
+        return null;
+    }
+
+    private static Map<String, Object> parseJsonQueryBehaviorOperand(RexNode behaviorNode) {
+        String behaviorName = getSymbolLiteralName(behaviorNode);
+        if (behaviorName == null) {
+            return null;
+        }
+
+        Map<String, Object> behaviorMap = new LinkedHashMap<>();
+        if ("NULL".equalsIgnoreCase(behaviorName)
+                || "ERROR".equalsIgnoreCase(behaviorName)
+                || "EMPTY_ARRAY".equalsIgnoreCase(behaviorName)
+                || "EMPTY_OBJECT".equalsIgnoreCase(behaviorName)) {
+            behaviorMap.put("type", behaviorName.toUpperCase(Locale.ROOT));
+            return behaviorMap;
+        }
+        return null;
+    }
+
+    private static String getSymbolLiteralName(RexNode symbolNode) {
+        if (symbolNode instanceof RexLiteral) {
+            RexLiteral literal = (RexLiteral) symbolNode;
+            Object literalValue = literal.getValue();
+            if (literalValue != null) {
+                return normalizeSymbolLiteralName(literalValue.toString());
+            }
+
+            Object value2 = literal.getValue2();
+            if (value2 != null) {
+                return normalizeSymbolLiteralName(value2.toString());
+            }
+        }
+
+        return normalizeSymbolLiteralName(symbolNode.toString());
+    }
+
+    private static String normalizeSymbolLiteralName(String symbolText) {
+        if (symbolText == null || symbolText.isEmpty()) {
+            return null;
+        }
+
+        if (symbolText.startsWith("FLAG(") && symbolText.endsWith(")")) {
+            symbolText = symbolText.substring(5, symbolText.length() - 1);
+        }
+
+        int bracketStart = symbolText.indexOf('[');
+        int bracketEnd = symbolText.lastIndexOf(']');
+        if (bracketStart >= 0 && bracketEnd > bracketStart) {
+            return symbolText.substring(bracketStart + 1, bracketEnd);
+        }
+        return symbolText;
     }
 }

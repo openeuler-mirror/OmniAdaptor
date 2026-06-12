@@ -32,6 +32,7 @@ public abstract class AbstractValidateOperatorStrategy {
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(9)",
             "VARCHAR",
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",
@@ -109,5 +110,14 @@ public abstract class AbstractValidateOperatorStrategy {
             dataTypes.add((List<String>) jsonMap.get(name));
         }
         return dataTypes;
+    }
+
+    protected String getStringInfo(Map<String, Object> jsonMap, String name) {
+        Object info = jsonMap.get(name);
+        if (info instanceof String) {
+            return (String) info;
+        } else {
+            return null;
+        }
     }
 }

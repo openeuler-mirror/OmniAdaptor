@@ -2,6 +2,7 @@
 
 ## 最新消息
 
+- \[2026.05.19\]：新增Flink日志分析能力，支持通过REST API获取Flink作业指标并分析算子、表达式和函数使用情况。
 - \[2025.02.04\]：新增算子识别能力，修复函数表达式名称/类型匹配问题。
 - \[2025.01.15\]：首次正式发布OmniOperator 1.0.0。支持执行日志中表达式、函数使用情况的高效分析。
 
@@ -11,14 +12,19 @@
 
 OmniHelper是专为大数据平台设计的日志分析工具，旨在帮助开发者和运维人员高效分析执行日志中的算子、表达式和函数使用情况。该工具作为Omni生态的配套组件，能够识别原生算子与Omni算子的混合执行情况，分析相关参数类型，识别不支持的算子/表达式/函数并生成结构化的分析报告，为性能优化提供数据支持。
 
+OmniHelper支持两种日志分析模式：
+- **Spark日志分析**：解析Spark事件日志（.lz4/.zstd格式），提取物理执行计划中的算子和函数信息。
+- **Flink日志分析**：通过Flink REST API获取作业执行指标，分析算子、表达式和函数使用情况。
+
 ### 架构介绍
 
 核心架构组件包括：
 
-- 命令行接口层：使用命令行解析模块构建命令行参数解析，支持输入路径、输出路径、Java配置等参数，提供友好的帮助信息和使用示例。
-- 日志解析模块：日志文件处理，支持通过正则表达式自动识别日志文件模式，单个或批量处理日志文件。
-- 算子/函数/表达式分析模块：高效分析执行日志中的算子/表达式/函数使用情况，识别不支持部分并提取算子执行时间和资源消耗情况。
-- 结果处理模块：合并多个任务的分析结果，计算统计信息并生成带样式的Excel报告。
+- **命令行接口层**：使用argparse子命令模式构建，支持`spark`和`flink`两种分析模式，提供友好的帮助信息和使用示例。
+- **Spark日志解析模块**：日志文件处理，通过Java工具将.lz4/.zstd压缩的Spark事件日志解析为JSON格式，支持单文件或批量目录处理。
+- **Flink日志解析模块**：通过Flink REST API获取作业概览、执行计划和使用频次等指标，支持Kerberos认证和自定义HTTP头等配置。
+- **算子/函数/表达式分析模块**：高效分析执行日志中的算子/表达式/函数使用情况，识别不支持部分并提取算子执行时间和资源消耗情况。
+- **结果处理模块**：合并多个任务的分析结果，计算统计信息并生成带样式的Excel报告。
 
 ### 应用场景
 
@@ -40,33 +46,40 @@ Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底
 
 ## 目录结构
 
-项目全量目录层级介绍如下：
+项目主要目录介绍如下：
 ```
 
 ├── omnihelper/                                             # 项目主目录
 │   ├── docs/                                               # 文档目录
-│   │   ├── release_notes.md                                # OmniHelper版本说明书
-│   ├── enum/                                               # 枚举类型定义目录
-│   │   ├── type_enum.py                                    # 数据类型枚举
-│   │   └── function_enum.py                                # 函数类型枚举
+│   │   ├── en/                                             # 英文文档
+│   │   ├── zh/                                             # 中文文档
+│   │   └── LICENSE                                         # 许可证文件
+│   ├── constants/                                          # 常量定义目录
 │   ├── util/                                               # 工具类目录
-│   │   ├── excel_util.py                                   # Excel处理工具
-│   │   ├── common_util.py                                  # 通用工具函数
-│   │   └── func_util.py                                    # 函数处理工具
 │   ├── parser/                                             # 日志解析模块目录
-│   │   ├── op_parser.py                                    # 算子解析器
-│   │   ├── function_parser.py                              # 函数解析器
-│   │   ├── type_matcher.py                                 # 类型匹配器
-│   │   └── function_checker.py                             # 函数校验器
+│   │   ├── function/                                       # 函数解析子模块
+│   │   ├── operator/                                       # 算子解析子模块
+│   │   ├── cte/                                            # CTE解析子模块
+│   │   └── type_matcher.py                                 # 类型匹配器
+│   ├── flink/                                              # Flink分析模块目录
+│   │   ├── flink_request.py                                # Flink REST API请求器
+│   │   ├── operator/                                       # Flink算子解析
+│   │   └── function/                                       # Flink函数解析
+│   ├── tests/                                              # 测试目录
 │   ├── resources/                                          # 资源文件目录
-│   │   ├── udf_dictionary.json                             # UDF字典
 │   │   ├── omni_op_dictionary.json                         # Omni算子字典
 │   │   ├── omni_function_dictionary.json                   # Omni函数字典
-│   │   └── omni_opname_mapping_dictionary.json             # 算子名称映射字典
+│   │   ├── omni_opname_mapping_dictionary.json             # 算子名称映射字典
+│   │   ├── flink_op_dictionary.json                        # Flink算子字典
+│   │   ├── flink_function_dictionary.json                  # Flink函数字典
+│   │   ├── return_type_dictionary.json                     # 返回类型字典
+│   │   ├── udf_dictionary.json                             # UDF字典
+│   │   └── spark_table_schema.csv                          # Spark表结构模板
 │   ├── main.py                                             # 主程序入口
+│   ├── spark_log_parser.py                                 # Spark日志解析器
+│   ├── flink_log_parser.py                                 # Flink日志解析器
 │   ├── build.sh                                            # 构建脚本
-│   ├── README.md                                           # 项目说明文档
-│   └── __init__.py                                         # Python包初始化文件
+│   └── pyproject.toml                                      # 项目配置文件
 ```
 
 ## 版本说明
@@ -74,6 +87,14 @@ Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底
 每个版本的特性变更详细信息，请参见《[版本说明书](docs/zh/release_notes.md)》。
 
 ## 环境部署
+
+### Python环境要求
+
+- Python >= 3.9
+- 依赖项：tqdm、numpy、pandas、openpyxl、requests
+- 可选依赖：requests-kerberos（启用Kerberos认证时需要）
+
+### Spark日志分析环境部署
 
 1. 安装Java环境。
      推荐使用JDK 1.8版本，并确保**java**命令可用，或在参数中指定Java的完整执行路径。
@@ -219,6 +240,16 @@ Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底
             ```
 
 
+### Flink日志分析环境部署
+
+- 确保Flink集群已启动并可访问REST API。
+- 确保Flink Dashboard URL可访问（默认：http://localhost:8081）。
+- 如果使用Kerberos认证，确保已安装并配置Kerberos相关依赖：
+   ```bash
+   pip install requests-kerberos
+   ```
+
+
 ## 快速入门
 
 ### 环境准备
@@ -247,14 +278,24 @@ Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底
 
 **命令格式**
 
+OmniHelper采用子命令模式，支持`spark`和`flink`两种分析模式：
+
 ```bash
-omnihelper [-h] --input_data INPUT_DATA [--output_dir OUTPUT_DIR]
-           [--show-op-details] [--java-path JAVA_PATH] --class-path CLASS_PATH
+# Spark日志分析
+omnihelper spark [-h] --input_data INPUT_DATA [--output_dir OUTPUT_DIR]
+                 [--show-op-details] [--java-path JAVA_PATH] --class-path CLASS_PATH
+
+# Flink日志分析
+omnihelper flink [-h] --url URL [--jobid JOBID [JOBID ...]] [--input_data INPUT_DATA]
+                 [--interval INTERVAL] [--timeout TIMEOUT] [--output_dir OUTPUT_DIR]
+                 [--show-op-details] [--no-ssl-verify] [--kerberos]
+                 [--kerberos-mutual-auth {OPTIONAL,REQUIRED,DISABLED}]
+                 [--header HEADER]
 ```
-**参数说明**
 
+#### Spark分析模式参数说明
 
-**表1** 基础参数
+**表1** Spark基础参数
 |参数|简写|是否必选|说明
 |--|--|--|--|
 |--help|-h|否|查看帮助信息.|
@@ -262,55 +303,65 @@ omnihelper [-h] --input_data INPUT_DATA [--output_dir OUTPUT_DIR]
 |--output_dir|-o|否|输出目录。<br>默认值：`./output`。|
 |--show-op-details|-s|否|隐藏算子文件大小、输出行数信息。|
 
-**表2** Java 配置参数
+**表2** Spark Java配置参数
 |参数|是否必选|说明
 |--|--|--|
 |--java-path|否|Java可执行文件路径，默认调用系统PATH中的`java`。|
 |--class-path|是|完整Java类路径（需包含解析依赖JAR包。）|
 
+#### Flink分析模式参数说明
+
+**表3** Flink基础参数
+|参数|简写|是否必选|说明
+|--|--|--|--|
+|--help|-h|否|查看帮助信息.|
+|--url|-u|是|Flink Dashboard URL，例如：http://127.0.0.1:8081 或 https://127.0.0.1:8081。|
+|--jobid|-j|否|Flink作业ID。支持多个作业ID，用空格分隔。如果不提供，将尝试从API获取。|
+|--input_data|无|否|输入字段和类型的映射文件路径，CSV格式。CSV文件应包含table_name、field_name和field_type列。|
+|--output_dir|-o|否|输出目录。<br>默认值：`./output`。|
+|--show-op-details|-s|否|隐藏算子文件大小、输出行数信息。|
+|--interval|-i|否|API调用间隔（毫秒）。<br>默认值：100。|
+|--timeout|-t|否|API调用超时时间（秒）。<br>默认值：30。|
+
+**表4** Flink认证与安全参数
+|参数|是否必选|说明
+|--|--|--|
+|--no-ssl-verify|否|跳过SSL证书验证（默认验证SSL）。|
+|--kerberos|否|启用Kerberos认证（默认：False）。|
+|--kerberos-mutual-auth|否|Kerberos双向认证模式（默认：OPTIONAL）。可选值：OPTIONAL、REQUIRED、DISABLED。|
+|--header|-H|否|自定义HTTP头，格式为"Key: Value"。可多次指定。例如：--header "Authorization: Bearer token"|
+
 
 **使用方法**
 
 ```bash
-usage: omnihelper [-h] --input_data INPUT_DATA [--output_dir OUTPUT_DIR]
-                  [--show-op-details] [--java-path JAVA_PATH] --class-path
-                  CLASS_PATH
+usage: omnihelper [-h] {spark,flink} ...
 
 Big Data Operator Scanning Command Line Tool
 
 optional arguments:
   -h, --help            show this help message and exit
-  --input_data INPUT_DATA, -i INPUT_DATA
-                        Input directory path or single file path (required).
-                        If a single .lz4 or .zstd file is provided, only that
-                        file will be processed.
-  --output_dir OUTPUT_DIR, -o OUTPUT_DIR
-                        Output directory path (default: ./output)
-  --show-op-details, -s
-                        Disable displaying op file sizes and output rows
-
-Java Configuration:
-  --java-path JAVA_PATH
-                        Java executable path (default: "java" from system
-                        PATH)
-  --class-path CLASS_PATH
-                        Complete Java classpath string
+  command               Subcommands
+    spark               Spark log analysis
+    flink               Flink log analysis
 ```
 
 **使用示例**
 
+#### Spark日志分析示例
+
 **示例一**： 解析单个日志文件。
 
      ```bash
-     ./omnihelper -i ./input_data/eventlog.lz4 -o ./output_dir
-     --java-path /path/to/java/bin/java
+     ./omnihelper spark -i ./input_data/eventlog.lz4 -o ./output_dir \
+     --java-path /path/to/java/bin/java \
      --class-path /path/to/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:/path/to/spark-3.4.3-bin-hadoop3/jars/*
      ```
 
 **示例二**： 解析日志文件目录。
 
      ```bash
-     ./omnihelper -i ./input_dir -o ./output \
+     ./omnihelper spark -i ./input_dir -o ./output \
      --java-path /usr/local/jdk1.8/bin/java \
      --class-path /opt/omnihelper/resources/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:/opt/spark-3.4.3-bin-hadoop3/jars/*
      ```
@@ -318,9 +369,41 @@ Java Configuration:
 **示例三**：解析日志文件目录并隐藏算子file sizes和output rows信息。
 
      ```bash
-     ./omnihelper -i ./input_dir -o ./output_dir -s
-     --java-path /path/to/java/bin/java
+     ./omnihelper spark -i ./input_dir -o ./output_dir -s \
+     --java-path /path/to/java/bin/java \
      --class-path /path/to/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:/path/to/spark-3.4.3-bin-hadoop3/jars/*
+     ```
+
+#### Flink日志分析示例
+
+**示例一**： 解析单个Flink作业。
+
+     ```bash
+     ./omnihelper flink --url http://127.0.0.1:8081 -o ./output_dir
+     ```
+
+**示例二**： 解析指定Flink作业。
+
+     ```bash
+     ./omnihelper flink -u https://example.com -j job_001 job_002 job_003 -o ./output_dir
+     ```
+
+**示例三**： 启用Kerberos认证。
+
+     ```bash
+     ./omnihelper flink --url http://127.0.0.1:8081 --kerberos
+     ```
+
+**示例四**： 使用自定义HTTP头。
+
+     ```bash
+     ./omnihelper flink -u https://example.com -H "X-Custom-Header: value"
+     ```
+
+**示例五**： 跳过SSL验证并指定API调用间隔和超时时间。
+
+     ```bash
+     ./omnihelper flink --url https://example.com --no-ssl-verify --interval 200 --timeout 60
      ```
 
 ### 自定义函数配置

@@ -1,12 +1,57 @@
 [
-  {"func_name": "=", "is_support_func": true},
-  {"func_name": "<>", "is_support_func": true},
-  {"func_name": ">", "is_support_func": true},
-  {"func_name": ">=", "is_support_func": true},
-  {"func_name": "<", "is_support_func": true},
-  {"func_name": "<=", "is_support_func": true},
+  {"func_name": "=", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
+      "DECIMAL64", "DECIMAL128", "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ]
+  },
+  {"func_name": "<>", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
+      "DECIMAL64", "DECIMAL128", "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ]
+  },
+  {"func_name": ">", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "DECIMAL64", "DECIMAL128"
+    ]
+  },
+  {"func_name": ">=", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "DECIMAL64", "DECIMAL128"
+    ]
+  },
+  {"func_name": "<", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "DECIMAL64", "DECIMAL128"
+    ]
+  },
+  {"func_name": "<=", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "DECIMAL64", "DECIMAL128"
+    ]
+  },
   {"func_name": "IS NULL", "is_support_func": false},
-  {"func_name": "IS NOT NULL", "is_support_func": true},
+  {"func_name": "IS NOT NULL", "is_support_func": true,
+    "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
+      "DECIMAL64", "DECIMAL128", "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ]
+  },
   {"func_name": "IS DISTINCT FROM", "is_support_func": false},
   {"func_name": "IS NOT DISTINCT FROM", "is_support_func": false},
   {"func_name": "BETWEEN", "is_support_func": false},
@@ -19,22 +64,37 @@
   {"func_name": "NOT IN", "is_support_func": false},
   {"func_name": "EXISTS", "is_support_func": false},
 
-
-  {"func_name": "AND", "is_support_func": true},
-  {"func_name": "OR", "is_support_func": true},
+  {"func_name": "AND", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": ["BOOLEAN"]
+  },
+  {"func_name": "OR", "func_type": "binary", "is_support_func": true,
+    "is_supported_type": ["BOOLEAN"]
+  },
   {"func_name": "NOT", "is_support_func": false},
   {"func_name": "IS FALSE", "is_support_func": false},
   {"func_name": "IS NOT FALSE", "is_support_func": false},
-  {"func_name": "IS TRUE", "is_support_func": true},
+  {"func_name": "IS TRUE", "is_support_func": true,
+   "is_supported_type": ["BOOLEAN"]
+  },
   {"func_name": "IS NOT TRUE", "is_support_func": false},
   {"func_name": "IS UNKNOWN", "is_support_func": false},
   {"func_name": "IS NOT UNKNOWN", "is_support_func": false},
 
-
-  {"func_name": "+", "is_support_func": true},
-  {"func_name": "-", "is_support_func": true},
-  {"func_name": "*", "is_support_func": true},
-  {"func_name": "/", "is_support_func": true},
+  {"func_name": "+", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INTEGER", "DECIMAL64", "DECIMAL128"]
+  },
+  {"func_name": "-", "func_type": "unary", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INTEGER", "DECIMAL64", "DECIMAL128"]
+  },
+  {"func_name": "-", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INTEGER", "DECIMAL64", "DECIMAL128"]
+  },
+  {"func_name": "*", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INTEGER", "DECIMAL64", "DECIMAL128"]
+  },
+  {"func_name": "/", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INTEGER", "DECIMAL64", "DECIMAL128"]
+  },
   {"func_name": "%", "is_support_func": false},
   {"func_name": "POWER", "is_support_func": false},
   {"func_name": "ABS", "is_support_func": false},
@@ -71,12 +131,17 @@
   {"func_name": "HEX", "is_support_func": false},
   {"func_name": "TRUNCATE", "is_support_func": false},
 
-
   {"func_name": "||", "is_support_func": false},
-  {"func_name": "CHAR_LENGTH", "is_support_func": true},
-  {"func_name": "CHARACTER_LENGTH", "is_support_func": true},
+  {"func_name": "CHAR_LENGTH", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "CHARACTER_LENGTH", "is_support_func": true,
+    "is_supported_type": ["STRING"]
+  },
   {"func_name": "UPPER", "is_support_func": false},
-  {"func_name": "LOWER", "is_support_func": true},
+  {"func_name": "LOWER", "is_support_func": true,
+   "is_supported_type": ["STRING"]
+  },
   {"func_name": "POSITION", "is_support_func": false},
   {"func_name": "TRIM", "is_support_func": false},
   {"func_name": "LTRIM", "is_support_func": false},
@@ -86,7 +151,9 @@
   {"func_name": "OVERLAY", "is_support_func": false},
   {"func_name": "SUBSTRING", "is_support_func": false},
   {"func_name": "REPLACE", "is_support_func": false},
-  {"func_name": "REGEXP_EXTRACT", "is_support_func": true},
+  {"func_name": "REGEXP_EXTRACT", "is_support_func": true,
+   "is_supported_type": [ "STRING", "INTEGER"]
+  },
   {"func_name": "INITCAP", "is_support_func": false},
   {"func_name": "CONCAT", "is_support_func": false},
   {"func_name": "CONCAT_WS", "is_support_func": false},
@@ -105,10 +172,11 @@
   {"func_name": "PARSE_URL", "is_support_func": false},
   {"func_name": "REGEXP", "is_support_func": false},
   {"func_name": "REVERSE", "is_support_func": false},
-  {"func_name": "SPLIT_INDEX", "is_support_func": true},
+  {"func_name": "SPLIT_INDEX", "is_support_func": true,
+   "is_supported_type": ["STRING", "INTEGER"]
+  },
   {"func_name": "STR_TO_MAP", "is_support_func": false},
   {"func_name": "SUBSTR", "is_support_func": false},
-
 
   {"func_name": "DATE", "is_support_func": false},
   {"func_name": "TIME", "is_support_func": false},
@@ -121,7 +189,9 @@
   {"func_name": "CURRENT_TIMESTAMP", "is_support_func": false},
   {"func_name": "NOW", "is_support_func": false},
   {"func_name": "CURRENT_ROW_TIMESTAMP", "is_support_func": false},
-  {"func_name": "EXTRACT", "is_support_func": true},
+  {"func_name": "EXTRACT", "is_support_func": true,
+   "is_supported_type": ["TIMESTAMP", "TIMESTAMP_WITH_LOCAL_TIME_ZONE" ,"STRING"]
+  },
   {"func_name": "YEAR", "is_support_func": false},
   {"func_name": "QUARTER", "is_support_func": false},
   {"func_name": "MONTH", "is_support_func": false},
@@ -135,7 +205,9 @@
   {"func_name": "FLOOR", "is_support_func": false},
   {"func_name": "CEIL", "is_support_func": false},
   {"func_name": "OVERLAPS", "is_support_func": false},
-  {"func_name": "DATE_FORMAT", "is_support_func": true},
+  {"func_name": "DATE_FORMAT", "is_support_func": true,
+  "is_supported_type": ["TIMESTAMP", "TIMESTAMP_WITH_LOCAL_TIME_ZONE", "STRING"]
+  },
   {"func_name": "TIMESTAMPADD", "is_support_func": false},
   {"func_name": "TIMESTAMPDIFF", "is_support_func": false},
   {"func_name": "CONVERT_TZ", "is_support_func": false},
@@ -146,11 +218,26 @@
   {"func_name": "TO_TIMESTAMP", "is_support_func": false},
   {"func_name": "CURRENT_WATERMARK", "is_support_func": false},
 
-
-  {"func_name": "CASE", "is_support_func": true},
+  {"func_name": "CASE", "is_support_func": true,
+  "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
+      "DECIMAL64", "DECIMAL128", "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ]
+  },
   {"func_name": "NULLIF", "is_support_func": false},
-  {"func_name": "COALESCE", "is_support_func": false},
-  {"func_name": "IF", "is_support_func": true},
+  {"func_name": "COALESCE", "is_support_func": true,
+  "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
+      "DECIMAL64", "DECIMAL128", "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ]
+  },
+  {"func_name": "IF", "is_support_func": true,
+    "is_supported_type": []
+  },
   {"func_name": "IFNULL", "is_support_func": false},
   {"func_name": "IS_ALPHA", "is_support_func": false},
   {"func_name": "IS_DECIMAL", "is_support_func": false},
@@ -158,8 +245,14 @@
   {"func_name": "GREATEST", "is_support_func": false},
   {"func_name": "LEAST", "is_support_func": false},
 
-
-  {"func_name": "CAST", "is_support_func": true},
+  {"func_name": "CAST", "is_support_func": true,
+   "is_supported_type": [
+      "BIGINT", "INTEGER", "TIMESTAMP_WITHOUT_TIME_ZONE(0)", "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
+      "DECIMAL64", "DECIMAL128", "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ]
+  },
   {"func_name": "TRY_CAST", "is_support_func": false},
   {"func_name": "TYPEOF", "is_support_func": false},
 
@@ -222,11 +315,19 @@
   {"func_name": "SHA2", "is_support_func": false},
 
 
-  {"func_name": "COUNT", "is_support_func": false},
-  {"func_name": "AVG", "is_support_func": false},
-  {"func_name": "SUM", "is_support_func": false},
-  {"func_name": "MAX", "is_support_func": false},
-  {"func_name": "MIN", "is_support_func": false},
+  {"func_name": "COUNT", "is_support_func": true,
+  "is_supported_type": ["BIGINT"]
+  },
+  {"func_name": "AVG", "is_support_func": true,
+  "is_supported_type": ["BIGINT"]
+  },
+  {"func_name": "SUM", "is_support_func": true,
+  "is_supported_type": ["BIGINT"]
+  },
+  {"func_name": "MAX", "is_support_func": true,
+  "is_supported_type": ["BIGINT", "VARCHAR(2147483647)"]
+  },
+  {"func_name": "MIN", "is_support_func": true, "is_supported_type": ["BIGINT", "VARCHAR(2147483647)"]},
   {"func_name": "STDDEV_POP", "is_support_func": false},
   {"func_name": "STDDEV_SAMP", "is_support_func": false},
   {"func_name": "VAR_POP", "is_support_func": false},
@@ -248,11 +349,28 @@
   {"func_name": "JSON_OBJECTAGG", "is_support_func": false},
   {"func_name": "JSON_ARRAYAGG", "is_support_func": false},
 
-  {"func_name": "count_char", "is_support_func": true},
-  {"func_name": "SEARCH", "is_support_func": true},
-  {"func_name": "HASH_CODE", "is_support_func": true},
-  {"func_name": "PROCTIME_MATERIALIZE", "is_support_func": true},
-  {"func_name": "PROCTIME", "is_support_func": true},
-  {"func_name": "MOD", "is_support_func": true},
-  {"func_name": "STDDEV_SAMP", "is_support_func": false}
+  {"func_name": "count_char", "is_support_func": true,
+   "is_supported_type": ["STRING"]
+  },
+  {"func_name": "SEARCH", "is_support_func": true,
+   "is_supported_type": []
+  },
+  {"func_name": "HASH_CODE", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INTEGER", "VARCHAR"]
+  },
+  {"func_name": "PROCTIME_MATERIALIZE", "is_support_func": true,
+   "is_supported_type": []
+  },
+  {"func_name": "PROCTIME", "is_support_func": true,
+   "is_supported_type": []
+  },
+  {"func_name": "MOD", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": ["BIGINT"]
+  },
+  {"func_name": "SUM0", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INTEGER", "DECIMAL64", "DECIMAL128"]
+  },
+  {"func_name": "LAST_STRING_VALUE_WITHOUT_RETRACT", "is_support_func": true,
+   "is_supported_type": ["VARCHAR(2147483647)"]
+  }
 ]

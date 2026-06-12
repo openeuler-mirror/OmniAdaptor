@@ -92,13 +92,14 @@ class FlinkExcelWriterWithStyle:
                 # 设置标题及列宽
                 self._write_headers(worksheet)
 
-                # 只合并 jobid 和 taskid 列，其他列都不合并
+                # 合并 jobid、taskid 和状态列
+                # jobid独立合并，taskid受jobid控制，状态列受taskid控制
                 self.merge_cells_full(
                     worksheet,
                     start_row=3,
-                    independent_cols=[1],  # jobid和taskid需要合并
-                    linked_cols=[2],  # 其他列都不合并
-                    control_cols=[1]  # 不需要控制列
+                    independent_cols=[1],  # jobid独立合并
+                    linked_cols=[2, 3],  # taskid和状态列联动合并
+                    control_cols=[1, 2]  # taskid受jobid控制，状态受taskid控制
                 )
 
             print(f"[SUCCESS] Analysis report has been saved to: {output_excel_path}")
