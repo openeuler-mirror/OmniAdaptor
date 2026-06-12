@@ -197,6 +197,10 @@ public class OmniTask extends Task {
     private long nativeTaskMetricGroupRef;
     private OmniTaskMetricGroup omniTaskMetricGroup;
     private Map<ExecutionAttemptID,OmniTaskReferenceCounter> taskSlotTable;
+    
+    // Cache for producer JobVertexID -> useOmniFlag mapping to avoid runtime race conditions
+    // This is populated from StreamConfig during task initialization
+    private Map<String, Boolean> partitionOmniFlagMap;
 
     /**
      * checkpointing
@@ -273,6 +277,7 @@ public class OmniTask extends Task {
         this.taskSlotTable = taskSlotTable;
         this.taskStateManagerWrapper = taskStateManagerWrapper;
         this.taskOperatorGatewayWrapper=taskOperatorGatewayWrapper;
+        this.partitionOmniFlagMap = new HashMap<>();
     }
 
     public TaskStateManagerWrapper getTaskStateManagerWrapper() {
@@ -521,6 +526,10 @@ public class OmniTask extends Task {
         StreamConfig streamConfig = new StreamConfig(taskConfiguration);
         Collection<StreamConfig> configs =
                 streamConfig.getTransitiveChainedTaskConfigsWithSelf(userCodeClassLoader.asClassLoader()).values();
+        
+        // Initialize partition OmniFlag map from StreamConfig to avoid runtime race conditions
+        initializePartitionOmniFlagMap(streamConfig, userCodeClassLoader.asClassLoader());
+        
         for (StreamConfig config : configs) {
             InternalOperatorMetricGroup operatorMetricGroup =
                     env.getMetricGroup().getOrAddOperator(config.getOperatorID(), config.getOperatorName());
@@ -1007,7 +1016,38 @@ public class OmniTask extends Task {
         }
     }
     
+    /**
+     * Initialize the partition OmniFlag map from StreamConfig.
+     * This map maps producer JobVertexID to useOmniFlag of source vertex.
+     * Called during task initialization to populate the cache before any channel checks.
+     */
+    private void initializePartitionOmniFlagMap(StreamConfig streamConfig, ClassLoader classLoader) {
+        try {
+            this.partitionOmniFlagMap = streamConfig.getPartitionOmniFlagMap(classLoader);
+            LOG.info("Initialized partition OmniFlag map with {} entries for task {}", 
+                partitionOmniFlagMap.size(), getTaskInfo().getTaskNameWithSubtasks());
+        } catch (Exception e) {
+            LOG.warn("Failed to initialize partition OmniFlag map, will fall back to taskSlotTable", e);
+            this.partitionOmniFlagMap = new HashMap<>();
+        }
+    }
+    
+    private String getProducerJobVertexIdString(ResultPartitionID partitionId) {
+        return partitionId.getProducerId().getJobVertexId().toString();
+    }
+
     boolean checkIfTargetResultPartitionIsNative(ResultPartitionID partitionId) {
+        if (partitionOmniFlagMap != null && !partitionOmniFlagMap.isEmpty()) {
+            String producerJobVertexId = getProducerJobVertexIdString(partitionId);
+            if (producerJobVertexId != null && partitionOmniFlagMap.containsKey(producerJobVertexId)) {
+                boolean isNative = partitionOmniFlagMap.get(producerJobVertexId);
+                LOG.debug("Checked partition {} using producer JobVertexID {}: isNative={}",
+                        partitionId, producerJobVertexId, isNative);
+                return isNative;
+            }
+        }
+
+        LOG.debug("Partition {} not found in JobVertex OmniFlag map, using taskSlotTable fallback", partitionId);
         OmniTaskReferenceCounter omniTaskReferenceCounter = taskSlotTable.get(partitionId.getProducerId());
         if (omniTaskReferenceCounter != null) {
             OmniTask omniTask = omniTaskReferenceCounter.getTask();
@@ -1015,7 +1055,6 @@ public class OmniTask extends Task {
         } else {
             throw new GeneralRuntimeException("OmniTaskReferenceCounter is null for partitionId: " + partitionId);
         }
-        
     }
 
     private void setRecoverInputStateFutureCompleted(RecoveredInputChannel recoveredInputChannel) {

@@ -631,7 +631,41 @@ public class StreamingJobGraphGenerator {
                 vertexConfig.setUseOmniEnabled(false);
             }
         }
+        
+        // Build partition OmniFlag map for each vertex
+        buildAndStorePartitionOmniFlagMap();
+        
         OmniGraphOverride.clearTypeInfo();
+    }
+
+    /**
+     * Build a map from producer JobVertexID to useOmniFlag for all source vertices,
+     * and store it in each JobVertex's StreamConfig.
+     * This allows OmniTask to determine at runtime if an input partition is produced by a native task.
+     */
+    private void buildAndStorePartitionOmniFlagMap() {
+        // Map: producer JobVertexID (as string) -> useOmniFlag of source vertex
+        Map<String, Boolean> partitionOmniFlagMap = new HashMap<>();
+
+        for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+            Integer sourceNodeId = vertexEntry.getKey();
+            StreamConfig sourceVertexConfig = vertexConfigs.get(sourceNodeId);
+
+            if (sourceVertexConfig == null) {
+                continue;
+            }
+
+            String producerJobVertexId = vertexEntry.getValue().getID().toString();
+            boolean sourceUseOmni = sourceVertexConfig.isUseOmniEnabled();
+            partitionOmniFlagMap.put(producerJobVertexId, sourceUseOmni);
+            LOG.debug("Mapped producer JobVertexID {} to useOmni={}", producerJobVertexId, sourceUseOmni);
+        }
+
+        for (Map.Entry<Integer, StreamConfig> configEntry : vertexConfigs.entrySet()) {
+            configEntry.getValue().setPartitionOmniFlagMap(partitionOmniFlagMap);
+        }
+
+        LOG.info("Built partition OmniFlag map with {} entries", partitionOmniFlagMap.size());
     }
 
     private boolean validateFallBackForCheckpoint(JobType jobType){
