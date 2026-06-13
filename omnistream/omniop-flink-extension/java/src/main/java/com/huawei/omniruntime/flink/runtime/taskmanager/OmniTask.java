@@ -529,11 +529,17 @@ public class OmniTask extends Task {
         
         // Initialize partition OmniFlag map from StreamConfig to avoid runtime race conditions
         initializePartitionOmniFlagMap(streamConfig, userCodeClassLoader.asClassLoader());
-        
-        for (StreamConfig config : configs) {
-            InternalOperatorMetricGroup operatorMetricGroup =
-                    env.getMetricGroup().getOrAddOperator(config.getOperatorID(), config.getOperatorName());
-            operatorMetricGroup.getIOMetricGroup().reuseOutputMetricsForTask();
+
+        // Initialize metric for Omni Task.(should initialize in createInitAndInvokeTask)
+        boolean useomniFlag = __taskInformation.getTaskConfiguration().getBoolean("useomni", false);
+        if (useomniFlag && (jobType == JobType.SQL || jobType == JobType.STREAM)) {
+            for (StreamConfig config : configs) {
+                InternalOperatorMetricGroup operatorMetricGroup =
+                        env.getMetricGroup().getOrAddOperator(config.getOperatorID(), config.getOperatorName());
+                if (config.isChainEnd()) {
+                    operatorMetricGroup.getIOMetricGroup().reuseOutputMetricsForTask();
+                }
+            }
         }
         // invokale Omni Source Operator Stream Task
 
