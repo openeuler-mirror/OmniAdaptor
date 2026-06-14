@@ -31,6 +31,7 @@ public class ValidateWindowAggOPStrategy extends AbstractValidateOperatorStrateg
     private static final Set<String> SUPPORT_AGG_FUNCTION_NAME = new HashSet<>(Arrays.asList(
             "MAX",
             "COUNT",
+            "SUM",
             "MIN"));
 
     private static final Set<String> SUPPORT_WINDOW_TYPE = new HashSet<>(Arrays.asList("TUMBLE", "HOP"));
@@ -40,6 +41,7 @@ public class ValidateWindowAggOPStrategy extends AbstractValidateOperatorStrateg
     static {
         SUPPORT_AGG_FUNCTION_DATATYPE.put("MAX", Collections.singletonList("BIGINT"));
         SUPPORT_AGG_FUNCTION_DATATYPE.put("COUNT", Collections.singletonList("BIGINT"));
+        SUPPORT_AGG_FUNCTION_DATATYPE.put("SUM", Collections.singletonList("BIGINT"));
         SUPPORT_AGG_FUNCTION_DATATYPE.put("MIN", Collections.singletonList("BIGINT"));
     }
 

@@ -15,13 +15,7 @@ import org.apache.flink.util.CollectionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * the strategy for GroupWindowAggregate operator.
@@ -31,15 +25,21 @@ import java.util.Set;
 public class ValidateGroupWindowAggOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateGroupWindowAggOPStrategy.class);
 
-    private static final Set<String> SUPPORT_AGG_FUNCTION_NAME = new HashSet<>(Collections.singletonList("COUNT"));
+    private static final Set<String> SUPPORT_AGG_FUNCTION_NAME = new HashSet<>(Arrays.asList("COUNT", "SUM", "MAX", "MIN"));
 
     private static final Set<String> SUPPORT_WINDOW_TYPE = new HashSet<>(
-        Collections.singletonList("SessionGroupWindow"));
+        Arrays.asList("SessionGroupWindow", "TumblingGroupWindow", "SlidingGroupWindow"));
+
+    private static final Set<String> SUPPORT_TIME_TYPE = new HashSet<>(
+        Collections.singletonList("event"));
 
     private static final Map<String, List<String>> SUPPORT_AGG_FUNCTION_DATATYPE = new HashMap<>();
 
     static {
         SUPPORT_AGG_FUNCTION_DATATYPE.put("COUNT", Collections.singletonList("BIGINT"));
+        SUPPORT_AGG_FUNCTION_DATATYPE.put("SUM", Collections.singletonList("BIGINT"));
+        SUPPORT_AGG_FUNCTION_DATATYPE.put("MAX", Collections.singletonList("BIGINT"));
+        SUPPORT_AGG_FUNCTION_DATATYPE.put("MIN", Collections.singletonList("BIGINT"));
     }
 
     @SuppressWarnings("unchecked")
@@ -47,16 +47,25 @@ public class ValidateGroupWindowAggOPStrategy extends AbstractValidateOperatorSt
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {
         List<String> inputTypeList = (ArrayList<String>) operatorInfoMap.get("inputTypes");
         // Validate SUPPORT_WINDOW_TYPE
-        String windowInfo;
-        Object windowInfoObj = operatorInfoMap.get("windowType");
-        if (windowInfoObj instanceof String) {
-            windowInfo = (String) operatorInfoMap.get("windowType");
-        } else {
+        String windowInfo = getStringInfo(operatorInfoMap, "windowType");
+        if (windowInfo == null) {
+            LOG.warn("The windowType field is null.");
             return false;
         }
         String windowType = windowInfo.substring(0, windowInfo.indexOf("("));
         if (!SUPPORT_WINDOW_TYPE.contains(windowType)) {
             LOG.info("The window type {} is not supported.", windowType);
+            return false;
+        }
+
+        // Validate SUPPORT_TIME_TYPE
+        String timeType = getStringInfo(operatorInfoMap, "timeType");
+        if (timeType == null) {
+            LOG.warn("The timeType field is null.");
+            return false;
+        }
+        if (!SUPPORT_TIME_TYPE.contains(timeType)) {
+            LOG.info("The time type {} is not supported.", timeType);
             return false;
         }
 
@@ -74,7 +83,12 @@ public class ValidateGroupWindowAggOPStrategy extends AbstractValidateOperatorSt
             }
             List<Integer> argIndexes = (ArrayList<Integer>) aggregateCallMap.get("argIndexes");
             if (inputTypesEmpty || CollectionUtil.isNullOrEmpty(argIndexes)) {
+                // when argIndexes is empty, the agg function may be COUNT(*)
                 continue;
+            }
+            if (argIndexes.size() > 1) {
+                LOG.warn("The aggregate function {} not support more than one argument.", functionName);
+                return false;
             }
             int argIndex = argIndexes.get(0);
             String argType = inputTypeList.get(argIndex);

@@ -27,15 +27,19 @@ import org.slf4j.LoggerFactory;
 public class OmniTaskManagerServices {
     private static final Logger LOG = LoggerFactory.getLogger(OmniTaskManagerServices.class);
 
-    private long nativeOmniTaskManagerServicesAddress;
+    private long nativeOmniTaskManagerServicesAddress = -1;
 
     private OmniShuffleEnvironment omniShuffleEnvironment;
 
     public OmniTaskManagerServices(TaskManagerServicesConfigurationPOJO taskManagerServicesConfiguration) {
         LOG.info("taskManagerServicesConfiguration is {}", taskManagerServicesConfiguration);
         LOG.info("taskManagerServicesConfiguration JSON is {}", JsonHelper.toJson(taskManagerServicesConfiguration));
-        this.nativeOmniTaskManagerServicesAddress = createOmniTaskManagerServices(
-                JsonHelper.toJson(taskManagerServicesConfiguration));
+        try {
+            nativeOmniTaskManagerServicesAddress = createOmniTaskManagerServices(
+                    JsonHelper.toJson(taskManagerServicesConfiguration));
+        } catch (Throwable t) {
+            LOG.error("Failed to create OmniTaskManagerServices.", t);
+        }
     }
 
     /**

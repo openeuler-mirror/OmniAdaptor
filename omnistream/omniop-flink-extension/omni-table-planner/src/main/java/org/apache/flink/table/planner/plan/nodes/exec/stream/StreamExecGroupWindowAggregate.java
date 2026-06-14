@@ -393,7 +393,8 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
         String windowType = window.toString();
         String countType;
         String timeType = "";
-        long actualSize;
+        long windowSize;
+        long windowSlide = -1L;
         if (window instanceof TumblingGroupWindow) {
             TumblingGroupWindow tumblingWindow = (TumblingGroupWindow) window;
             FieldReferenceExpression timeField = tumblingWindow.timeField();
@@ -401,12 +402,12 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
             countType = "time";
             if (isProctimeAttribute(timeField) && hasTimeIntervalType(size)) {
                 timeType = "processing";
-                actualSize = toDuration(size).toMillis();
+                windowSize = toDuration(size).toMillis();
             } else if (isRowtimeAttribute(timeField) && hasTimeIntervalType(size)) {
                 timeType = "event";
-                actualSize = toDuration(size).toMillis();
+                windowSize = toDuration(size).toMillis();
             } else if (isProctimeAttribute(timeField) && hasRowIntervalType(size)) {
-                actualSize = toLong(size);
+                windowSize = toLong(size);
                 countType = "count";
             } else {
                 // before applying the  windowing logic. Otherwise, this would be the same as a
@@ -422,12 +423,15 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
             countType = "time";
             if (isProctimeAttribute(timeField) && hasTimeIntervalType(size)) {
                 timeType = "processing";
-                actualSize = toDuration(size).toMillis();
+                windowSize = toDuration(size).toMillis();
+                windowSlide = toDuration(slide).toMillis();
             } else if (isRowtimeAttribute(timeField) && hasTimeIntervalType(size)) {
                 timeType = "event";
-                actualSize = toDuration(size).toMillis();
+                windowSize = toDuration(size).toMillis();
+                windowSlide = toDuration(slide).toMillis();
             } else if (isProctimeAttribute(timeField) && hasRowIntervalType(size)) {
-                actualSize = toLong(size);
+                windowSize = toLong(size);
+                windowSlide = toLong(slide);
                 countType = "count";
             } else {
                 // before applying the  windowing logic. Otherwise, this would be the same as a
@@ -442,10 +446,10 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
             countType = "time";
             if (isProctimeAttribute(timeField)) {
                 timeType = "processing";
-                actualSize = toDuration(gap).toMillis();
+                windowSize = toDuration(gap).toMillis();
             } else if (isRowtimeAttribute(timeField)) {
                 timeType = "event";
-                actualSize = toDuration(gap).toMillis();
+                windowSize = toDuration(gap).toMillis();
             } else {
                 throw new UnsupportedOperationException("This should not happen.");
             }
@@ -455,7 +459,10 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
         jsonMap.put("windowType", windowType);
         jsonMap.put("countType", countType);
         jsonMap.put("timeType", timeType);
-        jsonMap.put("actualSize", actualSize);
+        jsonMap.put("windowSize", windowSize);
+        if (windowSlide > 0) {
+            jsonMap.put("windowSlide", windowSlide);
+        }
         jsonMap.put("inputTimeFieldIndex", inputTimeFieldIndex);
     }
 

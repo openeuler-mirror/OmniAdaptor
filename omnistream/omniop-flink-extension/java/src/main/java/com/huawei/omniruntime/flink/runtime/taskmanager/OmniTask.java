@@ -50,6 +50,8 @@ import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.CheckpointStoreUtil;
+import org.apache.flink.runtime.checkpoint.SavepointType;
+import org.apache.flink.runtime.checkpoint.SnapshotType;
 import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriteRequestExecutorFactory;
 import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriter;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
@@ -105,13 +107,14 @@ import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.CheckpointStreamWithResultProvider;
 import org.apache.flink.runtime.state.CheckpointStorageAccess;
 import org.apache.flink.runtime.state.CheckpointedStateScope;
-import org.apache.flink.runtime.state.IncrementalKeyedStateHandle.HandleAndLocalPath;
+import org.apache.flink.runtime.state.OperatorBackendSerializationProxy;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.IncrementalKeyedStateHandle.HandleAndLocalPath;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.runtime.taskexecutor.GlobalAggregateManager;
 import org.apache.flink.runtime.taskexecutor.KvStateService;
@@ -204,6 +207,12 @@ public class OmniTask extends Task {
 
     private CheckpointOptions checkpointOptions;
     private CheckpointStreamFactory checkpointStreamFactory;
+
+    /**
+     * Checkpoint ID of the synchronous savepoint (stop-with-savepoint) that should trigger
+     * native task termination once the checkpoint is globally completed.
+     */
+    private Long syncSavepointId = null;
 
     // temporarily use public for easy access from OmniTaskWrapper
     public RuntimeEnvironment checkpointingEnv;
@@ -852,14 +861,59 @@ public class OmniTask extends Task {
             long checkpointId,
             long latestCompletedCheckpointId,
             NotifyCheckpointOperation notifyCheckpointOperation) {
-        long ordinal = notifyCheckpointOperation.ordinal();
         if (NotifyCheckpointOperation.ABORT == notifyCheckpointOperation) {
             abortCpp(nativeTaskRef, checkpointId, latestCompletedCheckpointId);
+            if (syncSavepointId != null && syncSavepointId == checkpointId) {
+                LOG.debug("Synchronous savepoint {} aborted, clearing stop flag.", checkpointId);
+                syncSavepointId = null;
+            }
         } else if (NotifyCheckpointOperation.COMPLETE == notifyCheckpointOperation) {
             long inputState = convertExecutionState(executionState);
             completeCpp(nativeTaskRef, checkpointId, inputState);
+            if (syncSavepointId != null && syncSavepointId == checkpointId) {
+                LOG.debug(
+                        "Stop-with-savepoint checkpoint {} completed for task {} (state={}), "
+                                + "signalling native task to terminate.",
+                        checkpointId,
+                        taskNameWithSubtask,
+                        executionState);
+                cancelTask(nativeTaskRef);
+                syncSavepointId = null;
+            } else {
+                LOG.debug(
+                        "Checkpoint {} completed for task {} (state={}, syncSavepointId={}).",
+                        checkpointId,
+                        taskNameWithSubtask,
+                        executionState,
+                        syncSavepointId);
+            }
         } else if (NotifyCheckpointOperation.SUBSUME == notifyCheckpointOperation) {
+            LOG.debug(
+                    "checkpoint {} subsumedCpp.",
+                    checkpointId);
             subsumedCpp(nativeTaskRef, latestCompletedCheckpointId);
+        }
+
+        switch (notifyCheckpointOperation) {
+            case ABORT:
+                    LOG.debug(
+                        "checkpoint {} notifyCheckpointAborted.",
+
+                        checkpointId);
+                super.notifyCheckpointAborted(checkpointId, latestCompletedCheckpointId);
+                break;
+            case COMPLETE:
+                    LOG.debug(
+                        "checkpoint {} notifyCheckpointComplete.",
+                        checkpointId);
+                super.notifyCheckpointComplete(checkpointId);
+                break;
+            case SUBSUME:
+                    LOG.debug(
+                        "checkpoint {} notifyCheckpointSubsumed.",
+                        checkpointId);
+                super.notifyCheckpointSubsumed(checkpointId);
+                break;
         }
     }
 
@@ -1018,6 +1072,24 @@ public class OmniTask extends Task {
         this.checkpointOptions = checkpointOptions;
         String checkpointOptionsString=JsonHelper.toJson(checkpointOptions);
         triggerCheckpointCpp(nativeTaskRef,checkpointID,checkpointTimestamp,checkpointOptionsString);
+
+        SnapshotType snapshotType = checkpointOptions.getCheckpointType();
+        if (snapshotType.isSavepoint() && ((SavepointType) snapshotType).isSynchronous()) {
+            this.syncSavepointId = checkpointID;
+            LOG.debug(
+                    "Synchronous savepoint {} triggered for task {} (state={}), "
+                            + "task will stop after checkpoint completion.",
+                    checkpointID,
+                    taskNameWithSubtask,
+                    executionState);
+        } else {
+            LOG.debug(
+                    "Checkpoint {} triggered for task {} (state={}, type={}).",
+                    checkpointID,
+                    taskNameWithSubtask,
+                    executionState,
+                    snapshotType);
+        }
     }
 
     public RuntimeEnvironment getCheckpointingEnv() {
@@ -1299,7 +1371,12 @@ public class OmniTask extends Task {
     }
 
     public void writeSavepointOutputStream(CheckpointStreamWithResultProvider provider, byte[] chunk) throws Exception {
-        provider.getCheckpointOutputStream().write(chunk);
+        try {
+            provider.getCheckpointOutputStream().write(chunk);
+        } catch (Exception e) {
+            LOG.error("method : writeSavepointOutputStream -> exception", e);
+            throw new IOException("Failed to writeSavepointOutputStream kk", e);
+        }
     }
 
     public void writeSavepointMetadata(
@@ -1316,6 +1393,20 @@ public class OmniTask extends Task {
         final DataOutputView out =
                 new DataOutputViewStreamWrapper(provider.getCheckpointOutputStream());
         serializationProxy.write(out);
+    }
+
+    public void writeOperatorMetaData(
+            CheckpointStreamWithResultProvider provider,
+            List<StateMetaInfoSnapshot> operatorStateMetaInfoSnapshotList,
+            List<StateMetaInfoSnapshot> broadcastStateMetaInfoSnapshotList) throws Exception {
+
+        final DataOutputView out = new DataOutputViewStreamWrapper(provider.getCheckpointOutputStream());
+
+        OperatorBackendSerializationProxy backendSerializationProxy =
+                new OperatorBackendSerializationProxy(
+                        operatorStateMetaInfoSnapshotList, broadcastStateMetaInfoSnapshotList);
+
+        backendSerializationProxy.write(out);
     }
 
     public long getSavepointOutputStreamPos(CheckpointStreamWithResultProvider provider) throws Exception {
@@ -1342,18 +1433,9 @@ public class OmniTask extends Task {
 
     private void deleteNativeTask(long nativeTaskToBeDeleted) {
         if (nativeTaskToBeDeleted != 0) {
-            ExecutorService deleteNativeTaskExecutorService = Executors.newSingleThreadExecutor();
-            deleteNativeTaskExecutorService.submit(() -> {
-                long delay = 120;
-                LOG.info("Delete native task {} after {} seconds.", nativeTaskToBeDeleted, delay);
-                try {
-                    Thread.sleep(delay * 1000);
-                } catch (InterruptedException e) {
-                    LOG.error("Interrupted while waiting to delete native task {}", nativeTaskToBeDeleted, e);
-                }
-                doDeleteNativeTask(nativeTaskToBeDeleted);
-                LOG.info("Native task {} has been deleted.", nativeTaskToBeDeleted);
-            });
+            LOG.info("Delete Omni task {} , native task {}, status {}", taskInfo.toString(), nativeTaskToBeDeleted, this.getExecutionState().toString());
+            doDeleteNativeTask(nativeTaskToBeDeleted);
+            LOG.info("Native task {} has been deleted.", nativeTaskToBeDeleted);
         }
     }
 

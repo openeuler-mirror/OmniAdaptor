@@ -18,6 +18,7 @@ class ExcelColumns:
     TASK_ID = 'taskid'
     STATUS = '状态'
     OPERATOR_NAME = '算子名称'
+    IS_SUPPORTED = '是否支持'
     INPUT = 'Input'
     OUTPUT = 'Output'
     FREQUENCY = '出现频次'

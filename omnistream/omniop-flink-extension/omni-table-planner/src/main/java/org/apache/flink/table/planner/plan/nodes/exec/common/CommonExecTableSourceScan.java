@@ -357,6 +357,7 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
                         && right instanceof RexLiteral
                         && right.getType().getSqlTypeName().getName().equals("INTERVAL_SECOND")
                         && ((RexLiteral) right).getValue() instanceof BigDecimal) {
+                    jsonMap.put("rowtimeFieldIndex", ((RexInputRef) left).getIndex());
                     long intervalValue = ((BigDecimal) ((RexLiteral) right).getValue()).longValue();
                     if (intervalValue == 0) {
                         jsonMap.put("watermarkStrategy", "ascending");

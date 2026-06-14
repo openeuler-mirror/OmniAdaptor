@@ -32,6 +32,8 @@ public class KafkaFormatPojo {
 
     private long outOfOrdernessMillis;
 
+    private long rowtimeFieldIndex = -1;
+
     private String deserializationSchema;
 
     private boolean hasMetadata;
@@ -86,6 +88,14 @@ public class KafkaFormatPojo {
 
     public void setOutOfOrdernessMillis(long outOfOrdernessMillis) {
         this.outOfOrdernessMillis = outOfOrdernessMillis;
+    }
+
+    public long getRowtimeFieldIndex() {
+        return rowtimeFieldIndex;
+    }
+
+    public void setRowtimeFieldIndex(long value) {
+        this.rowtimeFieldIndex = value;
     }
 
     public String getDeserializationSchema() {
