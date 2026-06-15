@@ -18,7 +18,7 @@
 
 package org.apache.flink.runtime.state.filesystem;
 
-import org.apache.flink.core.fs.ByteBufferWritable;
+import com.huawei.omniruntime.flink.core.fs.ByteBufferWritable;
 import org.apache.flink.core.fs.DuplicatingFileSystem;
 import org.apache.flink.core.fs.EntropyInjector;
 import org.apache.flink.core.fs.FSDataOutputStream;

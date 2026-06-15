@@ -19,7 +19,7 @@
 package org.apache.flink.core.fs.local;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.core.fs.ByteBufferWritable;
+import com.huawei.omniruntime.flink.core.fs.ByteBufferWritable;
 import org.apache.flink.core.fs.FSDataOutputStream;
 
 import javax.annotation.Nonnull;

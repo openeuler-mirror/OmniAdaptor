@@ -18,6 +18,8 @@
 
 package org.apache.flink.core.fs;
 
+import com.huawei.omniruntime.flink.core.fs.ByteBufferWritable;
+
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.WrappingProxy;

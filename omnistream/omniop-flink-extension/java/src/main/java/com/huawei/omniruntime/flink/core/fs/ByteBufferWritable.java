@@ -3,7 +3,7 @@
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  */
 
-package org.apache.flink.core.fs;
+package com.huawei.omniruntime.flink.core.fs;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
