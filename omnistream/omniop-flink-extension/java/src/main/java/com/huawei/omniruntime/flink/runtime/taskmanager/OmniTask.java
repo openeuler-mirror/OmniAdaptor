@@ -30,6 +30,7 @@ import com.huawei.omniruntime.flink.runtime.metrics.utils.OmniMetricHelper;
 import com.huawei.omniruntime.flink.runtime.state.TaskStateManagerWrapper;
 import com.huawei.omniruntime.flink.runtime.taskexecutor.TaskOperatorGatewayWrapper;
 import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
+import com.huawei.omniruntime.flink.core.fs.ByteBufferWritable;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 
 import org.apache.flink.api.common.ExecutionConfig;
@@ -38,7 +39,6 @@ import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.contrib.streaming.state.RocksDBSharedResources;
 import org.apache.flink.contrib.streaming.state.RocksDBStateUploader;
-import com.huawei.omniruntime.flink.core.fs.ByteBufferWritable;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FileSystemSafetyNet;
 import org.apache.flink.core.fs.Path;
