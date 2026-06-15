@@ -62,6 +62,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.io.OutputStream;
@@ -301,6 +302,11 @@ public class OmniTaskWrapper {
 
     public void writeSavepointOutputStream(CheckpointStreamWithResultProvider provider, byte[] chunk) throws Exception {
         omniTask.writeSavepointOutputStream(provider, chunk);
+    }
+
+    public boolean writeSavepointOutputStreamDirect(
+            CheckpointStreamWithResultProvider provider, ByteBuffer chunk, int len) throws Exception {
+        return omniTask.writeSavepointOutputStreamDirect(provider, chunk, len);
     }
 
     public void writeSavepointMetadata(CheckpointStreamWithResultProvider provider, String stateMetaInfoSnapshotsJson) throws Exception {

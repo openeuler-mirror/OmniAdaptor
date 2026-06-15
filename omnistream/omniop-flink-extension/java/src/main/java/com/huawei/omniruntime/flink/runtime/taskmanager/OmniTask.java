@@ -38,6 +38,7 @@ import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.contrib.streaming.state.RocksDBSharedResources;
 import org.apache.flink.contrib.streaming.state.RocksDBStateUploader;
+import org.apache.flink.core.fs.ByteBufferWritable;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FileSystemSafetyNet;
 import org.apache.flink.core.fs.Path;
@@ -102,6 +103,7 @@ import org.apache.flink.runtime.source.event.ReaderRegistrationEvent;
 import org.apache.flink.runtime.source.event.SourceEventWrapper;
 import org.apache.flink.runtime.source.event.WatermarkAlignmentEvent;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
+import org.apache.flink.runtime.state.CheckpointStateOutputStream;
 import org.apache.flink.runtime.state.CheckpointStreamWithResultProvider;
 import org.apache.flink.runtime.state.CheckpointStorageAccess;
 import org.apache.flink.runtime.state.CheckpointedStateScope;
@@ -144,6 +146,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -210,6 +213,8 @@ public class OmniTask extends Task {
 
     private CheckpointOptions checkpointOptions;
     private CheckpointStreamFactory checkpointStreamFactory;
+    private final ThreadLocal<byte[]> savepointDirectFallbackBuffer =
+            ThreadLocal.withInitial(() -> new byte[1024 * 1024]);
 
     /**
      * Checkpoint ID of the synchronous savepoint (stop-with-savepoint) that should trigger
@@ -1436,6 +1441,50 @@ public class OmniTask extends Task {
         }
     }
 
+    /**
+     * Writes savepoint output from a native DirectByteBuffer.
+     *
+     * <p>Attempts a zero-copy write through {@link ByteBufferWritable} when the
+     * savepoint output stream supports it. Falls back to heap-array copying when
+     * the buffer is not direct or the stream does not implement the interface.
+     *
+     * @return true when bytes were consumed through a direct ByteBuffer path,
+     *         false when a heap-array copy was necessary.
+     */
+    public boolean writeSavepointOutputStreamDirect(
+            CheckpointStreamWithResultProvider provider, ByteBuffer chunk, int len) throws Exception {
+        try {
+            if (provider == null || chunk == null) {
+                throw new IOException("Savepoint output stream provider or direct buffer is null");
+            }
+            if (len < 0 || len > chunk.capacity()) {
+                throw new IOException("Invalid savepoint direct buffer length: " + len);
+            }
+            chunk.clear();
+            chunk.limit(len);
+            CheckpointStateOutputStream outputStream = provider.getCheckpointOutputStream();
+            if (chunk.isDirect() && outputStream instanceof ByteBufferWritable) {
+                return ((ByteBufferWritable) outputStream).write(chunk);
+            }
+            byte[] copyBuffer = getSavepointDirectFallbackBuffer(len);
+            chunk.get(copyBuffer, 0, len);
+            outputStream.write(copyBuffer, 0, len);
+            return false;
+        } catch (Exception e) {
+            LOG.error("method : writeSavepointOutputStreamDirect -> exception", e);
+            throw new IOException("Failed to writeSavepointOutputStreamDirect", e);
+        }
+    }
+
+    private byte[] getSavepointDirectFallbackBuffer(int len) {
+        byte[] buffer = savepointDirectFallbackBuffer.get();
+        if (buffer.length < len) {
+            buffer = new byte[len];
+            savepointDirectFallbackBuffer.set(buffer);
+        }
+        return buffer;
+    }
+
     public void writeSavepointMetadata(
             CheckpointStreamWithResultProvider provider,
             final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots,
@@ -1466,6 +1515,19 @@ public class OmniTask extends Task {
         backendSerializationProxy.write(out);
     }
 
+    /**
+     * Writes pre-computed operator metadata bytes directly to the savepoint stream.
+     *
+     * <p>This bypasses the JSON parsing and StateMetaInfoSnapshot construction steps
+     * when the metadata has already been serialized by {@link OmniTaskWrapper}'s
+     * operator metadata cache.
+     */
+    public void writeOperatorMetaDataBytes(
+            CheckpointStreamWithResultProvider provider,
+            byte[] metadataBytes) throws Exception {
+        final CheckpointStateOutputStream checkpointOutputStream = provider.getCheckpointOutputStream();
+        checkpointOutputStream.write(metadataBytes);
+    }
     public long getSavepointOutputStreamPos(CheckpointStreamWithResultProvider provider) throws Exception {
         return provider.getCheckpointOutputStream().getPos();
     }
