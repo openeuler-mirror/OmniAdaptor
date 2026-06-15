@@ -78,6 +78,7 @@ import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.checkpoint.WithMasterCheckpointHook;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
+import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamGroupedReduceOperator;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
@@ -614,6 +615,10 @@ public class StreamingJobGraphGenerator {
         if (validateFallBackForCheckpoint(jobType)){
             return;
         }
+        boolean enableLowParaMode =
+                streamGraph.getConfiguration().get(ConfigOptions.key("low-parallelism.optimize.enabled").booleanType().defaultValue(false));
+        boolean dataStreamLowParaMode = isdataStreamLowParaMode(jobType) && enableLowParaMode;
+        OmniGraphOverride.setdataStreamLowParaMode(dataStreamLowParaMode);
 
         boolean validateRes = true;
         boolean shouldDoSpiltWatermark = false;
@@ -636,6 +641,29 @@ public class StreamingJobGraphGenerator {
         buildAndStorePartitionOmniFlagMap();
         
         OmniGraphOverride.clearTypeInfo();
+    }
+
+    private boolean isdataStreamLowParaMode(JobType jobType) {
+        if (jobType.equals(JobType.SQL)) {
+            return false;
+        }
+        for (OperatorChainInfo chainInfo : chainInfos.values()) {
+            List<StreamNode> allChainedNodes = chainInfo.getAllChainedNodes();
+            for (StreamNode chainedNode : allChainedNodes) {
+                String operatorName = chainedNode.getOperatorName();
+                if (OmniGraphOverride.isSource(operatorName) || OmniGraphOverride.isSink(operatorName)) {
+                    continue;
+                }
+                if (chainedNode.getOperatorFactory() instanceof SimpleOperatorFactory) {
+                    operatorName = chainedNode.getOperator().getClass().getSimpleName();
+                    if (operatorName.equals("StreamMap") || operatorName.equals("StreamGroupedReduceOperator")) {
+                        continue;
+                    }
+                }
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -1496,6 +1524,8 @@ public class StreamingJobGraphGenerator {
             ExecutionCheckpointConfigPOJO executionCheckpointConfigPOJO =
                 new ExecutionCheckpointConfigPOJO(checkpointCfg, configuration);
             config.setExecutionCheckpointConf(mapper.writeValueAsString(executionCheckpointConfigPOJO));
+            config.setLowParaMode(
+                configuration.get(ConfigOptions.key("low-parallelism.optimize.enabled").booleanType().defaultValue(false)));
         } catch (Exception e) {
             LOG.warn("get OmniConf or CheckpointConf failed!", e);
         }
