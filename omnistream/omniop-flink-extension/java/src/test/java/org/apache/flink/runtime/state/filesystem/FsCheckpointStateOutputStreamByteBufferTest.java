@@ -155,7 +155,7 @@ public class FsCheckpointStateOutputStreamByteBufferTest {
      * ByteBufferWritable 快速路径（LocalFileSystem 的 LocalDataOutputStream 支持零拷贝），返回 true。
      */
     @Test
-    void testWriteByteBufferLargeDirectFallsBack() throws IOException {
+    void testWriteByteBufferLargeDirectNativePath() throws IOException {
         FsCheckpointStreamFactory.FsCheckpointStateOutputStream stream =
                 new FsCheckpointStreamFactory.FsCheckpointStateOutputStream(
                         basePath, fs, 4096, 1024);
