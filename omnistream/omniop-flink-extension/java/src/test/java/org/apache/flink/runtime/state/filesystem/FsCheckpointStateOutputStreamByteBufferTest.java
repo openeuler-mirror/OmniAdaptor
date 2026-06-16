@@ -151,8 +151,8 @@ public class FsCheckpointStateOutputStreamByteBufferTest {
     }
 
     /**
-     * 大于 writeBuffer 的 DirectByteBuffer 且 delegate 不支持 ByteBufferWritable 时，
-     * 先 flush 再通过 fallback copy 写入，返回 false。
+     * 大于 writeBuffer 的 DirectByteBuffer 触发 flushToFile 后走 delegate 的
+     * ByteBufferWritable 快速路径（LocalFileSystem 的 LocalDataOutputStream 支持零拷贝），返回 true。
      */
     @Test
     void testWriteByteBufferLargeDirectFallsBack() throws IOException {
@@ -169,7 +169,7 @@ public class FsCheckpointStateOutputStreamByteBufferTest {
 
         boolean result = stream.write(buffer);
 
-        assertFalse(result);
+        assertTrue(result);
         assertFalse(buffer.hasRemaining());
         assertEquals(8192, stream.getPos());
         stream.close();
