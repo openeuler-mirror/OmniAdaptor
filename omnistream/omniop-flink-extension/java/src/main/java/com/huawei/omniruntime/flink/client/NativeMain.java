@@ -35,6 +35,7 @@ public class NativeMain {
                     + jobJarPath + " flink";
             hash = getFileHashCode(jobJarPath);
             String dest = System.getenv().getOrDefault("OMNI_LIBS", prefix + "/output/" + hash);
+            boolean isAI4C = false;
             int code = 0;
             if (!System.getenv().containsKey("OMNI_LIBS")) {
                 code = execute(scriptPath);
@@ -46,6 +47,7 @@ public class NativeMain {
                        LOG.error("AI4C use failed!");
                        return new Properties();
                    } else {
+                       isAI4C = true;
                        LOG.info("AI4C use success!");
                    }
                 }
@@ -57,6 +59,9 @@ public class NativeMain {
                 Path path = Paths.get(dest);
                 Properties config = getConfigProperties(dest);
                 rebuildJar(jobJarPath, path);
+                if (isAI4C) {
+                    config.setProperty("isAI4C", "true");
+                }
                 return config;
             } else {
                 LOG.error("tar omni udf so failed");

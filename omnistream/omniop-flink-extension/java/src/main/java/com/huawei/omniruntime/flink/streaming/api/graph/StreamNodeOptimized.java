@@ -13,6 +13,8 @@ package com.huawei.omniruntime.flink.streaming.api.graph;
 
 import com.google.gson.Gson;
 
+import com.huawei.omniruntime.flink.client.AI4C;
+import com.huawei.omniruntime.flink.configuration.HighParallelismOptimizeOptions;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 import org.apache.flink.api.common.eventtime.*;
 import org.apache.flink.api.common.functions.Function;
@@ -73,6 +75,7 @@ public class StreamNodeOptimized implements StreamNodeExtraDescription {
     static StreamNodeOptimized getInstance() {
         return INSTANCE;
     }
+    private boolean highParallelismOptimizeEnable = false;
 
     @SuppressWarnings("unchecked")
     public boolean setExtraDescription(StreamNode streamNode, StreamConfig streamConfig, StreamGraph streamGraph, JobType jobType) throws NoSuchFieldException, IllegalAccessException, IOException, ClassNotFoundException {
@@ -82,7 +85,7 @@ public class StreamNodeOptimized implements StreamNodeExtraDescription {
         List<Map<String, Object>> inputTypes = toStringTypeSerializers(streamNode.getTypeSerializersIn());
         Map<String, Object> outputTypes = toStringTypeSerializer(streamNode.getTypeSerializerOut());
         Map<String, Object> stateKeyTypes = toStringTypeSerializer(streamNode.getStateKeySerializer());
-
+        setHighParallelismOptimizeEnable(streamGraph);
         if (streamNode.getOperatorFactory() instanceof SimpleUdfStreamOperatorFactory) {
             StreamOperator<?> operator = streamNode.getOperator();
             if (operator instanceof AbstractUdfStreamOperator) {
@@ -120,6 +123,9 @@ public class StreamNodeOptimized implements StreamNodeExtraDescription {
         }
 
         if (streamNode.getOperatorFactory() instanceof SinkWriterOperatorFactory) {
+            if (highParallelismOptimizeEnable) {
+                return false;
+            }
             Sink sink = ((SinkWriterOperatorFactory<?, ?>) streamNode.getOperatorFactory()).getSink();
             if (!"KafkaSink".equals(sink.getClass().getSimpleName()) || !validateSinkAndSetDesc(sink, jsonMap)) {
                 return false;
@@ -127,6 +133,9 @@ public class StreamNodeOptimized implements StreamNodeExtraDescription {
         }
 
         if (streamNode.getOperatorFactory() instanceof SourceOperatorFactory) {
+            if (highParallelismOptimizeEnable) {
+                return false;
+            }
             if (validateSourceAndSetDesc(streamNode, jsonMap)) {
                 return false;
             }
@@ -147,6 +156,11 @@ public class StreamNodeOptimized implements StreamNodeExtraDescription {
         }
         streamConfig.setDescription(jsonString);
         return true;
+    }
+
+    public void setHighParallelismOptimizeEnable(StreamGraph streamGraph) {
+        boolean highParallelismOptimize = streamGraph.getConfiguration().get(HighParallelismOptimizeOptions.HIGH_PARALLELISM_ENABLE);
+        this.highParallelismOptimizeEnable = highParallelismOptimize && UdfConfig.getINSTANCE().isAI4C();
     }
 
     private boolean validateSourceAndSetDesc(StreamNode streamNode, Map<String, Object> jsonMap) {
@@ -277,6 +291,9 @@ public class StreamNodeOptimized implements StreamNodeExtraDescription {
         Function udf = operator.getUserFunction();
         String udfName = parseUdfName(udf);
         if (udfName.isEmpty()) {
+            return false;
+        }
+        if (highParallelismOptimizeEnable && !udfName.contains(AI4C.OPTIMIZE_FUNC_NAME)) {
             return false;
         }
         Properties config = UdfConfig.getINSTANCE().getConfig();

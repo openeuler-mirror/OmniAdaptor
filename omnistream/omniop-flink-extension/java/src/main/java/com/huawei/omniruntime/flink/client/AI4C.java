@@ -19,7 +19,7 @@ import java.util.Objects;
 public class AI4C {
     private static final Logger LOG = LoggerFactory.getLogger(AI4C.class);
     private static HashMap<String, String> ai4cmap = new LinkedHashMap<>();
-
+    public static String OPTIMIZE_FUNC_NAME = "eccf3286$2";
     static {
         ai4cmap.put("com_huawei_qinwei_JDFlinkWordCount_lambda_main_8119522c_1_org_apache_flink_api_common_functions_ReduceFunction.cpp", "59ef0750e9848888512bd32c707c0ae13af9ead976ab6bb794769f73e176425b");
         ai4cmap.put("com_huawei_qinwei_JDFlinkWordCount_lambda_main_8119522c_1_org_apache_flink_api_common_functions_ReduceFunction.h", "807f44405a2acc5dcf889afb3452a72f253a0560f39584e2cb5291516d491e98");
