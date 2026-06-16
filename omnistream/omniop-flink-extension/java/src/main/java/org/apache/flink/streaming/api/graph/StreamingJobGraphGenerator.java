@@ -189,6 +189,7 @@ public class StreamingJobGraphGenerator {
         add("1");
         add("2");
     }};
+    private static final String OMNI_SQL_UNION_ALL_INPUT = "omni.sql.union-all.input";
 
     private StreamingJobGraphGenerator(
             ClassLoader userClassloader,
@@ -1463,6 +1464,8 @@ public class StreamingJobGraphGenerator {
                 new StreamConfig.InputConfig[inputSerializers.length];
 
         int inputGateCount = 0;
+        boolean hasUnionInput = false;
+        Set<Integer> seenNetworkInputIndexes = new HashSet<>();
         for (final StreamEdge inEdge : inEdges) {
             final ChainedSourceInfo chainedSource = chainedSources.get(inEdge.getSourceId());
 
@@ -1484,6 +1487,9 @@ public class StreamingJobGraphGenerator {
             } else {
                 // network input. null if we move to a new input, non-null if this is a further edge
                 // that is union-ed into the same input
+                if (!seenNetworkInputIndexes.add(inputIndex)) {
+                    hasUnionInput = true;
+                }
                 if (inputConfigs[inputIndex] == null) {
                     // PASS_THROUGH is a sensible default for streaming jobs. Only for BATCH
                     // execution can we have sorted inputs
@@ -1555,6 +1561,7 @@ public class StreamingJobGraphGenerator {
                     + ", strategy must be one of [0,1,2]");
         }
         map.put("omni.bindcore.strategy", bindcoreStrategy);
+        map.put(OMNI_SQL_UNION_ALL_INPUT, Boolean.toString(hasUnionInput));
         try {
             ObjectMapper mapper = new ObjectMapper();
             String omniConfJson = mapper.writeValueAsString(map);
