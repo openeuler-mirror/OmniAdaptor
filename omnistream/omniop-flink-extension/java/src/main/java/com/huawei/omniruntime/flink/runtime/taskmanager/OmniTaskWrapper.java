@@ -6,7 +6,10 @@ package com.huawei.omniruntime.flink.runtime.taskmanager;
 
 import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskStateSnapshotDeser;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerKey;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerKeyedStateType;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerOperatorStateMode;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerType;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.utils.OmniStateSerializerUtils;
 import com.huawei.omniruntime.flink.runtime.restore.KeyGroupEntry;
 import com.huawei.omniruntime.flink.runtime.restore.KeyGroupEntryWrapper;
@@ -16,11 +19,14 @@ import com.huawei.omniruntime.flink.runtime.api.state.serializer.OmniStateSerial
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniStateMetaSerializerInfo;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.common.typeutils.TypeSerializerSnapshot;
+import org.apache.flink.api.common.typeutils.base.LongSerializer;
 import org.apache.flink.api.common.typeutils.base.array.BytePrimitiveArraySerializer;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
+import org.apache.flink.core.memory.DataOutputSerializer;
 import org.apache.flink.runtime.checkpoint.SnapshotType;
 import org.apache.flink.runtime.checkpoint.SavepointType;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
@@ -62,6 +68,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.io.OutputStream;
@@ -73,7 +80,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.WeakHashMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.state.FullSnapshotUtil.END_OF_KEY_GROUP_MARK;
@@ -89,6 +101,20 @@ public class OmniTaskWrapper {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final int[] versions = new int[] {6, 5, 4, 3, 2, 1};
+
+    private static final Object OPERATOR_METADATA_CACHE_LOCK = new Object();
+    private static final Map<ClassLoader, ConcurrentHashMap<OperatorMetadataCacheKey,
+            CompletableFuture<byte[]>>> OPERATOR_METADATA_CACHE_BY_CLASSLOADER =
+            new WeakHashMap<>();
+
+    private static ConcurrentHashMap<OperatorMetadataCacheKey, CompletableFuture<byte[]>>
+            getOperatorMetadataCache(ClassLoader userCodeClassLoader) {
+        synchronized (OPERATOR_METADATA_CACHE_LOCK) {
+            return OPERATOR_METADATA_CACHE_BY_CLASSLOADER.computeIfAbsent(
+                    userCodeClassLoader,
+                    ignored -> new ConcurrentHashMap<>());
+        }
+    }
 
     public OmniTaskWrapper(OmniTask omniTask) {
         this.omniTask = omniTask;
@@ -303,6 +329,11 @@ public class OmniTaskWrapper {
         omniTask.writeSavepointOutputStream(provider, chunk);
     }
 
+    public boolean writeSavepointOutputStreamDirect(
+            CheckpointStreamWithResultProvider provider, ByteBuffer chunk, int len) throws Exception {
+        return omniTask.writeSavepointOutputStreamDirect(provider, chunk, len);
+    }
+
     public void writeSavepointMetadata(CheckpointStreamWithResultProvider provider, String stateMetaInfoSnapshotsJson) throws Exception {
         try {
             LOG.debug("method : writeSavepointMetadata -> stateMetaInfoSnapshotsJson : {}", stateMetaInfoSnapshotsJson);
@@ -367,26 +398,222 @@ public class OmniTaskWrapper {
         }
     }
 
+    /**
+     * Returns the pre-serialized operator metadata bytes, reusing a cached
+     * copy when the same metadata JSON has been seen before (same JobID + JSON content).
+     *
+     * <p>Multiple subtasks within a pipeline often share identical operator metadata
+     * (especially for simple ListState with Long or byte[] serializers). Caching
+     * avoids redundant JSON parsing, StateMetaInfoSnapshot construction, and
+     * serialization per checkpoint. The cache is scoped by user-code ClassLoader
+     * and uses CompletableFuture to ensure only one build per key.
+     */
+    private byte[] getOrBuildOperatorMetadata(
+            String operatorStateMetaInfoSnapshotsJson,
+            String broadcastStateMetaInfoSnapshotsJson) throws Exception {
+        ClassLoader userCodeClassLoader = omniTask.getCheckpointingEnv()
+                .getUserCodeClassLoader().asClassLoader();
+        OperatorMetadataCacheKey key = new OperatorMetadataCacheKey(
+                omniTask.getJobID(),
+                operatorStateMetaInfoSnapshotsJson,
+                broadcastStateMetaInfoSnapshotsJson);
+        ConcurrentHashMap<OperatorMetadataCacheKey, CompletableFuture<byte[]>> cache =
+                getOperatorMetadataCache(userCodeClassLoader);
+        CompletableFuture<byte[]> newFuture = new CompletableFuture<>();
+        CompletableFuture<byte[]> existingFuture = cache.putIfAbsent(key, newFuture);
+        boolean owner = existingFuture == null;
+        CompletableFuture<byte[]> future = owner ? newFuture : existingFuture;
+        if (owner) {
+            try {
+                byte[] metadata = buildOperatorMetadata(
+                        operatorStateMetaInfoSnapshotsJson,
+                        broadcastStateMetaInfoSnapshotsJson);
+                newFuture.complete(metadata);
+                return metadata;
+            } catch (Throwable t) {
+                cache.remove(key, newFuture);
+                newFuture.completeExceptionally(t);
+                if (t instanceof Exception) {
+                    throw (Exception) t;
+                }
+                if (t instanceof Error) {
+                    throw (Error) t;
+                }
+                throw new IOException("Failed to build operator metadata", t);
+            }
+        }
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e;
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) {
+                throw (Exception) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new IOException("Failed to build cached operator metadata", cause);
+        }
+    }
+
+    private byte[] buildOperatorMetadata(
+            String operatorStateMetaInfoSnapshotsJson,
+            String broadcastStateMetaInfoSnapshotsJson) throws IOException {
+        List<Map<String, Object>> operatorStateMetaInfoMapList =
+                JsonHelper.fromJson(operatorStateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {
+                });
+        List<Map<String, Object>> broadcastStateMetaInfoMapList =
+                JsonHelper.fromJson(broadcastStateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {
+                });
+
+        byte[] fastMetadata = tryBuildFastOperatorMetadata(
+                operatorStateMetaInfoMapList,
+                broadcastStateMetaInfoMapList);
+        if (fastMetadata != null) {
+            return fastMetadata;
+        }
+
+        List<StateMetaInfoSnapshot> operatorStateMetaInfoSnapshotList =
+                OmniStateSerializerUtils.buildStateMetaInfoSnapshot(omniTask, operatorStateMetaInfoMapList);
+        List<StateMetaInfoSnapshot> broadcastStateMetaInfoSnapshotList =
+                OmniStateSerializerUtils.buildStateMetaInfoSnapshot(omniTask, broadcastStateMetaInfoMapList);
+
+        DataOutputSerializer out = new DataOutputSerializer(256);
+        OperatorBackendSerializationProxy backendSerializationProxy =
+                new OperatorBackendSerializationProxy(
+                        operatorStateMetaInfoSnapshotList,
+                        broadcastStateMetaInfoSnapshotList);
+        backendSerializationProxy.write(out);
+
+        return out.getCopyOfBuffer();
+    }
+
+    /**
+     * Attempts a fast metadata build path that avoids reflection-based serializer
+     * construction. Only applicable when all operator states use simple serializers
+     * (Long, byte[]) with no broadcast state. Returns null when the fast path cannot
+     * be taken, triggering the full build path in {@link #buildOperatorMetadata}.
+     */
+    private byte[] tryBuildFastOperatorMetadata(
+            List<Map<String, Object>> operatorStateMetaInfoMapList,
+            List<Map<String, Object>> broadcastStateMetaInfoMapList) throws IOException {
+        if (operatorStateMetaInfoMapList == null
+                || operatorStateMetaInfoMapList.isEmpty()
+                || (broadcastStateMetaInfoMapList != null && !broadcastStateMetaInfoMapList.isEmpty())) {
+            return null;
+        }
+
+        List<StateMetaInfoSnapshot> operatorStateMetaInfoSnapshotList =
+                new ArrayList<>(operatorStateMetaInfoMapList.size());
+        for (Map<String, Object> metaInfo : operatorStateMetaInfoMapList) {
+            StateMetaInfoSnapshot snapshot = tryBuildFastOperatorStateMetaInfo(metaInfo);
+            if (snapshot == null) {
+                return null;
+            }
+            operatorStateMetaInfoSnapshotList.add(snapshot);
+        }
+
+        DataOutputSerializer out = new DataOutputSerializer(256);
+        OperatorBackendSerializationProxy backendSerializationProxy =
+                new OperatorBackendSerializationProxy(
+                        operatorStateMetaInfoSnapshotList,
+                        Collections.emptyList());
+        backendSerializationProxy.write(out);
+
+        return out.getCopyOfBuffer();
+    }
+
+    private StateMetaInfoSnapshot tryBuildFastOperatorStateMetaInfo(Map<String, Object> metaInfo) {
+        if (metaInfo == null) {
+            return null;
+        }
+        Object typeCodeObj = metaInfo.get("backendStateType");
+        if (!(typeCodeObj instanceof Number)
+                || StateMetaInfoSnapshot.BackendStateType.byCode(((Number) typeCodeObj).intValue())
+                != StateMetaInfoSnapshot.BackendStateType.OPERATOR) {
+            return null;
+        }
+        Object serializerObj = metaInfo.get("serializer");
+        if (serializerObj == null) {
+            return null;
+        }
+        Map<String, String> serializer = JsonHelper.fromJson(serializerObj.toString(), HashMap.class);
+        if (serializer == null || serializer.size() != 1) {
+            return null;
+        }
+        String stateSerializerJson = serializer.get(OmniSerializerKey.STATE_SERIALIZER.getKey());
+        TypeSerializer<?> stateSerializer = getFastOperatorStateSerializer(stateSerializerJson);
+        if (stateSerializer == null) {
+            return null;
+        }
+
+        String name = (String) metaInfo.get("name");
+        Map<String, String> options = copyStringMap((Map<?, ?>) metaInfo.get("options"));
+        String optionKey = StateMetaInfoSnapshot.CommonOptionsKeys.OPERATOR_STATE_DISTRIBUTION_MODE.toString();
+        String stateTypeValue = options.get(optionKey);
+        OmniSerializerOperatorStateMode stateType = OmniSerializerOperatorStateMode.get(stateTypeValue);
+        if (stateType != null) {
+            options.put(optionKey, stateType.getModeName());
+        }
+
+        Map<String, TypeSerializer<?>> serializerGroup = new HashMap<>();
+        Map<String, TypeSerializerSnapshot<?>> serializerSnapshotGroup = new HashMap<>();
+        String metaKey = StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER.toString();
+        serializerGroup.put(metaKey, stateSerializer);
+        serializerSnapshotGroup.put(metaKey, stateSerializer.snapshotConfiguration());
+        return new StateMetaInfoSnapshot(
+                name,
+                StateMetaInfoSnapshot.BackendStateType.OPERATOR,
+                options,
+                serializerSnapshotGroup,
+                serializerGroup);
+    }
+
+    private static Map<String, String> copyStringMap(Map<?, ?> source) {
+        Map<String, String> result = new HashMap<>();
+        if (source == null) {
+            return result;
+        }
+        for (Map.Entry<?, ?> entry : source.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                result.put(entry.getKey().toString(), entry.getValue().toString());
+            }
+        }
+        return result;
+    }
+
+    private static TypeSerializer<?> getFastOperatorStateSerializer(String serializerJson) {
+        if (serializerJson == null) {
+            return null;
+        }
+        Map<String, Object> serializerMap = JsonHelper.fromJson(serializerJson, new TypeReference<Map<String, Object>>() {
+        });
+        Object typeObj = serializerMap == null ? null : serializerMap.get("type");
+        if (!(typeObj instanceof Number)) {
+            return null;
+        }
+        OmniSerializerType serializerType = OmniSerializerType.get(((Number) typeObj).intValue());
+        if (serializerType == OmniSerializerType.LONG) {
+            return LongSerializer.INSTANCE;
+        }
+        if (serializerType == OmniSerializerType.BYTE_PRIMITIVE_ARRAY) {
+            return BytePrimitiveArraySerializer.INSTANCE;
+        }
+        return null;
+    }
+
     public void writeOperatorMetaData(CheckpointStreamWithResultProvider provider,
                                       String operatorStateMetaInfoSnapshotsJson,
                                       String broadcastStateMetaInfoSnapshotsJson) throws IOException {
         try {
-            LOG.debug("method : writeOperatorMetaData -> operatorStateMetaInfoSnapshotsJson : {}", operatorStateMetaInfoSnapshotsJson);
-            LOG.debug("method : writeOperatorMetaData -> broadcastStateMetaInfoSnapshotsJson : {}", broadcastStateMetaInfoSnapshotsJson);
-            List<Map<String, Object>> operatorStateMetaInfoMapList = JsonHelper.fromJson(operatorStateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {
-            });
-            List<Map<String, Object>> broadcastStateMetaInfoMapList = JsonHelper.fromJson(broadcastStateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {
-            });
+            byte[] metadata = getOrBuildOperatorMetadata(
+                    operatorStateMetaInfoSnapshotsJson,
+                    broadcastStateMetaInfoSnapshotsJson);
 
-            List<StateMetaInfoSnapshot> operatorStateMetaInfoSnapshotList = OmniStateSerializerUtils.buildStateMetaInfoSnapshot(omniTask, operatorStateMetaInfoMapList);
-            List<StateMetaInfoSnapshot> broadcastStateMetaInfoSnapshotList = OmniStateSerializerUtils.buildStateMetaInfoSnapshot(omniTask, broadcastStateMetaInfoMapList);
-
-            LOG.debug("method : writeOperatorMetaData -> operatorStateMetaInfoSnapshotList : {}", JsonHelper.toJson(operatorStateMetaInfoSnapshotList));
-            LOG.debug("method : writeOperatorMetaData -> broadcastStateMetaInfoSnapshotList : {}", JsonHelper.toJson(broadcastStateMetaInfoSnapshotList));
-
-            omniTask.writeOperatorMetaData(provider,
-                    operatorStateMetaInfoSnapshotList,
-                    broadcastStateMetaInfoSnapshotList);
+            omniTask.writeOperatorMetaDataBytes(provider, metadata);
         } catch (Exception e) {
             LOG.error("method : writeOperatorMetaData -> exception", e);
             throw new IOException("Failed to materialize operator metadata", e);
@@ -834,4 +1061,39 @@ public class OmniTaskWrapper {
             return new KeyGroupEntryWrapper(keyGroupEntries, currentKvStateId, entryStateId, count);
         }
     }
+
+    private static class OperatorMetadataCacheKey {
+        private final JobID jobId;
+        private final String operatorStateMetaInfoSnapshotsJson;
+        private final String broadcastStateMetaInfoSnapshotsJson;
+
+        private OperatorMetadataCacheKey(
+                JobID jobId,
+                String operatorStateMetaInfoSnapshotsJson,
+                String broadcastStateMetaInfoSnapshotsJson) {
+            this.jobId = jobId;
+            this.operatorStateMetaInfoSnapshotsJson = operatorStateMetaInfoSnapshotsJson;
+            this.broadcastStateMetaInfoSnapshotsJson = broadcastStateMetaInfoSnapshotsJson;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof OperatorMetadataCacheKey)) {
+                return false;
+            }
+            OperatorMetadataCacheKey that = (OperatorMetadataCacheKey) other;
+            return Objects.equals(jobId, that.jobId)
+                    && Objects.equals(operatorStateMetaInfoSnapshotsJson, that.operatorStateMetaInfoSnapshotsJson)
+                    && Objects.equals(broadcastStateMetaInfoSnapshotsJson, that.broadcastStateMetaInfoSnapshotsJson);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(jobId, operatorStateMetaInfoSnapshotsJson, broadcastStateMetaInfoSnapshotsJson);
+        }
+    }
+
 }
