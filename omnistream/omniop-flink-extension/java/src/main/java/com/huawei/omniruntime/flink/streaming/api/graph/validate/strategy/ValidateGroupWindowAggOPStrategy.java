@@ -33,6 +33,8 @@ public class ValidateGroupWindowAggOPStrategy extends AbstractValidateOperatorSt
     private static final Set<String> SUPPORT_TIME_TYPE = new HashSet<>(
         Collections.singletonList("event"));
 
+    private static final Set<String> SUPPORT_TIME_ATTRIBUTE_TYPE = new HashSet<>(Arrays.asList("TIMESTAMP_WITHOUT_TIME_ZONE(3)"));
+
     private static final Map<String, List<String>> SUPPORT_AGG_FUNCTION_DATATYPE = new HashMap<>();
 
     static {
@@ -54,18 +56,21 @@ public class ValidateGroupWindowAggOPStrategy extends AbstractValidateOperatorSt
         }
         String windowType = windowInfo.substring(0, windowInfo.indexOf("("));
         if (!SUPPORT_WINDOW_TYPE.contains(windowType)) {
-            LOG.info("The window type {} is not supported.", windowType);
+            LOG.warn("The window type {} is not supported.", windowType);
             return false;
         }
 
         // Validate SUPPORT_TIME_TYPE
         String timeType = getStringInfo(operatorInfoMap, "timeType");
-        if (timeType == null) {
-            LOG.warn("The timeType field is null.");
+        if (!SUPPORT_TIME_TYPE.contains(timeType)) {
+            LOG.warn("The time type {} is not supported.", timeType);
             return false;
         }
-        if (!SUPPORT_TIME_TYPE.contains(timeType)) {
-            LOG.info("The time type {} is not supported.", timeType);
+
+        // Validate SUPPORT_TIME_ATTRIBUTE_TYPE
+        String timeAttributeType = getStringInfo(operatorInfoMap, "timeAttributeType");
+        if (!SUPPORT_TIME_ATTRIBUTE_TYPE.contains(timeAttributeType)) {
+            LOG.warn("The time attribute type {} is not supported.", timeAttributeType);
             return false;
         }
 
