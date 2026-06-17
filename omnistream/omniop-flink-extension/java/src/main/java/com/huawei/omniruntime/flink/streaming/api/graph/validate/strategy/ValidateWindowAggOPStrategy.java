@@ -36,6 +36,8 @@ public class ValidateWindowAggOPStrategy extends AbstractValidateOperatorStrateg
 
     private static final Set<String> SUPPORT_WINDOW_TYPE = new HashSet<>(Arrays.asList("TUMBLE", "HOP"));
 
+    private static final Set<String> SUPPORT_TIME_ATTRIBUTE_TYPE = new HashSet<>(Arrays.asList("TIMESTAMP_WITHOUT_TIME_ZONE(3)"));
+
     private static final Map<String, List<String>> SUPPORT_AGG_FUNCTION_DATATYPE = new HashMap<>();
 
     static {
@@ -59,6 +61,13 @@ public class ValidateWindowAggOPStrategy extends AbstractValidateOperatorStrateg
         }
         String windowType = windowInfo.substring(0, windowInfo.indexOf("("));
         if (!SUPPORT_WINDOW_TYPE.contains(windowType)) {
+            LOG.warn("The window type {} not support.", windowType);
+            return false;
+        }
+
+        String timeAttributeType = (String) operatorInfoMap.get("timeAttributeType");
+        if (!SUPPORT_TIME_ATTRIBUTE_TYPE.contains(timeAttributeType)) {
+            LOG.warn("The time attribute type {} not support.", timeAttributeType);
             return false;
         }
 

@@ -239,6 +239,7 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
                 TimeWindowUtil.getShiftTimeZone(
                         window.timeAttribute().getOutputDataType().getLogicalType(),
                         TableConfigUtils.getLocalTimeZone(config));
+        String timeAttributeType = DescriptionUtil.getFieldType(window.timeAttribute().getOutputDataType().getLogicalType());
 
         final boolean[] aggCallNeedRetractions = new boolean[aggCalls.length];
         Arrays.fill(aggCallNeedRetractions, needRetraction);
@@ -316,7 +317,7 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
 
         String oldDescription = transform.getDescription();
         transform.setDescription(getExtraDescription(oldDescription, aggInfoList,
-                accTypes, aggValueTypes, windowPropertyTypes, inputTransform, shiftTimeZone, allowedLateness, inputTimeFieldIndex));
+                accTypes, aggValueTypes, windowPropertyTypes, inputTransform, shiftTimeZone, allowedLateness, inputTimeFieldIndex, timeAttributeType));
         return transform;
     }
 
@@ -370,14 +371,14 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
 
     private String getExtraDescription(String oldDescription, AggregateInfoList aggInfoList, LogicalType[] accTypes,
                                        LogicalType[] aggValueTypes, LogicalType[] windowPropertyTypes, Transformation<RowData> inputTransform,
-                                       ZoneId shiftTimeZone, long allowedLateness, int inputTimeFieldIndex) {
+                                       ZoneId shiftTimeZone, long allowedLateness, int inputTimeFieldIndex, String timeAttributeType) {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
         Map<String, Object> jsonMap = new LinkedHashMap<>();
         setGroupAggDescription(jsonMap, this, oldDescription,
                 aggInfoList, accTypes, aggValueTypes, windowPropertyTypes, inputTransform,
                 grouping, false, allowedLateness);
 
-        getLogicalWindowInfo(shiftTimeZone, jsonMap, inputTimeFieldIndex);
+        getLogicalWindowInfo(shiftTimeZone, jsonMap, inputTimeFieldIndex, timeAttributeType);
         // window info
 
         String jsonString = "";
@@ -389,7 +390,7 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
         return jsonString;
     }
 
-    private void getLogicalWindowInfo(ZoneId shiftTimeZone, Map<String, Object> jsonMap, int inputTimeFieldIndex) {
+    private void getLogicalWindowInfo(ZoneId shiftTimeZone, Map<String, Object> jsonMap, int inputTimeFieldIndex, String timeAttributeType) {
         String windowType = window.toString();
         String countType;
         String timeType = "";
@@ -464,6 +465,7 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
             jsonMap.put("windowSlide", windowSlide);
         }
         jsonMap.put("inputTimeFieldIndex", inputTimeFieldIndex);
+        jsonMap.put("timeAttributeType", timeAttributeType);
         jsonMap.put("shiftTimeZone", shiftTimeZone.toString());
     }
 
