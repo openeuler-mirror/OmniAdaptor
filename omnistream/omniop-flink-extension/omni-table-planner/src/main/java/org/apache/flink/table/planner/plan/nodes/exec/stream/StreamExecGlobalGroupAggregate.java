@@ -207,12 +207,12 @@ public class StreamExecGlobalGroupAggregate extends StreamExecAggregateBase {
         Map<String, Object> aggInfoListMap = new LinkedHashMap<>();
         // local agg
         List<Map<String, Object>> localAggregateCalls = DescriptionUtil
-                .getAggregateCalls(localAggInfoList.getActualAggregateInfos());
+                .getAggregateCalls(localAggInfoList.aggInfos());
         aggInfoListMap.put("localAggregateCalls", localAggregateCalls);
 
         // global agg
         List<Map<String, Object>> globalAggregateCalls = DescriptionUtil
-                .getAggregateCalls(globalAggInfoList.getActualAggregateInfos());
+                .getAggregateCalls(globalAggInfoList.aggInfos());
         aggInfoListMap.put("globalAggregateCalls", globalAggregateCalls);
 
         List<String> accTypesList = new ArrayList<>();
@@ -227,6 +227,7 @@ public class StreamExecGlobalGroupAggregate extends StreamExecAggregateBase {
         }
         aggInfoListMap.put("globalAggValueTypes", aggValueTypesList); // Empty list
         aggInfoListMap.put("indexOfCountStar", globalAggInfoList.getIndexOfCountStar());
+        aggInfoListMap.put("countStarInserted", globalAggInfoList.countStarInserted());
         jsonMap.put("originDescription", oldDescription);
         jsonMap.put("inputTypes", inputTypeList);
         jsonMap.put("outputTypes", outputTypeList);

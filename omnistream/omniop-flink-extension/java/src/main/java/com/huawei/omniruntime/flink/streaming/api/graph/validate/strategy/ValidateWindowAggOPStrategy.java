@@ -74,6 +74,13 @@ public class ValidateWindowAggOPStrategy extends AbstractValidateOperatorStrateg
                     LOG.info("ValidateWindowAggOPStrategy not support aggCall is {}", name);
                     return false;
                 }
+
+                int filterArg = (int) aggregateCallMap.get("filterArg");
+                if (filterArg != -1) {
+                    LOG.warn("The aggregate function {} not support filterArg.", functionName);
+                    return false;
+                }
+
                 List<Integer> argIndexes = (ArrayList<Integer>) aggregateCallMap.get("argIndexes");
                 if (inputTypesEmpty || CollectionUtil.isNullOrEmpty(argIndexes)) {
                     continue;

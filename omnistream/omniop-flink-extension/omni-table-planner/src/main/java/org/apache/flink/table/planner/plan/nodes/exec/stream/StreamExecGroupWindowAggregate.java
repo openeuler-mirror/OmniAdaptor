@@ -357,6 +357,7 @@ public class StreamExecGroupWindowAggregate extends StreamExecAggregateBase {
 
         aggInfoListMap.put("aggValueTypes", aggValueTypesList); // Empty list
         aggInfoListMap.put("indexOfCountStar", aggInfoList.getIndexOfCountStar());
+        aggInfoListMap.put("countStarInserted", aggInfoList.countStarInserted());
         jsonMap.put("originDescription", oldDescription);
         jsonMap.put("inputTypes", inputTypeList);
         jsonMap.put("outputTypes", outputTypeList);
