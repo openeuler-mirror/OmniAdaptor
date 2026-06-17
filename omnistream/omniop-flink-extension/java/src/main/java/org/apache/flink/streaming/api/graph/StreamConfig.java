@@ -144,6 +144,8 @@ public class StreamConfig implements Serializable {
 
     private static final String PARTITION_OMNI_FLAG_MAP = "partitionOmniFlagMap";
 
+    private static final String CHECK_NATIVE = "checkNative";
+
     private static final String MANAGED_MEMORY_FRACTION_PREFIX = "managedMemFraction.";
     private static final ConfigOption<Boolean> STATE_BACKEND_USE_MANAGED_MEMORY =
             ConfigOptions.key("statebackend.useManagedMemory")
@@ -651,6 +653,14 @@ public class StreamConfig implements Serializable {
 
     public String getExecutionCheckpointConf() {
         return config.getString(EXECUTION_CHECKPOINT_CONF, "");
+    }
+
+    public void setCheckNative(boolean checkNative){
+        config.setBoolean(CHECK_NATIVE, checkNative);
+    }
+
+    public boolean getCheckNative(){
+        return config.getBoolean(CHECK_NATIVE, false);
     }
 
     /**

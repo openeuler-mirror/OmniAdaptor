@@ -337,7 +337,8 @@ public class OmniTaskExecutor extends TaskExecutor {
         OmniTask task) throws Exception {
         boolean useOmniFlag = taskInformation.getTaskConfiguration().getBoolean("useomni", false);
         int jobType = taskInformation.getTaskConfiguration().getInteger("jobType", 0);
-        log.info("Task name is {} and useOmniFlag is {} ", taskInformation.getTaskName(), useOmniFlag);
+        boolean checkNative = taskInformation.getTaskConfiguration().getBoolean("checkNative", false);
+        log.info("Task name is {} and useOmniFlag is {} ", taskInformation.getTaskName(), checkNative?!useOmniFlag:useOmniFlag);
         if (useOmniFlag) {
             // stream config pojo
             Collection<PermanentBlobKey> requiredJarFiles = jobInformation.getRequiredJarFileBlobKeys();
