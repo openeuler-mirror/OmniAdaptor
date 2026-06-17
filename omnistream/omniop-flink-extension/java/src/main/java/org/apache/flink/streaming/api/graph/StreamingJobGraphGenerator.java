@@ -31,6 +31,7 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.ExecutionCheckpointCo
 import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
 import com.huawei.omniruntime.flink.streaming.api.graph.OmniGraphOverride;
 
+import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
@@ -41,6 +42,7 @@ import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.common.functions.Function;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.*;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
@@ -107,6 +109,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -620,6 +623,8 @@ public class StreamingJobGraphGenerator {
         boolean dataStreamLowParaMode = isdataStreamLowParaMode(jobType) && enableLowParaMode;
         OmniGraphOverride.setdataStreamLowParaMode(dataStreamLowParaMode);
 
+        checkSourceOperator(jobType);
+
         boolean validateRes = true;
         boolean shouldDoSpiltWatermark = false;
         if (checkParallelism()) {
@@ -783,6 +788,59 @@ public class StreamingJobGraphGenerator {
             }
         }
         return ImmutablePair.of(isContainedGroupedReduceOperator, isContainedKeyedCoProcessOperator); // 未找到
+    }
+
+    private void checkSourceOperator(JobType jobType) {
+        if (!jobType.equals(JobType.SQL)) {
+            return;
+        }
+        LOG.info("checkSourceOperator call");
+        try {
+            boolean needNext = false;
+            boolean containsAgg = false;
+            for (Map.Entry<Integer, OperatorChainInfo> entry : chainInfos.entrySet()) {
+                OperatorChainInfo operatorChainInfo = entry.getValue();
+                List<StreamNode> allChainedNodes = operatorChainInfo.getAllChainedNodes();
+                for (StreamNode chainedNode : allChainedNodes) {
+                    String operatorName = chainedNode.getOperatorName();
+                    if (operatorName.contains("GroupAggregate")) {
+                        containsAgg = true;
+                    }
+                    if (!operatorName.contains("Source")) {
+                        continue;
+                    }
+                    StreamOperatorFactory<?> operatorFactory = chainedNode.getOperatorFactory();
+                    if (!(operatorFactory instanceof org.apache.flink.streaming.api.operators.SourceOperatorFactory)) {
+                        continue;
+                    }
+                    Source source = ReflectionUtils.retrievePrivateField(operatorFactory, "source");
+                    String sourceName = source.getClass().getSimpleName();
+                    if (sourceName.equals("NexmarkSource")) {
+                        Class<?> nexmarkFunction = source.getClass();
+                        Field[] fields = nexmarkFunction.getDeclaredFields();
+                        for (Field field : fields) {
+                            String name = field.getName();
+                            if (name.equals("needNext")) {
+                                needNext = true;
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+            if (needNext) {
+                OmniGraphOverride.setNext();
+                if (containsAgg) {
+                    for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+                        StreamConfig vertexConfig = new StreamConfig(vertexEntry.getValue().getConfiguration());
+                        vertexConfig.setCheckNative(true);
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            LOG.warn("parse Nexmark source failed ", ex);
+        }
     }
 
     private void waitForSerializationFuturesAndUpdateJobVertices()
