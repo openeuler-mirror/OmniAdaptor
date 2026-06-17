@@ -622,6 +622,9 @@ public class StreamingJobGraphGenerator {
 
         boolean validateRes = true;
         boolean shouldDoSpiltWatermark = false;
+        if (checkParallelism()) {
+            OmniGraphOverride.setParallelism();
+        }
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
             shouldDoSpiltWatermark = OmniGraphOverride.checkSplitWatermark(vertexEntry, this.chainInfos, shouldDoSpiltWatermark);
             LOG.info(vertexEntry.toString() + " shouldDoSpiltWatermark : " + shouldDoSpiltWatermark);
@@ -641,6 +644,15 @@ public class StreamingJobGraphGenerator {
         buildAndStorePartitionOmniFlagMap();
         
         OmniGraphOverride.clearTypeInfo();
+    }
+
+    private boolean checkParallelism() {
+        for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+            if (vertexEntry.getValue().getParallelism() >= 80 && vertexEntry.getValue().getParallelism() <= 120) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isdataStreamLowParaMode(JobType jobType) {

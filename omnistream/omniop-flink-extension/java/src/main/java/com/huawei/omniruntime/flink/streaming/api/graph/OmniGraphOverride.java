@@ -243,6 +243,18 @@ public final class OmniGraphOverride {
     }
 
     /**
+     * Parallelism
+     */
+    public static void setParallelism() {
+        if (performanceMode) {
+            SUPPORT_OP_NAME.clear();
+            SUPPORT_OP_NAME.addAll(
+                    Arrays.asList("Calc", "WatermarkAssigner", "StreamRecordTimestampInserter",
+                            "ConstraintEnforcer"));
+        }
+    }
+
+    /**
      * validateVertexForOmniTask
      *
      * @param vertexEntry   vertexEntry
