@@ -28,6 +28,7 @@ import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -556,7 +557,15 @@ public class StateAssignmentOperationTest {
                         OperatorState.class,
                         ExecutionJobVertex.class);
         method.setAccessible(true);
-        method.invoke(null, operatorState, executionJobVertex);
+        try {
+            method.invoke(null, operatorState, executionJobVertex);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) {
+                throw (Exception) cause;
+            }
+            throw e;
+        }
     }
 
     private static ExecutionJobVertex createMockExecutionJobVertex(
