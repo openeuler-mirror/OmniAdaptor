@@ -10,6 +10,10 @@
  */
 package org.apache.flink.runtime.checkpoint;
 
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
+import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.OperatorInstanceID;
 import org.apache.flink.runtime.state.KeyGroupRange;
@@ -22,16 +26,23 @@ import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * StateAssignmentOperation 单元测试，覆盖 key group 分区、keyed state 提取、state 重分区等核心静态方法。
@@ -535,5 +546,154 @@ public class StateAssignmentOperationTest {
         assertEquals(1, collector.size());
         assertEquals(32, collector.get(0).getKeyGroupRange().getStartKeyGroup());
         assertEquals(63, collector.get(0).getKeyGroupRange().getEndKeyGroup());
+    }
+
+    private static void invokeCheckParallelismPreconditions(
+            OperatorState operatorState, ExecutionJobVertex executionJobVertex) throws Exception {
+        Method method =
+                StateAssignmentOperation.class.getDeclaredMethod(
+                        "checkParallelismPreconditions",
+                        OperatorState.class,
+                        ExecutionJobVertex.class);
+        method.setAccessible(true);
+        method.invoke(null, operatorState, executionJobVertex);
+    }
+
+    private static ExecutionJobVertex createMockExecutionJobVertex(
+            int parallelism,
+            int maxParallelism,
+            boolean useOmni,
+            int taskType,
+            boolean canRescaleMaxParallelism) {
+        JobVertexID jobVertexId = new JobVertexID();
+        Configuration configuration = new Configuration();
+        configuration.setBoolean("useomni", useOmni);
+        configuration.setInteger("taskType", taskType);
+
+        JobVertex jobVertex = Mockito.mock(JobVertex.class);
+        when(jobVertex.getConfiguration()).thenReturn(configuration);
+
+        ExecutionJobVertex executionJobVertex = Mockito.mock(ExecutionJobVertex.class);
+        when(executionJobVertex.getJobVertex()).thenReturn(jobVertex);
+        when(executionJobVertex.getJobVertexId()).thenReturn(jobVertexId);
+        when(executionJobVertex.getParallelism()).thenReturn(parallelism);
+        when(executionJobVertex.getMaxParallelism()).thenReturn(maxParallelism);
+        when(executionJobVertex.canRescaleMaxParallelism(Mockito.anyInt()))
+                .thenReturn(canRescaleMaxParallelism);
+
+        return executionJobVertex;
+    }
+
+    /**
+     * checkParallelismPreconditions 在并行度和 maxParallelism 均匹配时应正常通过。
+     */
+    @Test
+    void testCheckParallelismPreconditionsNormal() throws Exception {
+        OperatorState operatorState = new OperatorState(OPERATOR_ID, 4, 128);
+        ExecutionJobVertex executionJobVertex =
+                createMockExecutionJobVertex(4, 128, false, 0, false);
+
+        assertDoesNotThrow(
+                () -> invokeCheckParallelismPreconditions(operatorState, executionJobVertex));
+    }
+
+    /**
+     * checkParallelismPreconditions 在 useOmni=true 且 taskType=1 且并行度不匹配时应抛出 IllegalStateException。
+     */
+    @Test
+    void testCheckParallelismPreconditionsOmniTaskType1ParallelismMismatch() throws Exception {
+        OperatorState operatorState = new OperatorState(OPERATOR_ID, 2, 128);
+        ExecutionJobVertex executionJobVertex =
+                createMockExecutionJobVertex(4, 128, true, 1, false);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> invokeCheckParallelismPreconditions(operatorState, executionJobVertex));
+    }
+
+    /**
+     * checkParallelismPreconditions 在 useOmni=true 但 taskType=0 时，即使并行度不匹配也不应抛异常。
+     */
+    @Test
+    void testCheckParallelismPreconditionsOmniTaskType0ParallelismMismatch() throws Exception {
+        OperatorState operatorState = new OperatorState(OPERATOR_ID, 2, 128);
+        ExecutionJobVertex executionJobVertex =
+                createMockExecutionJobVertex(4, 128, true, 0, false);
+
+        assertDoesNotThrow(
+                () -> invokeCheckParallelismPreconditions(operatorState, executionJobVertex));
+    }
+
+    /**
+     * checkParallelismPreconditions 在 useOmni=false 时，即使 taskType=1 且并行度不匹配也不应抛异常。
+     */
+    @Test
+    void testCheckParallelismPreconditionsNotOmniTaskType1ParallelismMismatch() throws Exception {
+        OperatorState operatorState = new OperatorState(OPERATOR_ID, 2, 128);
+        ExecutionJobVertex executionJobVertex =
+                createMockExecutionJobVertex(4, 128, false, 1, false);
+
+        assertDoesNotThrow(
+                () -> invokeCheckParallelismPreconditions(operatorState, executionJobVertex));
+    }
+
+    /**
+     * checkParallelismPreconditions 在恢复状态的 maxParallelism 低于当前 parallelism 时应抛出 IllegalStateException。
+     */
+    @Test
+    void testCheckParallelismPreconditionsMaxParallelismLowerThanParallelism() throws Exception {
+        OperatorState operatorState = new OperatorState(OPERATOR_ID, 2, 64);
+        ExecutionJobVertex executionJobVertex =
+                createMockExecutionJobVertex(128, 128, false, 0, false);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> invokeCheckParallelismPreconditions(operatorState, executionJobVertex));
+    }
+
+    /**
+     * checkParallelismPreconditions 在 maxParallelism 不匹配但可 rescale 时应正常通过并调用 setMaxParallelism。
+     */
+    @Test
+    void testCheckParallelismPreconditionsMaxParallelismRescaleSuccess() throws Exception {
+        OperatorState operatorState = new OperatorState(OPERATOR_ID, 4, 256);
+        ExecutionJobVertex executionJobVertex =
+                createMockExecutionJobVertex(4, 128, false, 0, true);
+
+        assertDoesNotThrow(
+                () -> invokeCheckParallelismPreconditions(operatorState, executionJobVertex));
+
+        verify(executionJobVertex).setMaxParallelism(256);
+    }
+
+    /**
+     * checkParallelismPreconditions 在 maxParallelism 不匹配且不可 rescale 时应抛出 IllegalStateException。
+     */
+    @Test
+    void testCheckParallelismPreconditionsMaxParallelismRescaleFailure() throws Exception {
+        OperatorState operatorState = new OperatorState(OPERATOR_ID, 4, 256);
+        ExecutionJobVertex executionJobVertex =
+                createMockExecutionJobVertex(4, 128, false, 0, false);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> invokeCheckParallelismPreconditions(operatorState, executionJobVertex));
+
+        verify(executionJobVertex, never()).setMaxParallelism(Mockito.anyInt());
+    }
+
+    /**
+     * checkParallelismPreconditions 在 maxParallelism 相等时不应调用 setMaxParallelism。
+     */
+    @Test
+    void testCheckParallelismPreconditionsMaxParallelismEqual() throws Exception {
+        OperatorState operatorState = new OperatorState(OPERATOR_ID, 4, 128);
+        ExecutionJobVertex executionJobVertex =
+                createMockExecutionJobVertex(4, 128, false, 0, false);
+
+        assertDoesNotThrow(
+                () -> invokeCheckParallelismPreconditions(operatorState, executionJobVertex));
+
+        verify(executionJobVertex, never()).setMaxParallelism(Mockito.anyInt());
     }
 }
