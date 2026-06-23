@@ -136,9 +136,15 @@ public class StreamConfig implements Serializable {
 
     private static final String OMNI_CONF = "omniconf";
 
+    private static final String LOW_PARA_MODE = "LowParaMode";
+
     private static final String CHECKPOINT_CONF = "checkpointConf";
 
     private static final String EXECUTION_CHECKPOINT_CONF = "executionCheckpointConf";
+
+    private static final String PARTITION_OMNI_FLAG_MAP = "partitionOmniFlagMap";
+
+    private static final String CHECK_NATIVE = "checkNative";
 
     private static final String MANAGED_MEMORY_FRACTION_PREFIX = "managedMemFraction.";
     private static final ConfigOption<Boolean> STATE_BACKEND_USE_MANAGED_MEMORY =
@@ -625,6 +631,14 @@ public class StreamConfig implements Serializable {
         return config.getString(OMNI_CONF, "0");
     }
 
+    public void setLowParaMode(boolean LowParaMode) {
+        config.setBoolean(LOW_PARA_MODE, LowParaMode);
+    }
+
+    public boolean getOmniBatchMode() {
+        return config.getBoolean(LOW_PARA_MODE, false);
+    }
+
     public void setCheckpointConf(String checkpointConf) {
         config.setString(CHECKPOINT_CONF, checkpointConf);
     }
@@ -639,6 +653,41 @@ public class StreamConfig implements Serializable {
 
     public String getExecutionCheckpointConf() {
         return config.getString(EXECUTION_CHECKPOINT_CONF, "");
+    }
+
+    public void setCheckNative(boolean checkNative){
+        config.setBoolean(CHECK_NATIVE, checkNative);
+    }
+
+    public boolean getCheckNative(){
+        return config.getBoolean(CHECK_NATIVE, false);
+    }
+
+    /**
+     * Sets a map from IntermediateDataSetID to useOmniFlag flag for partition sources.
+     * This map is used to determine if a partition is produced by a native (Omni) task.
+     * @param partitionOmniFlagMap Map from IntermediateDataSetID (as String) to Boolean useOmniFlag
+     */
+    public void setPartitionOmniFlagMap(Map<String, Boolean> partitionOmniFlagMap) {
+        try {
+            InstantiationUtil.writeObjectToConfig(partitionOmniFlagMap, this.config, PARTITION_OMNI_FLAG_MAP);
+        } catch (IOException e) {
+            throw new StreamTaskException("Could not serialize partition OmniFlag map.", e);
+        }
+    }
+
+    /**
+     * Gets the map from IntermediateDataSetID to useOmniFlag flag for partition sources.
+     * @return Map from IntermediateDataSetID (as String) to Boolean useOmniFlag, or empty map if not set
+     */
+    public Map<String, Boolean> getPartitionOmniFlagMap(ClassLoader cl) {
+        try {
+            Map<String, Boolean> map =
+                    InstantiationUtil.readObjectFromConfig(this.config, PARTITION_OMNI_FLAG_MAP, cl);
+            return map == null ? new HashMap<>() : map;
+        } catch (Exception e) {
+            throw new StreamTaskException("Could not instantiate partition OmniFlag map.", e);
+        }
     }
     
     /**

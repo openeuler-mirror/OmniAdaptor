@@ -130,6 +130,8 @@ public final class OmniGraphOverride {
 
     private static boolean performanceMode = true;
 
+    private static boolean DATASTREAM_LOW_PARA_MODE = false;
+
     static {
         try {
             String flinkPerformance = System.getProperty("FLINK_PERFORMANCE");
@@ -233,6 +235,27 @@ public final class OmniGraphOverride {
      */
     public static void setStateBackend(StateBackend stateBackend) {
         if (performanceMode && stateBackend != null && !(stateBackend instanceof HashMapStateBackend)) {
+            SUPPORT_OP_NAME.clear();
+            SUPPORT_OP_NAME.addAll(
+                    Arrays.asList("Calc", "WatermarkAssigner", "StreamRecordTimestampInserter",
+                            "ConstraintEnforcer"));
+        }
+    }
+
+    /**
+     * Parallelism
+     */
+    public static void setParallelism() {
+        if (performanceMode) {
+            SUPPORT_OP_NAME.clear();
+            SUPPORT_OP_NAME.addAll(
+                    Arrays.asList("Calc", "WatermarkAssigner", "StreamRecordTimestampInserter",
+                            "ConstraintEnforcer"));
+        }
+    }
+
+    public static void setNext() {
+        if (performanceMode) {
             SUPPORT_OP_NAME.clear();
             SUPPORT_OP_NAME.addAll(
                     Arrays.asList("Calc", "WatermarkAssigner", "StreamRecordTimestampInserter",
@@ -444,6 +467,13 @@ public final class OmniGraphOverride {
                 break;
             case STREAM:
                 StreamConfig streamConfig = vertexConfigs.get(node.getId());
+                if (!DATASTREAM_LOW_PARA_MODE) {
+                    streamConfig.setLowParaMode(false);
+                } else {
+                    if (isSink(operatorName)) {
+                        return true;
+                    }
+                }
                 boolean result;
                 try {
                     result = validateWatermark(node) && StreamNodeOptimized.getInstance().setExtraDescription(
@@ -796,12 +826,12 @@ public final class OmniGraphOverride {
         return jsonMap;
     }
 
-    private static boolean isSource(String operatorName) {
+    public static boolean isSource(String operatorName) {
         Matcher matcher = SOURCE_REGEX.matcher(operatorName);
         return matcher.find();
     }
 
-    private static boolean isSink(String operatorName) {
+    public static boolean isSink(String operatorName) {
         Matcher matcher = SINK_REGEX.matcher(operatorName);
         return matcher.find();
     }
@@ -1218,5 +1248,9 @@ public final class OmniGraphOverride {
             taskTypes.add(taskType);
             jobType = jobType.getCombinationsTaskType(taskType);
         }
+    }
+
+    public static void setdataStreamLowParaMode(boolean isBatchMode) {
+        DATASTREAM_LOW_PARA_MODE = isBatchMode;
     }
 }

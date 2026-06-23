@@ -19,6 +19,7 @@ public class UdfConfig {
 
     private static final UdfConfig INSTANCE = new UdfConfig();
     private Properties config = new Properties();
+    private boolean isAI4C = false;
 
     public static UdfConfig getINSTANCE() {
         return INSTANCE;
@@ -27,6 +28,10 @@ public class UdfConfig {
     public void setJarNumber(String jarFilePath) {
         config = NativeMain.getConfig(jarFilePath);
         for (String stringPropertyName : config.stringPropertyNames()) {
+            if (stringPropertyName.equals("isAI4C")) {
+                isAI4C = true;
+            }
+
             if (!config.getProperty(stringPropertyName).endsWith(".so")) {
                 config.remove(stringPropertyName);
             }
@@ -35,5 +40,9 @@ public class UdfConfig {
 
     public Properties getConfig() {
         return config;
+    }
+
+    public boolean isAI4C() {
+        return isAI4C;
     }
 }

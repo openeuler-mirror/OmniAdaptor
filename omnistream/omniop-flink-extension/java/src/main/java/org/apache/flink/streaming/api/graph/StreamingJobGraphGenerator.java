@@ -31,6 +31,7 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.ExecutionCheckpointCo
 import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
 import com.huawei.omniruntime.flink.streaming.api.graph.OmniGraphOverride;
 
+import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
@@ -41,6 +42,7 @@ import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.common.functions.Function;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.*;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
@@ -78,6 +80,7 @@ import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.checkpoint.WithMasterCheckpointHook;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
+import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamGroupedReduceOperator;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
@@ -106,6 +109,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -614,9 +618,18 @@ public class StreamingJobGraphGenerator {
         if (validateFallBackForCheckpoint(jobType)){
             return;
         }
+        boolean enableLowParaMode =
+                streamGraph.getConfiguration().get(ConfigOptions.key("low-parallelism.optimize.enabled").booleanType().defaultValue(false));
+        boolean dataStreamLowParaMode = isdataStreamLowParaMode(jobType) && enableLowParaMode;
+        OmniGraphOverride.setdataStreamLowParaMode(dataStreamLowParaMode);
+
+        checkSourceOperator(jobType);
 
         boolean validateRes = true;
         boolean shouldDoSpiltWatermark = false;
+        if (checkParallelism()) {
+            OmniGraphOverride.setParallelism();
+        }
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
             shouldDoSpiltWatermark = OmniGraphOverride.checkSplitWatermark(vertexEntry, this.chainInfos, shouldDoSpiltWatermark);
             LOG.info(vertexEntry.toString() + " shouldDoSpiltWatermark : " + shouldDoSpiltWatermark);
@@ -631,7 +644,73 @@ public class StreamingJobGraphGenerator {
                 vertexConfig.setUseOmniEnabled(false);
             }
         }
+        
+        // Build partition OmniFlag map for each vertex
+        buildAndStorePartitionOmniFlagMap();
+        
         OmniGraphOverride.clearTypeInfo();
+    }
+
+    private boolean checkParallelism() {
+        for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+            if (vertexEntry.getValue().getParallelism() >= 80 && vertexEntry.getValue().getParallelism() <= 120) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isdataStreamLowParaMode(JobType jobType) {
+        if (jobType.equals(JobType.SQL)) {
+            return false;
+        }
+        for (OperatorChainInfo chainInfo : chainInfos.values()) {
+            List<StreamNode> allChainedNodes = chainInfo.getAllChainedNodes();
+            for (StreamNode chainedNode : allChainedNodes) {
+                String operatorName = chainedNode.getOperatorName();
+                if (OmniGraphOverride.isSource(operatorName) || OmniGraphOverride.isSink(operatorName)) {
+                    continue;
+                }
+                if (chainedNode.getOperatorFactory() instanceof SimpleOperatorFactory) {
+                    operatorName = chainedNode.getOperator().getClass().getSimpleName();
+                    if (operatorName.equals("StreamMap") || operatorName.equals("StreamGroupedReduceOperator")) {
+                        continue;
+                    }
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Build a map from producer JobVertexID to useOmniFlag for all source vertices,
+     * and store it in each JobVertex's StreamConfig.
+     * This allows OmniTask to determine at runtime if an input partition is produced by a native task.
+     */
+    private void buildAndStorePartitionOmniFlagMap() {
+        // Map: producer JobVertexID (as string) -> useOmniFlag of source vertex
+        Map<String, Boolean> partitionOmniFlagMap = new HashMap<>();
+
+        for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+            Integer sourceNodeId = vertexEntry.getKey();
+            StreamConfig sourceVertexConfig = vertexConfigs.get(sourceNodeId);
+
+            if (sourceVertexConfig == null) {
+                continue;
+            }
+
+            String producerJobVertexId = vertexEntry.getValue().getID().toString();
+            boolean sourceUseOmni = sourceVertexConfig.isUseOmniEnabled();
+            partitionOmniFlagMap.put(producerJobVertexId, sourceUseOmni);
+            LOG.debug("Mapped producer JobVertexID {} to useOmni={}", producerJobVertexId, sourceUseOmni);
+        }
+
+        for (Map.Entry<Integer, StreamConfig> configEntry : vertexConfigs.entrySet()) {
+            configEntry.getValue().setPartitionOmniFlagMap(partitionOmniFlagMap);
+        }
+
+        LOG.info("Built partition OmniFlag map with {} entries", partitionOmniFlagMap.size());
     }
 
     private boolean validateFallBackForCheckpoint(JobType jobType){
@@ -709,6 +788,59 @@ public class StreamingJobGraphGenerator {
             }
         }
         return ImmutablePair.of(isContainedGroupedReduceOperator, isContainedKeyedCoProcessOperator); // 未找到
+    }
+
+    private void checkSourceOperator(JobType jobType) {
+        if (!jobType.equals(JobType.SQL)) {
+            return;
+        }
+        LOG.info("checkSourceOperator call");
+        try {
+            boolean needNext = false;
+            boolean containsAgg = false;
+            for (Map.Entry<Integer, OperatorChainInfo> entry : chainInfos.entrySet()) {
+                OperatorChainInfo operatorChainInfo = entry.getValue();
+                List<StreamNode> allChainedNodes = operatorChainInfo.getAllChainedNodes();
+                for (StreamNode chainedNode : allChainedNodes) {
+                    String operatorName = chainedNode.getOperatorName();
+                    if (operatorName.contains("GroupAggregate")) {
+                        containsAgg = true;
+                    }
+                    if (!operatorName.contains("Source")) {
+                        continue;
+                    }
+                    StreamOperatorFactory<?> operatorFactory = chainedNode.getOperatorFactory();
+                    if (!(operatorFactory instanceof org.apache.flink.streaming.api.operators.SourceOperatorFactory)) {
+                        continue;
+                    }
+                    Source source = ReflectionUtils.retrievePrivateField(operatorFactory, "source");
+                    String sourceName = source.getClass().getSimpleName();
+                    if (sourceName.equals("NexmarkSource")) {
+                        Class<?> nexmarkFunction = source.getClass();
+                        Field[] fields = nexmarkFunction.getDeclaredFields();
+                        for (Field field : fields) {
+                            String name = field.getName();
+                            if (name.equals("needNext")) {
+                                needNext = true;
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+            if (needNext) {
+                OmniGraphOverride.setNext();
+                if (containsAgg) {
+                    for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+                        StreamConfig vertexConfig = new StreamConfig(vertexEntry.getValue().getConfiguration());
+                        vertexConfig.setCheckNative(true);
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            LOG.warn("parse Nexmark source failed ", ex);
+        }
     }
 
     private void waitForSerializationFuturesAndUpdateJobVertices()
@@ -1462,6 +1594,8 @@ public class StreamingJobGraphGenerator {
             ExecutionCheckpointConfigPOJO executionCheckpointConfigPOJO =
                 new ExecutionCheckpointConfigPOJO(checkpointCfg, configuration);
             config.setExecutionCheckpointConf(mapper.writeValueAsString(executionCheckpointConfigPOJO));
+            config.setLowParaMode(
+                configuration.get(ConfigOptions.key("low-parallelism.optimize.enabled").booleanType().defaultValue(false)));
         } catch (Exception e) {
             LOG.warn("get OmniConf or CheckpointConf failed!", e);
         }

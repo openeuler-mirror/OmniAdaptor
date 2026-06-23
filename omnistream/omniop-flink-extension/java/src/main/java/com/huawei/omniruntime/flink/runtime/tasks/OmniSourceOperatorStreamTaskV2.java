@@ -107,8 +107,6 @@ public class OmniSourceOperatorStreamTaskV2<T> extends OmniStreamTask<T, SourceO
     /** Only set for externally induced sources. See also {@link #isExternallyInducedSource()}. */
     private StreamTaskExternallyInducedSourceInput<T> externallyInducedSourceInput;
 
-    private long nativeSourceOperatorRef;
-
     public OmniSourceOperatorStreamTaskV2(Environment env) throws Exception {
         super(env);
     }
@@ -146,7 +144,6 @@ public class OmniSourceOperatorStreamTaskV2<T> extends OmniStreamTask<T, SourceO
         } else {
             // hook
             long nativeStreamTaskRef = getOmniStreamTaskRef();
-            nativeSourceOperatorRef = getNativeSourceOperator(nativeStreamTaskRef);
             ByteBuffer outputBuffer = this.getOutputBuffer();
             ByteBuffer outputBufferStatus = this.getOutputBufferStatus();
             input = new OmniStreamTaskSourceInput<>(sourceOperator, nativeStreamTaskRef, 0, 0, outputBuffer, outputBufferStatus);
@@ -234,13 +231,11 @@ public class OmniSourceOperatorStreamTaskV2<T> extends OmniStreamTask<T, SourceO
                 // TODO what kind of exception to throw
                 throw new RuntimeException(e.getMessage());
             }
-            handleOperatorEvent(nativeSourceOperatorRef, desc);
+            dispatchOperatorEvent(omniTaskRef, operatorID.toString(), desc);
         });
     }
 
-    private static native long getNativeSourceOperator(long omniStreamTaskRef);
-
-    private static native void handleOperatorEvent(long omniSourceOperatorRef, String eventDesc);
+    private static native void dispatchOperatorEvent(long omniTaskRef, String operatorId, String eventDesc);
 
     @Override
     public CompletableFuture<Boolean> triggerCheckpointAsync(
