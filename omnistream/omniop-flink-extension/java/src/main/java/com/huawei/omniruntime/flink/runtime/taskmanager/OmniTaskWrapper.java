@@ -821,11 +821,15 @@ public class OmniTaskWrapper {
             JsonNode delegateNode = getFirstPresent(
                     rootNode, "metaDataState", "delegateStateHandle", "streamStateHandle");
             if (delegateNode == null) {
+                LOG.error("Error: OperatorStreamStateHandle missing metaDataState/delegateStateHandle/streamStateHandle. "
+                        + "metaStateHandleStr={}", metaStateHandleStr);
                 throw new IOException(
                         "OperatorStreamStateHandle missing metaDataState/delegateStateHandle/streamStateHandle.");
             }
             StreamStateHandle metaDataState = TaskStateSnapshotDeser.parseStreamStateHandle(delegateNode);
             if (metaDataState == null) {
+                LOG.error("Error: OperatorStreamStateHandle delegate parsed to null. metaStateHandleStr={}",
+                        metaStateHandleStr);
                 throw new IOException("OperatorStreamStateHandle delegate parsed to null.");
             }
             JsonNode partitionOffsetsNode = rootNode.get("stateNameToPartitionOffsets");
@@ -863,6 +867,8 @@ public class OmniTaskWrapper {
             }
             return new OperatorStreamStateHandle(stateMap, metaDataState);
         } catch (Exception e) {
+            LOG.error("Error: deserializing metaStateHandleStr to OperatorStreamStateHandle. metaStateHandleStr={}",
+                    metaStateHandleStr, e);
             throw new JsonHelper.JsonHelperException(
                     "Error deserializing metaStateHandleStr to OperatorStreamStateHandle: "
                             + metaStateHandleStr, e);
@@ -931,9 +937,12 @@ public class OmniTaskWrapper {
             OperatorStreamStateHandle operatorStateHandle = deserializeOperatorStreamStateHandle(metaStateHandleStr);
             metaStateHandle = operatorStateHandle.getDelegateStateHandle();
         } else {
+            LOG.error("Error: unsupported operator metaStateHandleStr json. classType={}, metaStateHandleStr={}",
+                    classType, metaStateHandleStr);
             throw new IOException("Unsupported metaStateHandleStr json.");
         }
         if (metaStateHandle == null) {
+            LOG.error("Error: OperatorStreamStateHandle delegate is null. metaStateHandleStr={}", metaStateHandleStr);
             throw new IOException("OperatorStreamStateHandle delegate is null.");
         }
 
@@ -977,8 +986,26 @@ public class OmniTaskWrapper {
     }
 
     public FSDataInputStream getSavepointInputStream(String metaStateHandleStr) throws IOException {
-        KeyGroupsStateHandle keyedGroupsStateHandle = deserializeKeyGroupsStateHandle(metaStateHandleStr);
-        StreamStateHandle metaStateHandle = keyedGroupsStateHandle.getDelegateStateHandle();
+        StreamStateHandle metaStateHandle;
+        JsonNode rootNode = OBJECT_MAPPER.readTree(metaStateHandleStr);
+        JsonNode classTypeNode = getFirstPresent(rootNode, "@class", "stateHandleName");
+        if (classTypeNode == null || !classTypeNode.isTextual()) {
+            LOG.error("Error: Savepoint input stream handle json is missing @class/stateHandleName. "
+                    + "metaStateHandleStr={}", metaStateHandleStr);
+            throw new IOException("Savepoint input stream handle json is missing @class/stateHandleName.");
+        }
+        String classType = classTypeNode.asText();
+        if (classType.endsWith("KeyGroupsStateHandle")) {
+            KeyGroupsStateHandle keyedGroupsStateHandle = deserializeKeyGroupsStateHandle(metaStateHandleStr);
+            metaStateHandle = keyedGroupsStateHandle.getDelegateStateHandle();
+        } else if (classType.endsWith("OperatorStreamStateHandle")) {
+            OperatorStreamStateHandle operatorStateHandle = deserializeOperatorStreamStateHandle(metaStateHandleStr);
+            metaStateHandle = operatorStateHandle.getDelegateStateHandle();
+        } else {
+            LOG.error("Error: unsupported savepoint input stream handle json. classType={}, metaStateHandleStr={}",
+                    classType, metaStateHandleStr);
+            throw new IOException("Unsupported savepoint input stream handle json: " + classType);
+        }
         if (null == metaStateHandle) {
             LOG.error("Error getSavepointInputStream: metaStateHandleStr:{}", metaStateHandleStr);
             return null;
@@ -1008,6 +1035,7 @@ public class OmniTaskWrapper {
             return -1;
         }
         if (buffer == null) {
+            LOG.error("Error: readSavepointInputStream target buffer is null.");
             throw new IOException("readSavepointInputStream target buffer is null.");
         }
         return inputStream.read(buffer, offset, length);
