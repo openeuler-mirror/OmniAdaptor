@@ -221,7 +221,6 @@ public class OmniTaskTest {
         ByteBuffer chunk = ByteBuffer.allocate(10); // non-direct
         chunk.put(new byte[]{1, 2, 3});
 
-        byte[] expectedBytes = new byte[]{1, 2, 3};
         doNothing().when(outputStream).write(any(byte[].class), eq(0), eq(3));
 
         boolean result = omniTask.writeSavepointOutputStreamDirect(provider, chunk, 3);
@@ -340,7 +339,7 @@ public class OmniTaskTest {
         when(env.getCheckpointStorageAccess()).thenReturn(checkpointAccess);
 
         // inject invokable into the mock via reflection (OmniTask extends Task)
-        Field invokableField = omniTask.getClass().getSuperclass().getDeclaredField("invokable");
+        Field invokableField = org.apache.flink.runtime.taskmanager.Task.class.getDeclaredField("invokable");
         invokableField.setAccessible(true);
         invokableField.set(omniTask, streamTask);
 
@@ -361,7 +360,7 @@ public class OmniTaskTest {
         }
     }
 
-    // ========== helpers ==========
+    // ==========ut验证 helpers ==========
 
     /**
      * Sets checkpointStreamFactory on the mock via reflection to bypass null check.
