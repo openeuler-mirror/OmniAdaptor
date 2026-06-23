@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StringTyp
 /**
  * 功能描述
  *
- * @author w00630100
+ * @author xxx
  * @since 2022-02-21
  */
 class OmniExpressionAdaptorSuite extends SparkFunSuite {
