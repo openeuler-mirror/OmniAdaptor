@@ -46,6 +46,7 @@ import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.IncrementalLocalKeyedStateHandle;
 import org.apache.flink.runtime.state.IncrementalRemoteKeyedStateHandle;
+import org.apache.flink.runtime.state.KeyGroupsSavepointStateHandle;
 import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.StateHandleID;
 import org.apache.flink.runtime.state.IncrementalKeyedStateHandle.HandleAndLocalPath;
@@ -61,16 +62,15 @@ import org.apache.flink.runtime.taskmanager.RuntimeEnvironment;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.flink.core.io.VersionMismatchException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -79,6 +79,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -100,7 +101,13 @@ public class OmniTaskWrapper {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private static final int[] versions = new int[] {6, 5, 4, 3, 2, 1};
+    private static final int MAX_KEY_GROUP_ENTRY_BATCH_SIZE = 1000;
+    private static final int SINGLE_BYTE_MAX_GROUPS = 128;
+    private static final int PREFIX_ONE_BYTE = 1;
+    private static final int PREFIX_TWO_BYTES = 2;
+
+    private final Map<FSDataInputStream, KeyedStateInputContext> keyedStateInputContexts =
+            Collections.synchronizedMap(new IdentityHashMap<>());
 
     private static final Object OPERATOR_METADATA_CACHE_LOCK = new Object();
     private static final Map<ClassLoader, ConcurrentHashMap<OperatorMetadataCacheKey,
@@ -772,14 +779,24 @@ public class OmniTaskWrapper {
                     rootNode.get("keyGroupRange").toString(),
                     KeyGroupRange.class);
 
-            KeyGroupRangeOffsets keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange);
+            KeyGroupRangeOffsets keyGroupRangeOffsets = parseKeyGroupRangeOffsets(rootNode, keyGroupRange);
 
+            JsonNode delegateNode = getFirstPresent(rootNode, "metaDataState", "streamStateHandle", "stateHandle");
+            if (delegateNode == null) {
+                throw new IOException("KeyGroupsStateHandle missing metaDataState/streamStateHandle/stateHandle.");
+            }
             StreamStateHandle metaDataState =
-                    TaskStateSnapshotDeser.parseStreamStateHandle(rootNode.get("metaDataState"));
+                    TaskStateSnapshotDeser.parseStreamStateHandle(delegateNode);
 
-            String jstateHandleId = rootNode.get("stateHandleId").get("keyString").asText();
+            JsonNode stateHandleIdNode = rootNode.get("stateHandleId");
+            String jstateHandleId = stateHandleIdNode != null && stateHandleIdNode.has("keyString")
+                    ? stateHandleIdNode.get("keyString").asText()
+                    : UUID.randomUUID().toString();
             StateHandleID stateHandleId = new StateHandleID(jstateHandleId);
 
+            if (isKeyGroupsSavepointStateHandle(rootNode)) {
+                return new KeyGroupsSavepointStateHandle(keyGroupRangeOffsets, metaDataState);
+            }
             return KeyGroupsStateHandle.restore(
                     keyGroupRangeOffsets,
                     metaDataState,
@@ -789,8 +806,27 @@ public class OmniTaskWrapper {
                 metaStateHandleStr, e.getMessage());
             throw new JsonHelper.JsonHelperException(
                     "Error deserializing metaStateHandleStr to IncrementalRemoteKeyedStateHandle: "
-                            + metaStateHandleStr, e);
+                    + metaStateHandleStr, e);
         }
+    }
+
+    private static KeyGroupRangeOffsets parseKeyGroupRangeOffsets(JsonNode rootNode, KeyGroupRange keyGroupRange) {
+        JsonNode groupRangeOffsetsNode = rootNode.get("groupRangeOffsets");
+        JsonNode offsetsNode = groupRangeOffsetsNode == null ? null : unwrapTypedArray(groupRangeOffsetsNode.get("offsets"));
+        long[] offsets = new long[keyGroupRange.getNumberOfKeyGroups()];
+        if (offsetsNode != null && offsetsNode.isArray()) {
+            for (int i = 0; i < offsets.length && i < offsetsNode.size(); i++) {
+                offsets[i] = offsetsNode.get(i).asLong();
+            }
+        }
+        return new KeyGroupRangeOffsets(keyGroupRange, offsets);
+    }
+
+    private static boolean isKeyGroupsSavepointStateHandle(JsonNode rootNode) {
+        String classType = rootNode.has("@class") ? rootNode.get("@class").asText() : "";
+        String stateHandleName = rootNode.has("stateHandleName") ? rootNode.get("stateHandleName").asText() : "";
+        return classType.contains("KeyGroupsSavepointStateHandle")
+                || stateHandleName.contains("KeyGroupsSavepointStateHandle");
     }
 
     private static JsonNode getFirstPresent(JsonNode rootNode, String... fieldNames) {
@@ -883,7 +919,10 @@ public class OmniTaskWrapper {
             IncrementalRemoteKeyedStateHandle remoteKeyedStateHandle =
                     deserializeIncrementalRemoteKeyedStateHandle(metaStateHandleStr);
             metaStateHandle = remoteKeyedStateHandle.getMetaStateHandle();
-        } else if ("org.apache.flink.runtime.state.KeyGroupsStateHandle".equals(classType)) {
+        } else if ("org.apache.flink.runtime.state.KeyGroupsStateHandle".equals(classType)
+                || "org.apache.flink.runtime.state.KeyGroupsSavepointStateHandle".equals(classType)
+                || "KeyGroupsStateHandle".equals(classType)
+                || "KeyGroupsSavepointStateHandle".equals(classType)) {
             KeyGroupsStateHandle keyedGroupsStateHandle =
                     deserializeKeyGroupsStateHandle(metaStateHandleStr);
             metaStateHandle = keyedGroupsStateHandle.getDelegateStateHandle();
@@ -986,18 +1025,31 @@ public class OmniTaskWrapper {
         FSDataInputStream inputStream = metaStateHandle.openInputStream();
         if (null == inputStream) {
             LOG.error("Error getSavepointInputStream: metaStateHandleStr:{}", metaStateHandleStr);
+        } else {
+            KeyedStateHandleFormat format = keyedGroupsStateHandle instanceof KeyGroupsSavepointStateHandle
+                    ? KeyedStateHandleFormat.CANONICAL_FULL_SNAPSHOT
+                    : KeyedStateHandleFormat.NATIVE_HEAP;
+            keyedStateInputContexts.put(inputStream, new KeyedStateInputContext(format));
         }
         return inputStream;
     }
 
     public void closeSavepointInputStream(FSDataInputStream inputStream) throws IOException {
         if (inputStream != null) {
+            KeyedStateInputContext context = keyedStateInputContexts.remove(inputStream);
+            if (context != null) {
+                context.closeNativeCursor();
+            }
             inputStream.close();
         }
     }
 
     public void setSavepointInputStreamOffset(FSDataInputStream inputStream, long offset) throws IOException {
         if (inputStream != null) {
+            KeyedStateInputContext context = keyedStateInputContexts.get(inputStream);
+            if (context != null) {
+                context.closeNativeCursor();
+            }
             inputStream.seek(offset);
         }
     }
@@ -1015,23 +1067,28 @@ public class OmniTaskWrapper {
 
     public boolean isUsingKeyGroupCompression(FSDataInputStream inputStream) throws IOException {
         DataInputView in = new DataInputViewStreamWrapper(inputStream);
-        int readVersion = in.readInt();
-        for (int version : versions) {
-            if (version == readVersion) {
-                if (readVersion >= 4) {
-                    return in.readBoolean();
-                } else {
-                    return false;
-                }
-            }
+        KeyedBackendSerializationProxy<?> serializationProxy =
+                new KeyedBackendSerializationProxy<>(getUserCodeClassLoader());
+        serializationProxy.read(in);
+        KeyedStateInputContext context = keyedStateInputContexts.get(inputStream);
+        if (context != null) {
+            context.readVersion = serializationProxy.getReadVersion();
+            context.usingKeyGroupCompression = serializationProxy.isUsingKeyGroupCompression();
+            context.stateMetaInfoSnapshots = serializationProxy.getStateMetaInfoSnapshots();
+            TypeSerializerSnapshot<?> keySerializerSnapshot = serializationProxy.getKeySerializerSnapshot();
+            context.keySerializer = keySerializerSnapshot == null ? null : keySerializerSnapshot.restoreSerializer();
+            context.keyGroupPrefixBytes = computeRequiredBytesInKeyGroupPrefix(getMaxNumberOfKeyGroups());
+            context.nativeStateReaderInfos = createNativeStateReaderInfos(context.stateMetaInfoSnapshots);
         }
-        LOG.error("Incompatible version: found " + readVersion + ", compatible version are" + Arrays.toString(versions));
-        throw new VersionMismatchException("Incompatible version: found " + readVersion
-            + ", compatible version are" + Arrays.toString(versions));
+        return serializationProxy.isUsingKeyGroupCompression();
     }
 
     public KeyGroupEntryWrapper getKeyGroupEntries(FSDataInputStream inputStream, int currentKvStateId,
                                         boolean isUsingKeyGroupCompression) throws IOException {
+        KeyedStateInputContext context = keyedStateInputContexts.get(inputStream);
+        if (context != null && context.format == KeyedStateHandleFormat.NATIVE_HEAP) {
+            return getNativeHeapKeyGroupEntries(inputStream, currentKvStateId, context);
+        }
         StreamCompressionDecorator keygroupStressCompressionDecorator = isUsingKeyGroupCompression ?
             SnappyStreamCompressionDecorator.INSTANCE : UncompressedStreamCompressionDecorator.INSTANCE;
         try(InputStream compressedKgIn = keygroupStressCompressionDecorator.decorateWithCompression(inputStream);
@@ -1041,10 +1098,10 @@ public class OmniTaskWrapper {
                 currentKvStateId = END_OF_KEY_GROUP_MARK & kgInputView.readShort();
             }
             int entryStateId = currentKvStateId;
-            KeyGroupEntry[] keyGroupEntries = new KeyGroupEntry[1000];
+            KeyGroupEntry[] keyGroupEntries = new KeyGroupEntry[MAX_KEY_GROUP_ENTRY_BATCH_SIZE];
             // read by state or by count 1000
             int count = 0;
-            for (int i = 0; i < 1000; i++) {
+            for (int i = 0; i < MAX_KEY_GROUP_ENTRY_BATCH_SIZE; i++) {
                 count++;
                 byte[] key = BytePrimitiveArraySerializer.INSTANCE.deserialize(kgInputView);
                 byte[] value = BytePrimitiveArraySerializer.INSTANCE.deserialize(kgInputView);
@@ -1059,6 +1116,365 @@ public class OmniTaskWrapper {
                 keyGroupEntries[i] = new KeyGroupEntry(key, value);
             }
             return new KeyGroupEntryWrapper(keyGroupEntries, currentKvStateId, entryStateId, count);
+        }
+    }
+
+    private KeyGroupEntryWrapper getNativeHeapKeyGroupEntries(
+            FSDataInputStream inputStream,
+            int currentKvStateId,
+            KeyedStateInputContext context) throws IOException {
+        if (!context.isNativeReaderReady()) {
+            throw new IOException("Native heap keyed state reader is not initialized from metadata.");
+        }
+        if (currentKvStateId == -1 || context.nativeCursor == null || context.nativeCursor.finished) {
+            context.closeNativeCursor();
+            context.nativeCursor = new NativeHeapKeyGroupCursor(
+                    inputStream,
+                    context.usingKeyGroupCompression,
+                    context.readVersion,
+                    context.nativeStateReaderInfos);
+        }
+        try {
+            KeyGroupEntryWrapper entries = context.nativeCursor.nextBatch(
+                    context.keySerializer,
+                    context.keyGroupPrefixBytes);
+            if (context.nativeCursor.finished) {
+                context.closeNativeCursor();
+            }
+            return entries;
+        } catch (IOException | RuntimeException e) {
+            context.closeNativeCursor();
+            throw e;
+        }
+    }
+
+    private ClassLoader getUserCodeClassLoader() {
+        RuntimeEnvironment env = omniTask.getCheckpointingEnv();
+        return env.getUserCodeClassLoader().asClassLoader();
+    }
+
+    private int getMaxNumberOfKeyGroups() {
+        return omniTask.getTaskInfo().getMaxNumberOfParallelSubtasks();
+    }
+
+    private static int computeRequiredBytesInKeyGroupPrefix(int totalKeyGroupsInJob) {
+        return totalKeyGroupsInJob > SINGLE_BYTE_MAX_GROUPS ? PREFIX_TWO_BYTES : PREFIX_ONE_BYTE;
+    }
+
+    private static List<NativeStateReaderInfo> createNativeStateReaderInfos(
+            List<StateMetaInfoSnapshot> metaInfoSnapshots) throws IOException {
+        List<NativeStateReaderInfo> infos = new ArrayList<>(metaInfoSnapshots.size());
+        for (StateMetaInfoSnapshot metaInfoSnapshot : metaInfoSnapshots) {
+            TypeSerializer<?> namespaceSerializer = null;
+            TypeSerializer<?> valueSerializer = null;
+            if (metaInfoSnapshot.getBackendStateType() == StateMetaInfoSnapshot.BackendStateType.KEY_VALUE) {
+                namespaceSerializer = restoreSerializer(
+                        metaInfoSnapshot,
+                        StateMetaInfoSnapshot.CommonSerializerKeys.NAMESPACE_SERIALIZER);
+                valueSerializer = restoreSerializer(
+                        metaInfoSnapshot,
+                        StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER);
+            } else if (metaInfoSnapshot.getBackendStateType()
+                    == StateMetaInfoSnapshot.BackendStateType.PRIORITY_QUEUE) {
+                valueSerializer = restoreSerializer(
+                        metaInfoSnapshot,
+                        StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER);
+            }
+            infos.add(new NativeStateReaderInfo(
+                    metaInfoSnapshot.getName(),
+                    metaInfoSnapshot.getBackendStateType(),
+                    namespaceSerializer,
+                    valueSerializer));
+        }
+        return infos;
+    }
+
+    private static TypeSerializer<?> restoreSerializer(
+            StateMetaInfoSnapshot metaInfoSnapshot,
+            StateMetaInfoSnapshot.CommonSerializerKeys serializerKey) throws IOException {
+        TypeSerializer<?> serializer = metaInfoSnapshot.getTypeSerializer(serializerKey.toString());
+        if (serializer != null) {
+            return serializer;
+        }
+        TypeSerializerSnapshot<?> snapshot = metaInfoSnapshot.getTypeSerializerSnapshot(serializerKey);
+        if (snapshot == null) {
+            throw new IOException("Missing serializer snapshot " + serializerKey
+                    + " for state " + metaInfoSnapshot.getName());
+        }
+        return snapshot.restoreSerializer();
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void serializeWithSerializer(
+            TypeSerializer serializer,
+            Object value,
+            DataOutputSerializer output) throws IOException {
+        serializer.serialize(value, output);
+    }
+
+    private static void writeKeyGroupPrefix(
+            DataOutputSerializer output,
+            int keyGroup,
+            int keyGroupPrefixBytes) throws IOException {
+        for (int i = keyGroupPrefixBytes; --i >= 0;) {
+            output.writeByte((keyGroup >> (i * 8)) & 0xFF);
+        }
+    }
+
+    private static byte[] copyBuffer(DataOutputSerializer output) {
+        return output.getCopyOfBuffer();
+    }
+
+    private enum KeyedStateHandleFormat {
+        CANONICAL_FULL_SNAPSHOT,
+        NATIVE_HEAP
+    }
+
+    private static class KeyedStateInputContext {
+        private final KeyedStateHandleFormat format;
+        private int readVersion;
+        private boolean usingKeyGroupCompression;
+        private List<StateMetaInfoSnapshot> stateMetaInfoSnapshots = Collections.emptyList();
+        private TypeSerializer<?> keySerializer;
+        private int keyGroupPrefixBytes;
+        private List<NativeStateReaderInfo> nativeStateReaderInfos = Collections.emptyList();
+        private NativeHeapKeyGroupCursor nativeCursor;
+
+        private KeyedStateInputContext(KeyedStateHandleFormat format) {
+            this.format = format;
+        }
+
+        private boolean isNativeReaderReady() {
+            return keySerializer != null
+                    && keyGroupPrefixBytes > 0
+                    && stateMetaInfoSnapshots != null
+                    && nativeStateReaderInfos != null
+                    && nativeStateReaderInfos.size() == stateMetaInfoSnapshots.size();
+        }
+
+        private void closeNativeCursor() throws IOException {
+            if (nativeCursor != null) {
+                nativeCursor.close();
+                nativeCursor = null;
+            }
+        }
+    }
+
+    private static class NativeStateReaderInfo {
+        private final String stateName;
+        private final StateMetaInfoSnapshot.BackendStateType backendStateType;
+        private final TypeSerializer<?> namespaceSerializer;
+        private final TypeSerializer<?> valueSerializer;
+
+        private NativeStateReaderInfo(
+                String stateName,
+                StateMetaInfoSnapshot.BackendStateType backendStateType,
+                TypeSerializer<?> namespaceSerializer,
+                TypeSerializer<?> valueSerializer) {
+            this.stateName = stateName;
+            this.backendStateType = backendStateType;
+            this.namespaceSerializer = namespaceSerializer;
+            this.valueSerializer = valueSerializer;
+        }
+    }
+
+    private static class NativeHeapKeyGroupCursor implements AutoCloseable {
+        private final DataInputViewStreamWrapper inputView;
+        private final int keyGroupId;
+        private final int readVersion;
+        private final List<NativeStateReaderInfo> stateReaderInfos;
+        private int nextStateOrdinal;
+        private int currentKvStateId = -1;
+        private List<KeyGroupEntry> pendingEntries = Collections.emptyList();
+        private int pendingIndex;
+        private boolean finished;
+
+        private NativeHeapKeyGroupCursor(
+                FSDataInputStream inputStream,
+                boolean usingKeyGroupCompression,
+                int readVersion,
+                List<NativeStateReaderInfo> stateReaderInfos) throws IOException {
+            this.keyGroupId = new DataInputViewStreamWrapper(inputStream).readInt();
+            StreamCompressionDecorator compressionDecorator = usingKeyGroupCompression
+                    ? SnappyStreamCompressionDecorator.INSTANCE
+                    : UncompressedStreamCompressionDecorator.INSTANCE;
+            InputStream compressedInputStream = null;
+            boolean inputViewCreated = false;
+            try {
+                compressedInputStream = compressionDecorator.decorateWithCompression(
+                        new NonClosingInputStream(inputStream));
+                this.inputView = new DataInputViewStreamWrapper(compressedInputStream);
+                inputViewCreated = true;
+            } finally {
+                if (!inputViewCreated && compressedInputStream != null) {
+                    compressedInputStream.close();
+                }
+            }
+            this.readVersion = readVersion;
+            this.stateReaderInfos = stateReaderInfos;
+        }
+
+        private KeyGroupEntryWrapper nextBatch(
+                TypeSerializer<?> keySerializer,
+                int keyGroupPrefixBytes) throws IOException {
+            while (pendingIndex >= pendingEntries.size() && !finished) {
+                readNextState(keySerializer, keyGroupPrefixBytes);
+            }
+            if (pendingIndex >= pendingEntries.size()) {
+                finished = true;
+                return new KeyGroupEntryWrapper(
+                        new KeyGroupEntry[0],
+                        END_OF_KEY_GROUP_MARK,
+                        END_OF_KEY_GROUP_MARK,
+                        0);
+            }
+
+            int batchKvStateId = currentKvStateId;
+            int remaining = pendingEntries.size() - pendingIndex;
+            int count = Math.min(MAX_KEY_GROUP_ENTRY_BATCH_SIZE, remaining);
+            KeyGroupEntry[] batch = new KeyGroupEntry[count];
+            for (int i = 0; i < count; i++) {
+                batch[i] = pendingEntries.get(pendingIndex++);
+            }
+            if (pendingIndex >= pendingEntries.size() && nextStateOrdinal >= stateReaderInfos.size()) {
+                finished = true;
+            }
+            int nextKvStateId = finished ? END_OF_KEY_GROUP_MARK : currentKvStateId;
+            return new KeyGroupEntryWrapper(batch, nextKvStateId, batchKvStateId, count);
+        }
+
+        private void readNextState(
+                TypeSerializer<?> keySerializer,
+                int keyGroupPrefixBytes) throws IOException {
+            if (nextStateOrdinal >= stateReaderInfos.size()) {
+                finished = true;
+                pendingEntries = Collections.emptyList();
+                pendingIndex = 0;
+                return;
+            }
+            currentKvStateId = inputView.readShort() & END_OF_KEY_GROUP_MARK;
+            if (currentKvStateId < 0 || currentKvStateId >= stateReaderInfos.size()) {
+                throw new IOException("Invalid native heap kvStateId " + currentKvStateId
+                        + " for keyGroup " + keyGroupId
+                        + ", stateCount=" + stateReaderInfos.size());
+            }
+            NativeStateReaderInfo readerInfo = stateReaderInfos.get(currentKvStateId);
+            if (readerInfo.backendStateType == StateMetaInfoSnapshot.BackendStateType.KEY_VALUE) {
+                pendingEntries = readKeyValueStateEntries(keySerializer, keyGroupPrefixBytes, readerInfo);
+            } else if (readerInfo.backendStateType == StateMetaInfoSnapshot.BackendStateType.PRIORITY_QUEUE) {
+                pendingEntries = readPriorityQueueEntries(keyGroupPrefixBytes, readerInfo);
+            } else {
+                throw new IOException("Unsupported native heap backend state type: "
+                        + readerInfo.backendStateType + ", state=" + readerInfo.stateName);
+            }
+            pendingIndex = 0;
+            nextStateOrdinal++;
+        }
+
+        private List<KeyGroupEntry> readKeyValueStateEntries(
+                TypeSerializer<?> keySerializer,
+                int keyGroupPrefixBytes,
+                NativeStateReaderInfo readerInfo) throws IOException {
+            if (readVersion == 1) {
+                return readKeyValueStateEntriesV1(keySerializer, keyGroupPrefixBytes, readerInfo);
+            }
+            int numElements = inputView.readInt();
+            List<KeyGroupEntry> result = new ArrayList<>(numElements);
+            for (int i = 0; i < numElements; i++) {
+                Object namespace = readerInfo.namespaceSerializer.deserialize(inputView);
+                Object key = keySerializer.deserialize(inputView);
+                Object state = readerInfo.valueSerializer.deserialize(inputView);
+                result.add(toKeyValueEntry(
+                        keySerializer,
+                        readerInfo.namespaceSerializer,
+                        readerInfo.valueSerializer,
+                        keyGroupPrefixBytes,
+                        keyGroupId,
+                        key,
+                        namespace,
+                        state));
+            }
+            return result;
+        }
+
+        private List<KeyGroupEntry> readKeyValueStateEntriesV1(
+                TypeSerializer<?> keySerializer,
+                int keyGroupPrefixBytes,
+                NativeStateReaderInfo readerInfo) throws IOException {
+            if (inputView.readByte() == 0) {
+                return Collections.emptyList();
+            }
+            int numNamespaces = inputView.readInt();
+            List<KeyGroupEntry> result = new ArrayList<>();
+            for (int namespaceIndex = 0; namespaceIndex < numNamespaces; namespaceIndex++) {
+                Object namespace = readerInfo.namespaceSerializer.deserialize(inputView);
+                int numEntries = inputView.readInt();
+                for (int entryIndex = 0; entryIndex < numEntries; entryIndex++) {
+                    Object key = keySerializer.deserialize(inputView);
+                    Object state = readerInfo.valueSerializer.deserialize(inputView);
+                    result.add(toKeyValueEntry(
+                            keySerializer,
+                            readerInfo.namespaceSerializer,
+                            readerInfo.valueSerializer,
+                            keyGroupPrefixBytes,
+                            keyGroupId,
+                            key,
+                            namespace,
+                            state));
+                }
+            }
+            return result;
+        }
+
+        private List<KeyGroupEntry> readPriorityQueueEntries(
+                int keyGroupPrefixBytes,
+                NativeStateReaderInfo readerInfo) throws IOException {
+            int numElements = inputView.readInt();
+            List<KeyGroupEntry> result = new ArrayList<>(numElements);
+            for (int i = 0; i < numElements; i++) {
+                Object element = readerInfo.valueSerializer.deserialize(inputView);
+                DataOutputSerializer keyOutput = new DataOutputSerializer(128);
+                writeKeyGroupPrefix(keyOutput, keyGroupId, keyGroupPrefixBytes);
+                serializeWithSerializer(readerInfo.valueSerializer, element, keyOutput);
+                result.add(new KeyGroupEntry(copyBuffer(keyOutput), new byte[0]));
+            }
+            return result;
+        }
+
+        private KeyGroupEntry toKeyValueEntry(
+                TypeSerializer<?> keySerializer,
+                TypeSerializer<?> namespaceSerializer,
+                TypeSerializer<?> valueSerializer,
+                int keyGroupPrefixBytes,
+                int keyGroup,
+                Object key,
+                Object namespace,
+                Object state) throws IOException {
+            DataOutputSerializer keyOutput = new DataOutputSerializer(128);
+            writeKeyGroupPrefix(keyOutput, keyGroup, keyGroupPrefixBytes);
+            serializeWithSerializer(keySerializer, key, keyOutput);
+            serializeWithSerializer(namespaceSerializer, namespace, keyOutput);
+
+            DataOutputSerializer valueOutput = new DataOutputSerializer(128);
+            serializeWithSerializer(valueSerializer, state, valueOutput);
+            return new KeyGroupEntry(copyBuffer(keyOutput), copyBuffer(valueOutput));
+        }
+
+        @Override
+        public void close() throws IOException {
+            inputView.close();
+        }
+    }
+
+    private static final class NonClosingInputStream extends FilterInputStream {
+        private NonClosingInputStream(InputStream in) {
+            super(in);
+        }
+
+        @Override
+        public void close() throws IOException {
+            // The compressed stream is closed with the native cursor, while the underlying
+            // FSDataInputStream is reused across key groups and closed by closeSavepointInputStream().
         }
     }
 
