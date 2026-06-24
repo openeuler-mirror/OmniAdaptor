@@ -814,6 +814,10 @@ public class OmniTaskWrapper {
         return node;
     }
 
+    private static boolean isStateHandleType(String classType, String simpleName, String fullClassName) {
+        return simpleName.equals(classType) || fullClassName.equals(classType);
+    }
+
     private OperatorStreamStateHandle deserializeOperatorStreamStateHandle(String metaStateHandleStr) {
         try {
             JsonNode rootNode = OBJECT_MAPPER.readTree(metaStateHandleStr);
@@ -995,10 +999,12 @@ public class OmniTaskWrapper {
             throw new IOException("Savepoint input stream handle json is missing @class/stateHandleName.");
         }
         String classType = classTypeNode.asText();
-        if (classType.endsWith("KeyGroupsStateHandle")) {
+        if (isStateHandleType(
+                classType, "KeyGroupsStateHandle", "org.apache.flink.runtime.state.KeyGroupsStateHandle")) {
             KeyGroupsStateHandle keyedGroupsStateHandle = deserializeKeyGroupsStateHandle(metaStateHandleStr);
             metaStateHandle = keyedGroupsStateHandle.getDelegateStateHandle();
-        } else if (classType.endsWith("OperatorStreamStateHandle")) {
+        } else if (isStateHandleType(
+                classType, "OperatorStreamStateHandle", "org.apache.flink.runtime.state.OperatorStreamStateHandle")) {
             OperatorStreamStateHandle operatorStateHandle = deserializeOperatorStreamStateHandle(metaStateHandleStr);
             metaStateHandle = operatorStateHandle.getDelegateStateHandle();
         } else {
