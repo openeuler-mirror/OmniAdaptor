@@ -1030,6 +1030,7 @@ public class OmniTaskWrapper {
 
     public FSDataInputStream getSavepointInputStream(String metaStateHandleStr) throws IOException {
         StreamStateHandle metaStateHandle;
+        KeyedStateHandleFormat keyedStateHandleFormat = null;
         JsonNode rootNode = OBJECT_MAPPER.readTree(metaStateHandleStr);
         JsonNode classTypeNode = getFirstPresent(rootNode, "@class", "stateHandleName");
         if (classTypeNode == null || !classTypeNode.isTextual()) {
@@ -1039,8 +1040,15 @@ public class OmniTaskWrapper {
         }
         String classType = classTypeNode.asText();
         if (isStateHandleType(
-                classType, "KeyGroupsStateHandle", "org.apache.flink.runtime.state.KeyGroupsStateHandle")) {
+                classType, "KeyGroupsStateHandle", "org.apache.flink.runtime.state.KeyGroupsStateHandle")
+                || isStateHandleType(
+                        classType,
+                        "KeyGroupsSavepointStateHandle",
+                        "org.apache.flink.runtime.state.KeyGroupsSavepointStateHandle")) {
             KeyGroupsStateHandle keyedGroupsStateHandle = deserializeKeyGroupsStateHandle(metaStateHandleStr);
+            keyedStateHandleFormat = keyedGroupsStateHandle instanceof KeyGroupsSavepointStateHandle
+                    ? KeyedStateHandleFormat.CANONICAL_FULL_SNAPSHOT
+                    : KeyedStateHandleFormat.NATIVE_HEAP;
             metaStateHandle = keyedGroupsStateHandle.getDelegateStateHandle();
         } else if (isStateHandleType(
                 classType, "OperatorStreamStateHandle", "org.apache.flink.runtime.state.OperatorStreamStateHandle")) {
@@ -1058,11 +1066,8 @@ public class OmniTaskWrapper {
         FSDataInputStream inputStream = metaStateHandle.openInputStream();
         if (null == inputStream) {
             LOG.error("Error getSavepointInputStream: metaStateHandleStr:{}", metaStateHandleStr);
-        } else {
-            KeyedStateHandleFormat format = keyedGroupsStateHandle instanceof KeyGroupsSavepointStateHandle
-                    ? KeyedStateHandleFormat.CANONICAL_FULL_SNAPSHOT
-                    : KeyedStateHandleFormat.NATIVE_HEAP;
-            keyedStateInputContexts.put(inputStream, new KeyedStateInputContext(format));
+        } else if (keyedStateHandleFormat != null) {
+            keyedStateInputContexts.put(inputStream, new KeyedStateInputContext(keyedStateHandleFormat));
         }
         return inputStream;
     }
