@@ -767,17 +767,13 @@ public class TaskStateSnapshotDeser {
         handleNode.put("@class", handle.getClass().getName());
         handleNode.put("stateHandleName", "OperatorStreamStateHandle");
 
-        // 序列化delegateStateHandle
-        // 目前的用例只支持ByteStreamStateHandle, 如果需要支持更多的类型，可继续补充
-        ObjectNode delegate = JsonNodeFactory.instance.objectNode();
+        // Serialize the real delegate handle type so canonical savepoints can restore file-backed operator state.
         StreamStateHandle delegateStateHandle = handle.getDelegateStateHandle();
-        if (delegateStateHandle instanceof ByteStreamStateHandle) {
-            ByteStreamStateHandle stateHandle = (ByteStreamStateHandle) delegateStateHandle;
-            delegate.put("@class", stateHandle.getClass().getName());
-            delegate.put("handleName", stateHandle.getHandleName());
-            delegate.put("data", Base64.getEncoder().encodeToString(stateHandle.getData()));
+        if (delegateStateHandle != null) {
+            ObjectNode delegate = serializeStreamStateHandle(delegateStateHandle);
+            handleNode.set("delegateStateHandle", delegate);
+            handleNode.set("streamStateHandle", delegate);
         }
-        handleNode.set("delegateStateHandle", delegate);
 
         ObjectNode partition = JsonNodeFactory.instance.objectNode();
         partition.put("@class", "java.util.HashMap");
