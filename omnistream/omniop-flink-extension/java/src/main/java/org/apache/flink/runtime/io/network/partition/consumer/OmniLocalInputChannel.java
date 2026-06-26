@@ -71,25 +71,22 @@ public class OmniLocalInputChannel extends LocalInputChannel {
         nativeLocalInputChannelRef = doChangeNativeLocalInputChannel(nativeTaskRef, parititonIdString);
         if(nativeLocalInputChannelRef != -1) {
             registerJavaOmniLocalInputChannel(nativeLocalInputChannelRef);
-            LOG.info("Successfully changed native local input channel for OmniLocalInputChannel with " +
-                    "channelIndex: {} of task: {}, nativeLocalInputChannelRef = {}", localInputChannel.getChannelIndex(),
-                    taskName, nativeLocalInputChannelRef);
+            LOG.info("Successfully changed native local input channel for OmniLocalInputChannel, taskName: {}, channelInfo: {}, nativeLocalInputChannelRef = {}",
+                    taskName, localInputChannel.getChannelInfo(), nativeLocalInputChannelRef);
             return true;
         } else {
-            LOG.error("Failed to change native local input channel for OmniLocalInputChannel with channelIndex: {} " +
-                    "of task: {}", localInputChannel.getChannelIndex(), taskName);
+            LOG.error("Failed to change native local input channel for OmniLocalInputChannel, taskName: {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
             return false;
         }
     }
     
     
     public void doRequestSubpartition() throws IOException {
-        LOG.info("????????Requesting subpartition for OmniLocalInputChannel with channelIndex: {} of task: {}",
-                localInputChannel.getChannelIndex(), taskName);
+        LOG.info("Requesting subpartition for OmniLocalInputChannel, taskName: {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
         requestSubpartition();
     }
     
-    
+    @Override
     public synchronized void notifyDataAvailable() {
         doGetNextBuffer();
     }
@@ -111,7 +108,7 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                 long segmentAddress;
                 if (bufferType == 1) {
                     if (ba.buffer().getDataType() == Buffer.DataType.RECOVERY_COMPLETION) {
-                        LOG.info("!!!!!! Skipping recovery completion event for task: {}", taskName);
+                        LOG.info("Skipping recovery completion event, taskName: {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
                         resumeConsumption();
                         return; // Skip recovery completion events
                     }
@@ -133,7 +130,7 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                     readIndex = 0;
                     EventBuffer eventBuffer = new EventBuffer(memorySegment);
                     fillBufferRecycler(segmentAddress, eventBuffer);
-                    LOG.info("Received event buffer with address: {} for task", segmentAddress, taskName);
+                    LOG.info("Received event buffer with address: {}, taskName: {}, channelInfo: {}", segmentAddress, taskName, localInputChannel.getChannelInfo());
                 } else {
                     segmentAddress = memorySegment.getAddress();
                     fillBufferRecycler(segmentAddress, readOnlySlicedNetworkBuffer);
@@ -151,8 +148,7 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                     doGetNextBuffer();
                 }
             } else {
-                LOG.info("No more data available for OmniLocalInputChannel with channelIndex: {} of task: {}",
-                        localInputChannel.getChannelIndex(), taskName);
+                LOG.info("No more data available for OmniLocalInputChannel, taskName: {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
             }
         } catch (IOException e) {
             throw new GeneralRuntimeException(e);
@@ -179,19 +175,19 @@ public class OmniLocalInputChannel extends LocalInputChannel {
             pendingRecycleBuffers.add(prb);
         }
     }
-    
+
+    @Override
     protected void notifyChannelNonEmpty() {
-        LOG.info("notifyChannelNonEmpty OmniLocalInputChannel with channelIndex: {} of task: {}",
-                localInputChannel.getChannelIndex(), taskName);
+        LOG.info("notifyChannelNonEmpty OmniLocalInputChannel, taskName: {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
         notifyDataAvailable();
     }
-    
+
+    @Override
     public void releaseAllResources() throws IOException {
         running = false;
         executorService.shutdownNow();
         super.releaseAllResources();
-        LOG.info("Releasing all resources for OmniLocalInputChannel with channelIndex: {} of task: {}",
-                localInputChannel.getChannelIndex(), taskName);
+        LOG.info("Releasing all resources for OmniLocalInputChannel, taskName: {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
     }
     
     public void startRecycleBuffersThread() {
@@ -236,7 +232,7 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                     }
                 });
                 pendingRecycleBuffers.clear();
-                LOG.info("****************************OmniLocalInputChannel Recycling buffer thread finished for " + "channeldIndex = {} of task: {}", localInputChannel.getChannelIndex(), taskName);
+                LOG.info("****************************OmniLocalInputChannel Recycling buffer thread finished for " + "taskName = {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
             }
         }
     }
