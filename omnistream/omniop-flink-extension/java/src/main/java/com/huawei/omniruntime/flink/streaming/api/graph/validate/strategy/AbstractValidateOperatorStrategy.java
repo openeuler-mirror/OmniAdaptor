@@ -29,6 +29,7 @@ public abstract class AbstractValidateOperatorStrategy {
             "BIGINT",
             "INTEGER",
             "DOUBLE",
+            "DATE",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
