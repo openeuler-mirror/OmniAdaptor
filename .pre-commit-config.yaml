@@ -1,0 +1,42 @@
+minimum_pre_commit_version: 4.0.0
+exclude: ^LICENSES/|^docs/|\.(html|csv|svg)$
+
+default_stages: [pre-commit]
+ci:
+  autofix_prs: false
+  autoupdate_schedule: monthly
+
+repos:
+  - repo: https://gitcode.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace        # 移除行尾空白字符
+      - id: end-of-file-fixer          # 确保文件以换行符结尾
+      - id: check-yaml                 # 校验 YAML 文件语法
+      - id: check-json                 # 校验 JSON 文件语法
+      - id: check-xml                  # 校验 XML 文件语法
+      - id: check-merge-conflict       # 检查未解决的合并冲突标记
+      - id: check-added-large-files    # 拦截超大文件提交（默认 500KB）
+      #  args: ["--maxkb", "500"]      # 支持自定义修改
+      - id: detect-private-key         # 检测私钥/敏感信息泄露
+  - repo: https://gitcode.com/gh_mirrors/co/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: ["-L", "ErrorProne,errorprone"]
+  - repo: https://gitcode.com/gh_mirrors/ma/markdownlint-cli
+    rev: v0.46.0
+    hooks:
+      - id: markdownlint
+        exclude: '.*\.inc\.md$|.*report_template\.md$|.*contributors\.md$|.*PULL_REQUEST_TEMPLATE\.md$|^docs/|\.md$'
+        stages: [manual]
+        description: "Markdown format check (run in CI: pre-commit run markdownlint --all-files)"
+  - repo: local
+    hooks:
+      - id: spotless-check
+        name: Spotless format check
+        entry: >
+          bash -c "pushd omnistream/omniop-flink-extension/omni-flink-bundle/ && mvn spotless:check; popd"
+        language: system
+        files: \.java$
+        pass_filenames: false
