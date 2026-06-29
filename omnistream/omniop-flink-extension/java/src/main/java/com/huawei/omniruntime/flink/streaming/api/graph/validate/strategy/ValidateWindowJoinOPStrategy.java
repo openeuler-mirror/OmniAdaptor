@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,7 @@ import java.util.Set;
 public class ValidateWindowJoinOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateWindowJoinOPStrategy.class);
     private static final Set<String> SUPPORT_JOIN_TYPE = new HashSet<>(Arrays.asList("InnerJoin"));
+    private static final Set<String> SUPPORT_TIME_TYPE = new HashSet<>(Collections.singletonList("event"));
     private static final Set<String> SUPPORT_ON_CONDITION_DATA_TYPE = new HashSet<>(Arrays.asList("INTEGER", "INT", "STRING", "BIGINT"));
     private static final Set<String> SUPPORT_NON_EQUI_OPERATOR = new HashSet<>(Arrays.asList(
             "EQUAL",
@@ -37,6 +39,14 @@ public class ValidateWindowJoinOPStrategy extends AbstractValidateOperatorStrate
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {
         String joinType = operatorInfoMap.get("joinType").toString();
         if (!SUPPORT_JOIN_TYPE.contains(joinType)) {
+            return false;
+        }
+
+        String leftTimeType = getStringInfo(operatorInfoMap, "leftTimeType");
+        String rightTimeType = getStringInfo(operatorInfoMap, "rightTimeType");
+        if (!SUPPORT_TIME_TYPE.contains(leftTimeType) || !SUPPORT_TIME_TYPE.contains(rightTimeType)) {
+            LOG.warn("WindowJoin time types are not supported. leftTimeType = {}, rightTimeType = {}",
+                    leftTimeType, rightTimeType);
             return false;
         }
 

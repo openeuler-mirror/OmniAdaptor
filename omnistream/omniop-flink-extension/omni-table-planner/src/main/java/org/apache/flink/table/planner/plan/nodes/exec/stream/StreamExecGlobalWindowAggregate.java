@@ -183,6 +183,7 @@ public class StreamExecGlobalWindowAggregate extends StreamExecWindowAggregateBa
         // window info
         String typeName = DescriptionUtil.getFieldType(windowing.getTimeAttributeType());
         jsonMap.put("window", windowSpec.toString());
+        jsonMap.put("timeType", windowing.isRowtime() ? "event" : "processing");
         jsonMap.put("timeAttributeType", typeName);
         String jsonString = "";
         try {

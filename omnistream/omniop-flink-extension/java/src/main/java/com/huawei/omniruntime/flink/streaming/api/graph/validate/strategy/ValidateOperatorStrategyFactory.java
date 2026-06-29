@@ -20,6 +20,7 @@ public class ValidateOperatorStrategyFactory {
 
     static {
         strategyMap.put("GroupAggregate", new ValidateAggOPStrategy());
+        strategyMap.put("WindowAggregate", new ValidateWindowAggOPStrategy());
         strategyMap.put("LocalWindowAggregate", new ValidateWindowAggOPStrategy());
         strategyMap.put("GlobalWindowAggregate", new ValidateWindowAggOPStrategy());
         strategyMap.put("GroupWindowAggregate", new ValidateGroupWindowAggOPStrategy());
