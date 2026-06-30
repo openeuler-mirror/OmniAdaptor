@@ -24,6 +24,7 @@ import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.rex.RexShuttle;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
@@ -147,7 +148,7 @@ public abstract class CommonExecCorrelate extends ExecNodeBase<RowData>
         String functionName = extractFunctionName(invocation);
         String functionClass = extractFunctionClass(invocation);
 
-        // 5. ★ 直接提取参数索引，不调用 buildJsonMap() ★
+        // 5. 提取参数索引（向后兼容）+ 序列化完整表达式树（新增 functionArgs）
         List<Integer> functionArgIndices = new ArrayList<>();
         for (RexNode operand : invocation.getOperands()) {
             if (operand instanceof RexFieldAccess) {
@@ -160,27 +161,45 @@ public abstract class CommonExecCorrelate extends ExecNodeBase<RowData>
             }
         }
 
+        // 5b. 序列化每个 operand 的完整表达式树为 JSON（functionArgs）
+        //     参照 CommonExecCalc.getExtraDescription 的做法
+        HashMap<Integer, Integer> accessIndexMap = new HashMap<>();
+        for (int i = 0; i < inputRowType.getFieldCount(); i++) {
+            accessIndexMap.put(i, i);
+        }
+        RexNodeUtil.accessIndexMap = accessIndexMap;
+
+        // RexShuttle to recursively normalize RexFieldAccess(RexCorrelVariable)
+        // to RexInputRef throughout the entire expression tree
+        RexShuttle correlVarNormalizer = new RexShuttle() {
+            @Override
+            public RexNode visitFieldAccess(RexFieldAccess fieldAccess) {
+                if (fieldAccess.getReferenceExpr() instanceof RexCorrelVariable) {
+                    return new RexInputRef(
+                            fieldAccess.getField().getIndex(), fieldAccess.getType());
+                }
+                return super.visitFieldAccess(fieldAccess);
+            }
+        };
+
+        List<Map<String, Object>> argExprList = new ArrayList<>();
+        for (RexNode operand : invocation.getOperands()) {
+            RexNode normalized = operand.accept(correlVarNormalizer);
+            argExprList.add(RexNodeUtil.buildJsonMap(normalized));
+        }
+
         // 6. 可选的过滤条件
-        //    注意：condition 中也可能包含 RexFieldAccess(RexCorrelVariable)，
-        //    如果有 condition，也需要同样的处理（或暂时不序列化）
         Map<String, Object> conditionMap = null;
         if (condition != null) {
-            // 先构建 accessIndexMap 再调用 buildJsonMap
-            // 但如果 condition 中也有 RexCorrelVariable，同样会 NPE
-            // 建议初期先不支持带 condition 的 Correlate，或者单独处理
             try {
-                HashMap<Integer, Integer> accessIndexMap = new HashMap<>();
-                for (int i = 0; i < inputRowType.getFieldCount(); i++) {
-                    accessIndexMap.put(i, i);
-                }
-                RexNodeUtil.accessIndexMap = accessIndexMap;
                 conditionMap = RexNodeUtil.buildJsonMap(condition);
-                RexNodeUtil.accessIndexMap.clear();
             } catch (Exception e) {
                 LOG.warn("Failed to serialize correlate condition, skipping", e);
                 conditionMap = null;
             }
         }
+
+        RexNodeUtil.accessIndexMap.clear();
 
         // 7. 组装 JSON
         Map<String, Object> jsonMap = new LinkedHashMap<>();
@@ -188,6 +207,7 @@ public abstract class CommonExecCorrelate extends ExecNodeBase<RowData>
         jsonMap.put("joinType", joinType.toString());
         jsonMap.put("functionName", functionName);
         jsonMap.put("functionClass", functionClass);
+        jsonMap.put("functionArgs", argExprList);
         jsonMap.put("functionArgIndices", functionArgIndices);
         jsonMap.put("inputTypes", inputTypeList);
         jsonMap.put("outputTypes", outputTypeList);
