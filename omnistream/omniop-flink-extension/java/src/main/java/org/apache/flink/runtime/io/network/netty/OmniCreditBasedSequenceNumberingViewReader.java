@@ -29,10 +29,7 @@ import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.FreeingBufferRecycler;
 import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
-import org.apache.flink.runtime.io.network.partition.PartitionNotFoundException;
-import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
-import org.apache.flink.runtime.io.network.partition.ResultPartitionProvider;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
+import org.apache.flink.runtime.io.network.partition.*;
 import org.apache.flink.runtime.io.network.partition.consumer.EndOfChannelStateEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
@@ -41,10 +38,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -137,39 +136,77 @@ public class OmniCreditBasedSequenceNumberingViewReader
             int subPartitionIndex)
             throws IOException {
         synchronized (requestLock) {
-            super.requestSubpartitionView(partitionProvider, resultPartitionId, subPartitionIndex);
-
             ResultPartitionIDPOJO resultPartitionIDPOJO = new ResultPartitionIDPOJO(resultPartitionId);
             JSONObject jsonObject = new JSONObject(resultPartitionIDPOJO);
-            String parititonIdString = jsonObject.toString();
             this.subPartitionIndex = subPartitionIndex;
-            this.partitionId = parititonIdString;
-            try {
-                LOG.info("requestSubpartitionView for task: {} ## {}", taskName.substring(0, 15), subPartitionIndex);
-                nativeCreditBasedSequenceNumberingViewReaderRef = createNativeCreditBasedSequenceNumberingViewReader(
-                        nativeTaskRef, statusAddress, partitionId, subPartitionIndex);
-                if (nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
-                    LOG.error("create nativeCreditBasedSequenceNumberingViewReader failed");
-                    throw new PartitionNotFoundException(resultPartitionId);
-                }
-                LOG.info("ViewReader for task : {} ## {} create result = {},{}",
-                        taskName.substring(0, 15),
-                        subPartitionIndex, nativeCreditBasedSequenceNumberingViewReaderRef,
-                        this.hashCode());
-            } catch (Exception e) {
-                LOG.warn("Error in requestSubpartitionView, but we let it go", e);
-                throw new PartitionNotFoundException(resultPartitionId);
-            } catch (Error e) {
-                LOG.error("Error in requestSubpartitionView, but we let it go", e);
+            this.partitionId = jsonObject.toString();
+
+            BufferWritingResultPartition producer =
+                    resolveProducerPartition(partitionProvider, resultPartitionId);
+            setNativeTaskRef(producer.getNativeTaskRef());
+            setTaskName(producer.getOwningTaskName());
+
+            // Step 1 — Native bind first: Java readView is not occupied yet on failure.
+            LOG.info("requestSubpartitionView for task: {} ## {}", taskName.substring(0, 15), subPartitionIndex);
+            nativeCreditBasedSequenceNumberingViewReaderRef = createNativeCreditBasedSequenceNumberingViewReader(
+                    nativeTaskRef, statusAddress, partitionId, subPartitionIndex);
+            if (nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
+                LOG.error("create nativeCreditBasedSequenceNumberingViewReader failed");
                 throw new PartitionNotFoundException(resultPartitionId);
             }
+            LOG.info("requestSubpartitionView for task: {} ## {} create result = {},{}",
+                    taskName.substring(0, 15),
+                    subPartitionIndex, nativeCreditBasedSequenceNumberingViewReaderRef,
+                    this.hashCode());
+
+            // Step 2 — Java bind via super: occupies subpartition.readView only after Native succeeds.
+            try {
+                super.requestSubpartitionView(partitionProvider, resultPartitionId, subPartitionIndex);
+            } catch (Exception e) {
+                LOG.error("Java bind failed after Native bind succeeded, cleaning up native reader", e);
+                stop();
+                if (e instanceof IOException) {
+                    throw (IOException) e;
+                }
+                throw new PartitionNotFoundException(resultPartitionId);
+            }
+
             Thread thread = new Thread(this);
             thread.start();
-            // start the thread
             startFirstDataAvailableNotificationThread();
         }
     }
-    
+
+    private static BufferWritingResultPartition resolveProducerPartition(
+            ResultPartitionProvider partitionProvider, ResultPartitionID resultPartitionId)
+            throws PartitionNotFoundException {
+        if (!(partitionProvider instanceof ResultPartitionManager)) {
+            throw new PartitionNotFoundException(resultPartitionId);
+        }
+        ResultPartitionManager resultPartitionManager = (ResultPartitionManager) partitionProvider;
+        try {
+            Field field = ResultPartitionManager.class.getDeclaredField("registeredPartitions");
+            field.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Map<ResultPartitionID, ResultPartition> registeredPartitions =
+                    (Map<ResultPartitionID, ResultPartition>) field.get(resultPartitionManager);
+            ResultPartition resultPartition = registeredPartitions.get(resultPartitionId);
+            if (resultPartition == null) {
+                throw new PartitionNotFoundException(resultPartitionId);
+            }
+            if (!(resultPartition instanceof BufferWritingResultPartition)) {
+                throw new PartitionNotFoundException(resultPartitionId);
+            }
+            BufferWritingResultPartition producer = (BufferWritingResultPartition) resultPartition;
+            if (!producer.isNative()) {
+                throw new PartitionNotFoundException(resultPartitionId);
+            }
+            return producer;
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to resolve producer partition", e);
+        }
+    }
+
     private void startFirstDataAvailableNotificationThread() {
         executor.execute(() -> {
             synchronized (localChannelLocker) {
@@ -249,14 +286,6 @@ public class OmniCreditBasedSequenceNumberingViewReader
             notifyDataAvailableForNetty();
         }
         return res;
-    }
-
-    private void releaseNativeViewReader() {
-        if (nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
-            return ;
-        }
-        LOG.info("releaseNativeViewReader is : " + nativeCreditBasedSequenceNumberingViewReaderRef);
-        releaseNativeViewReader(nativeCreditBasedSequenceNumberingViewReaderRef);
     }
 
     /**
@@ -512,7 +541,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
         LOG.info("OmniCreditBasedSequenceNumberingViewReader of {}## {} and native ref = {}"
                         + "............................is stopped......................................",
                 taskName.substring(0, 15), subPartitionIndex, nativeCreditBasedSequenceNumberingViewReaderRef);
-        releaseNativeViewReader();
+
         setNativeCreditBasedSequenceNumberingViewReaderRef(-1);
     }
 
@@ -595,12 +624,6 @@ public class OmniCreditBasedSequenceNumberingViewReader
     public native int getAvailabilityAndBacklog(
             long nativeCreditBasedSequenceNumberingViewReaderRef,
             int numCreditsAvailable);
-
-    /**
-     *
-     * @param nativeCreditBasedSequenceNumberingViewReaderRef nativeViewReader point
-     */
-    public native void releaseNativeViewReader(long nativeCreditBasedSequenceNumberingViewReaderRef);
 
     /**
      * getNextBuffer

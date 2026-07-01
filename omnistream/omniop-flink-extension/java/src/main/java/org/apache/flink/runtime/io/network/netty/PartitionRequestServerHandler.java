@@ -107,7 +107,8 @@ class PartitionRequestServerHandler extends SimpleChannelInboundHandler<NettyMes
                                         request.receiverId, request.credit, outboundQueue);
                     }
 
-
+                    // The reader above is only a shell; requestSubpartitionView() below
+                    // establishes the actual connection to the subpartition (Java + Native views).
                     reader.requestSubpartitionView(
                             partitionProvider, request.partitionId, request.queueIndex);
 
