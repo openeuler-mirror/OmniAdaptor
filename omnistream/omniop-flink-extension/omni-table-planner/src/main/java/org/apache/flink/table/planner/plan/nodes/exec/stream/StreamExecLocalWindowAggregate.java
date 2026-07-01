@@ -168,6 +168,7 @@ public class StreamExecLocalWindowAggregate extends StreamExecWindowAggregateBas
         getSliceAssignerInfo(windowing, shiftTimeZone, jsonMap);
         String typeName = DescriptionUtil.getFieldType(windowing.getTimeAttributeType());
         jsonMap.put("window", windowSpec.toString());
+        jsonMap.put("timeType", windowing.isRowtime() ? "event" : "processing");
         jsonMap.put("timeAttributeType", typeName);
         String jsonString = "";
         try {

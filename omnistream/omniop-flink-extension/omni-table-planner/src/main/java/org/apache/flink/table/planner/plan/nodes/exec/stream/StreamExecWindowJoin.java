@@ -211,8 +211,10 @@ public class StreamExecWindowJoin extends ExecNodeBase<RowData>
         jsonMap.put("nonEquiCondition", nonEquiConditionMap);
         jsonMap.put("joinType", joinType.toString());
         jsonMap.put("leftWindowing", leftWindowSpec.toString());
+        jsonMap.put("leftTimeType", leftWindowing.isRowtime() ? "event" : "processing");
         jsonMap.put("leftTimeAttributeType", leftTypeName);
         jsonMap.put("rightWindowing", rightWindowSpec.toString());
+        jsonMap.put("rightTimeType", rightWindowing.isRowtime() ? "event" : "processing");
         jsonMap.put("rightTimeAttributeType", rightTypeName);
         jsonMap.put("leftWindowEndIndex", leftWindowEndIndex);
         jsonMap.put("rightWindowEndIndex", rightWindowEndIndex);
@@ -298,4 +300,3 @@ public class StreamExecWindowJoin extends ExecNodeBase<RowData>
         return transform;
     }
 }
- 
