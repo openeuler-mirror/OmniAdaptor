@@ -114,6 +114,7 @@ public class RexNodeUtil {
     static {
         unaryOperatorMap.put("-", UnaryExprType.NEGATION);
         unaryOperatorMap.put("IS TRUE", UnaryExprType.IS_TRUE);
+        unaryOperatorMap.put("IS NOT TRUE", UnaryExprType.IS_NOT_TRUE);
     }
 
     static {
@@ -152,7 +153,8 @@ public class RexNodeUtil {
 
     public enum UnaryExprType {
         NEGATION,
-        IS_TRUE
+        IS_TRUE,
+        IS_NOT_TRUE
     }
 
 
@@ -212,8 +214,8 @@ public class RexNodeUtil {
             if (binaryOperatorMap.containsKey(call.getOperator().getName())
                     && (binaryOperatorMap.get(call.getOperator().getName()) == BinaryExprType.EQUAL
                     || binaryOperatorMap.get(call.getOperator().getName()) == BinaryExprType.AND)) {
-                input = call.operands.get(0);
-                value = call.operands.get(1);
+                input = call.getOperands().get(0);
+                value = call.getOperands().get(1);
                 return new Object[]{input, value};
             } else {
                 LOG.info("Cannot parse the expression of a CASE operation");
@@ -262,7 +264,7 @@ public class RexNodeUtil {
             SpecialExprType udfType = resolveOperatorType(udfOperatorMap, operatorName);
             SpecialExprType specialType = udfType != null ? udfType : resolveOperatorType(specialOperatorMap, operatorName);
             LOG.info("Current rexNode is {}", rexCall.toString());
-            if (rexCall.operands.size() == 2 && binaryType != null) {
+            if (operands.size() == 2 && binaryType != null) {
                 jsonMap.put("exprType",  OperatorExprType.BINARY.name());
                 setDataType(rexCall,jsonMap, "returnType");
                 jsonMap.put("operator", binaryType.name());
@@ -271,11 +273,14 @@ public class RexNodeUtil {
                 Map<String, Object> rightMap =  buildJsonMap(operands.get(1));
                 jsonMap.put("right", rightMap);
                 return jsonMap;
-            } else if (rexCall.operands.size() == 1 && unaryType != null) {
+            } else if (operands.size() == 1 && unaryType != null) {
                 Map<String, Object> childMap = buildJsonMap(operands.get(0));
                 if (unaryType.equals(UnaryExprType.IS_TRUE) ||
                         childMap.containsKey("exprType") && childMap.get("exprType").equals(SpecialExprType.SWITCH)) {
                     return childMap;
+                }
+                if (unaryType.equals(UnaryExprType.IS_NOT_TRUE)) {
+                    return buildIsNotTrueMap(rexCall, childMap);
                 }
                 jsonMap.put("exprType",  OperatorExprType.UNARY.name());
                 setDataType(rexCall,jsonMap, "returnType");
@@ -692,7 +697,7 @@ public class RexNodeUtil {
                         jsonMap.put("operator", "AND");
                         setDataType(rexCall, jsonMap, "returnType");
                         List<Map<String, Object>> cond = new ArrayList<>();
-                        for (int i=0; i < rexCall.operands.size(); i++) {
+                        for (int i=0; i < operands.size(); i++) {
                             cond.add(buildJsonMap(operands.get(i)));
                         }
                         jsonMap.put("conditions", cond);
@@ -704,7 +709,7 @@ public class RexNodeUtil {
                         jsonMap.put("operator", "OR");
                         setDataType(rexCall, jsonMap, "returnType");
                         cond = new ArrayList<>();
-                        for (int i=0; i < rexCall.operands.size(); i++) {
+                        for (int i=0; i < operands.size(); i++) {
                             cond.add(buildJsonMap(operands.get(i)));
                         }
                         jsonMap.put("conditions", cond);
@@ -798,6 +803,31 @@ public class RexNodeUtil {
             LOG.info("The RexNode is not a RexCall/RexInputRef/RexLiteral. It is not recognized.");
             return jsonMap;
         }
+    }
+
+    private static Map<String, Object> buildIsNotTrueMap(RexCall rexCall, Map<String, Object> childMap) {
+        Map<String, Object> jsonMap = new LinkedHashMap<>();
+        jsonMap.put("exprType", "SWITCH_GENERAL");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("numOfCases", 1);
+
+        Map<String, Object> caseMap = new LinkedHashMap<>();
+        caseMap.put("when", childMap);
+        caseMap.put("result", buildBooleanLiteralMap(false));
+        caseMap.put("exprType", "WHEN");
+        caseMap.put("returnType", RexTypeToIdMap.get(SqlTypeName.BOOLEAN.toString()));
+        jsonMap.put("Case1", caseMap);
+        jsonMap.put("else", buildBooleanLiteralMap(true));
+        return jsonMap;
+    }
+
+    private static Map<String, Object> buildBooleanLiteralMap(boolean value) {
+        Map<String, Object> literalMap = new LinkedHashMap<>();
+        literalMap.put("exprType", OperatorExprType.LITERAL.name());
+        literalMap.put("dataType", RexTypeToIdMap.get(SqlTypeName.BOOLEAN.toString()));
+        literalMap.put("isNull", false);
+        literalMap.put("value", value);
+        return literalMap;
     }
 
     /**
