@@ -77,7 +77,7 @@ public final class OmniGraphOverride {
     private static final Logger LOG = LoggerFactory.getLogger(OmniGraphOverride.class);
     private static final Pattern SOURCE_REGEX = Pattern.compile("^Source");
 
-    // patter to extract substring till the first "(" like   "Calc(..."   flink 1.14
+    // pattern to extract substring till the first "(" like   "Calc(..."   flink 1.14
     private static final Pattern OPERATOR_NAME_REGEX = Pattern.compile("^\\s*(.*?)[\\[(]");
 
     // watermark op flink 1.16 name like WatermarkAssigner( ...

@@ -1,5 +1,5 @@
 minimum_pre_commit_version: 4.0.0
-exclude: ^LICENSES/|^docs/|\.(html|csv|svg)$
+exclude: ^LICENSES/|^docs/|\.(html|csv|svg)$|org/apache/flink
 
 default_stages: [pre-commit]
 ci:
@@ -23,7 +23,7 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
-        args: ["-L", "ErrorProne,errorprone"]
+        args: ["-L", "ErrorProne,errorprone,plugable,invokable"]
   - repo: https://gitcode.com/gh_mirrors/ma/markdownlint-cli
     rev: v0.46.0
     hooks:

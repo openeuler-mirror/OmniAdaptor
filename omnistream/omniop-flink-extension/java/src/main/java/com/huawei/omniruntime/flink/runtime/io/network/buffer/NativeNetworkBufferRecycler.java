@@ -21,12 +21,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class NativeNetworkBufferRecycler extends NativeBufferRecycler {
     private static final Logger LOG = LoggerFactory.getLogger(NativeNetworkBufferRecycler.class);
     private static final ConcurrentHashMap<Long, NativeNetworkBufferRecycler> INSTANCE_MAP = new ConcurrentHashMap<>();
-    
-    
+
+
     private NativeNetworkBufferRecycler(long nativeReaderRef) {
         super(nativeReaderRef);
     }
-    
+
     public static synchronized NativeBufferRecycler getInstance(long nativeReaderRef) {
         NativeNetworkBufferRecycler bufferRecycler = getInstanceByNativeReaderRef(nativeReaderRef);
         if (bufferRecycler == null) {
@@ -35,15 +35,15 @@ public class NativeNetworkBufferRecycler extends NativeBufferRecycler {
         }
         return bufferRecycler;
     }
-    
+
     public synchronized static NativeNetworkBufferRecycler getInstanceByNativeReaderRef(long nativeReaderRef) {
         return INSTANCE_MAP.get(nativeReaderRef);
     }
-    
+
     public synchronized static void addRecycler(long nativeReaderRef, NativeNetworkBufferRecycler recycler) {
         INSTANCE_MAP.put(nativeReaderRef, recycler);
     }
-    
+
     public static void unRegisterInstance(long nativeReaderRef) {
         NativeNetworkBufferRecycler nativeNetworkBufferRecycler = INSTANCE_MAP.remove(nativeReaderRef);
         if (nativeNetworkBufferRecycler != null) {
@@ -56,11 +56,11 @@ public class NativeNetworkBufferRecycler extends NativeBufferRecycler {
             nativeNetworkBufferRecycler.memorySegmentToAddress.clear();
         }
     }
-    
+
     public static NativeNetworkBufferRecycler createNativeBufferRecycler(long nativeReaderRef) {
         return new NativeNetworkBufferRecycler(nativeReaderRef);
     }
-    
+
     public native void freeNativeByteBuffer(long nativeReaderRef, long address);
-    
+
 }

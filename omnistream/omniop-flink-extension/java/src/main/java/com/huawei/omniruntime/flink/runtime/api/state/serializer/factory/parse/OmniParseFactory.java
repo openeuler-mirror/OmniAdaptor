@@ -92,7 +92,7 @@ public abstract class OmniParseFactory {
                 case BINARY_ROW:
                     factory = new OmniParseValueFactory();
                     break;
-                case UNKNOW:
+                case UNKNOWN:
                     break;
                 default:
                     LOG.warn("method : build -> serializer type : {} has no deal.", serializerType);

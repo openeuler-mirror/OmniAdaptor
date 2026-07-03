@@ -84,4 +84,3 @@ public class AbstractIDPOJO {
         return Objects.hash(upperPart, lowerPart);
     }
 }
-

@@ -16,11 +16,11 @@ import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
 import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
 
 public class EventBuffer extends NetworkBuffer {
-    
+
     public EventBuffer(MemorySegment memorySegment) {
         super(memorySegment, BufferRecycler.DummyBufferRecycler.INSTANCE);
     }
-    
+
     public EventBuffer(MemorySegment memorySegment, BufferRecycler recycler) {
         super(memorySegment, recycler);
     }

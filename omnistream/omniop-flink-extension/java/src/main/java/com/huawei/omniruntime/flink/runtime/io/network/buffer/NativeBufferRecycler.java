@@ -52,7 +52,7 @@ public class NativeBufferRecycler implements BufferRecycler {
         }
         return bufferRecycler;
     }
-    
+
     public static NativeBufferRecycler createNativeBufferRecycler(long nativeReaderRef) {
         return new NativeBufferRecycler(nativeReaderRef);
     }
@@ -97,7 +97,7 @@ public class NativeBufferRecycler implements BufferRecycler {
     public synchronized  static void addRecycler(long nativeReaderRef, NativeBufferRecycler recycler) {
         INSTANCE_MAP.put(nativeReaderRef, recycler);
     }
-    
+
     public synchronized static NativeBufferRecycler getInstanceByNativeReaderRef(long nativeReaderRef) {
         return INSTANCE_MAP.get(nativeReaderRef);
     }

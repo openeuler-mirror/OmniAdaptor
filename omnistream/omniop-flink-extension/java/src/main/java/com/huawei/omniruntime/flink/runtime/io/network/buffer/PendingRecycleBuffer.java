@@ -16,7 +16,7 @@ import org.apache.flink.runtime.io.network.buffer.Buffer;
 public class PendingRecycleBuffer {
     private Buffer buffer;
     private long address;
-    
+
     public PendingRecycleBuffer(Buffer buffer, long address) {
         this.buffer = buffer;
         this.address = address;

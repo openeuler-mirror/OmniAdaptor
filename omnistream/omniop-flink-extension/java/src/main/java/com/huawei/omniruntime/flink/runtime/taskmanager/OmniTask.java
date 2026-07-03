@@ -184,7 +184,7 @@ public class OmniTask extends Task {
     private long nativeTaskRef = 0L;
     private JobType jobType; // 0 default vanilla java task, 1 native sql task, 2 native datastream task. 3 future - hybrid java+cpp source task
 
-    // dup fields of the Task as those field are prviate in parent class Task
+    // dup fields of the Task as those field are private in parent class Task
     private JobInformation __jobInformation;
     private TaskInformation __taskInformation;
     private OriginalTaskDataFetcher originalTaskDataFetcher;
@@ -198,7 +198,7 @@ public class OmniTask extends Task {
     private long nativeTaskMetricGroupRef;
     private OmniTaskMetricGroup omniTaskMetricGroup;
     private Map<ExecutionAttemptID,OmniTaskReferenceCounter> taskSlotTable;
-    
+
     // Cache for producer JobVertexID -> useOmniFlag mapping to avoid runtime race conditions
     // This is populated from StreamConfig during task initialization
     private Map<String, Boolean> partitionOmniFlagMap;
@@ -218,7 +218,7 @@ public class OmniTask extends Task {
     public RuntimeEnvironment checkpointingEnv;
 
     private OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources;
-    
+
     /**
      * <b>IMPORTANT:</b> This constructor may not start any work that would need to be undone in the
      * case of a failing task deployment.
@@ -467,7 +467,7 @@ public class OmniTask extends Task {
         // ----------------------------------------------------------------
 
         LOG.debug("Registering task at network: {}.", this);
-        // action 1, natvie should do similary operation
+        // action 1, natvie should do similarly operation
         setupPartitionsAndGates(partitionWriters, inputGates);
         if (jobType == JobType.SQL) {
             bindNativeTaskRefToResultPartition(nativeTaskRef, partitionWriters, jobType);
@@ -523,7 +523,7 @@ public class OmniTask extends Task {
         StreamConfig streamConfig = new StreamConfig(taskConfiguration);
         Collection<StreamConfig> configs =
                 streamConfig.getTransitiveChainedTaskConfigsWithSelf(userCodeClassLoader.asClassLoader()).values();
-        
+
         // Initialize partition OmniFlag map from StreamConfig to avoid runtime race conditions
         initializePartitionOmniFlagMap(streamConfig, userCodeClassLoader.asClassLoader());
 
@@ -597,7 +597,7 @@ public class OmniTask extends Task {
 
         // invoke will start the mailbox loop
         // before this invoke, the native stream task and all setup should be ready
-        // OmniStreamTask binding to native stream task should be ready as wll
+        // OmniStreamTask binding to native stream task should be ready as well
 
         long nativeStreamTask = 0L;
         boolean useomniFlag = __taskInformation.getTaskConfiguration().getBoolean("useomni", false);
@@ -937,15 +937,15 @@ public class OmniTask extends Task {
             List<OmniLocalInputChannel> localInputChannels = new ArrayList<>();
             for (IndexedInputGate inputGate : inputGates) {
                 InputGateWithMetrics inputGateWithMetrics = (InputGateWithMetrics) inputGate;
-                
+
                 int numberOfChannels = inputGateWithMetrics.getNumberOfInputChannels();
-                
+
                 for (int i = 0; i < numberOfChannels; i++) {
                     InputChannel inputChannel = inputGateWithMetrics.getChannel(i);
                     setRecoverInputStateFutureCompleted((RecoveredInputChannel) inputChannel);
                 }
                 convertRemoteRecoveryChannelToNormal(inputGateWithMetrics);
-                
+
                 for (int i = 0; i < numberOfChannels; i++) {
                     InputChannel inputChannel = inputGateWithMetrics.getChannel(i);
                     if (inputChannel instanceof RemoteInputChannel) {
@@ -966,7 +966,7 @@ public class OmniTask extends Task {
                         }
                 }
             }
-            
+
             if (!remoteInputChannels.isEmpty() || !localInputChannels.isEmpty()) {
                 OriginalTaskDataFetcher originalTaskDataFetcher = new OriginalTaskDataFetcher(nativeTaskRef,
                         this.getTaskInfo().getTaskNameWithSubtasks(), jobType);
@@ -975,7 +975,7 @@ public class OmniTask extends Task {
                 }
                 if (!localInputChannels.isEmpty()) {
                     originalTaskDataFetcher.createAndStartLocalDataFetcher(localInputChannels);
-                    
+
                 }
                 return originalTaskDataFetcher;
             }
@@ -984,7 +984,7 @@ public class OmniTask extends Task {
             return null;
         }
     }
-    
+
     /**
      * Initialize the partition OmniFlag map from StreamConfig.
      * This map maps producer JobVertexID to useOmniFlag of source vertex.
@@ -993,14 +993,14 @@ public class OmniTask extends Task {
     private void initializePartitionOmniFlagMap(StreamConfig streamConfig, ClassLoader classLoader) {
         try {
             this.partitionOmniFlagMap = streamConfig.getPartitionOmniFlagMap(classLoader);
-            LOG.info("Initialized partition OmniFlag map with {} entries for task {}", 
+            LOG.info("Initialized partition OmniFlag map with {} entries for task {}",
                 partitionOmniFlagMap.size(), getTaskInfo().getTaskNameWithSubtasks());
         } catch (Exception e) {
             LOG.warn("Failed to initialize partition OmniFlag map, will fall back to taskSlotTable", e);
             this.partitionOmniFlagMap = new HashMap<>();
         }
     }
-    
+
     private String getProducerJobVertexIdString(ResultPartitionID partitionId) {
         return partitionId.getProducerId().getJobVertexId().toString();
     }
@@ -1134,7 +1134,7 @@ public class OmniTask extends Task {
             keySerializer = (null != keySerializer)
                     ? keySerializer
                     : BasicTypeInfo.STRING_TYPE_INFO.createSerializer(((StreamTask<?, ?>) this.invokable).getExecutionConfig());
-            
+
             KeyedBackendSerializationProxy<?> serializationProxy =
                     new KeyedBackendSerializationProxy<>(keySerializer, stateMetaInfoSnapshots, false);
 
@@ -1160,13 +1160,13 @@ public class OmniTask extends Task {
             }
         }
     }
-    
+
     public List<HandleAndLocalPath> uploadFilesToCheckpointFs(List<java.nio.file.Path> paths,
                                                               int numberOfSnapshottingThreads) throws Exception {
         if (this.checkpointStreamFactory == null) {
             throw new IllegalStateException("CheckpointStreamFactory is not initialized.");
         }
-    
+
         final CloseableRegistry snapshotCloseableRegistry = new CloseableRegistry();
         final CloseableRegistry tmpResourcesRegistry = new CloseableRegistry();
         final CheckpointedStateScope stateScope = CheckpointedStateScope.SHARED;
@@ -1279,7 +1279,7 @@ public class OmniTask extends Task {
             return null;
         }
     }
-    
+
     private OmniLocalInputChannel createOmniLocalInputChannel(InputGateWithMetrics inputGateWithMetrics,
             LocalInputChannel localInputChannel) {
         SingleInputGate singleInputGate = getSingleInputGateFromInputGateWithMetrics(inputGateWithMetrics);
@@ -1295,8 +1295,8 @@ public class OmniTask extends Task {
                 taskEventPublisher, stateWriter, this.getTaskInfo().getTaskNameWithSubtasks());
         return omniLocalInputChannel;
     }
-    
-    
+
+
     public int getConsumers() {
         int consumers = 0;
         for (ResultPartitionWriter partitionWriter : partitionWriters) {
@@ -1304,7 +1304,7 @@ public class OmniTask extends Task {
         }
         return consumers;
     }
-    
+
     private synchronized void deleteParentTaskInSlotTable() {
         for (IndexedInputGate inputGate : this.inputGates) {
             int numOfChannel = inputGate.getNumberOfInputChannels();
@@ -1433,7 +1433,7 @@ public class OmniTask extends Task {
         keySerializer = (null != keySerializer)
                 ? keySerializer
                 : BasicTypeInfo.STRING_TYPE_INFO.createSerializer(((StreamTask<?, ?>) this.invokable).getExecutionConfig());
-        
+
         KeyedBackendSerializationProxy<?> serializationProxy =
                 new KeyedBackendSerializationProxy<>(keySerializer, stateMetaInfoSnapshots, false);
         final DataOutputView out =

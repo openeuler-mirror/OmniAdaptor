@@ -40,4 +40,3 @@ Object *com_huawei_qinwei_JDFlinkWordCount_lambda_main_eccf3286_2_org_apache_fli
 	result->setSize(totalLen);
 	return result;
 }
-

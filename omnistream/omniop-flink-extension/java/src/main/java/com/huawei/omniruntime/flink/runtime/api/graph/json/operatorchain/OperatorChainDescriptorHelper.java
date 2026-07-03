@@ -375,7 +375,7 @@ public class OperatorChainDescriptorHelper {
                 opDesc.setInputs(inputsData);
             }
         }
-        LOG.info("handling descirption and output for op {}", opConfig.getOperatorName());
+        LOG.info("handling description and output for op {}", opConfig.getOperatorName());
         { //  description and output
             if (!Objects.equals(id, "org.apache.flink.table.runtime.operators.sink.SinkOperator")) {
                 String description = rewriteToOmniDatatypes(opConfig.getDescription()).toString();

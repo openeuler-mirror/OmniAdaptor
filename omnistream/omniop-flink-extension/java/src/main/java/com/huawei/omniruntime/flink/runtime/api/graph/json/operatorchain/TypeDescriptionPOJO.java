@@ -43,8 +43,8 @@ public class TypeDescriptionPOJO {
         return isNull;
     }
 
-    public void setIsNull(boolean aNull) {
-        isNull = aNull;
+    public void setIsNull(boolean nullValue) {
+        isNull = nullValue;
     }
 
     public int getPrecision() {

@@ -331,14 +331,14 @@ public class OmniStateSerializerHelperTest {
     }
 
     @Test
-    @DisplayName("UNKNOW type keySerializer JSON -> buildStateDescriptor returns null -> getStateBackendKeySerializer returns null")
+    @DisplayName("UNKNOWN type keySerializer JSON -> buildStateDescriptor returns null -> getStateBackendKeySerializer returns null")
     void testGetStateBackendKeySerializerMetaInfoNullStateDescriptor() {
         Map<String, Object> metaInfo = new HashMap<>();
         metaInfo.put("name", "testState");
-        metaInfo.put("keySerializer", "{\"type\":0}"); // UNKNOW type has no factory
+        metaInfo.put("keySerializer", "{\"type\":0}"); // UNKNOWN type has no factory
 
         Map<String, Object> mockMap = new HashMap<>();
-        mockMap.put("type", 0); // UNKNOW
+        mockMap.put("type", 0); // UNKNOWN
 
         try (MockedStatic<JsonHelper> jsonMock = mockStatic(JsonHelper.class)) {
             jsonMock.when(() -> JsonHelper.fromJson(anyString(), any(TypeReference.class)))

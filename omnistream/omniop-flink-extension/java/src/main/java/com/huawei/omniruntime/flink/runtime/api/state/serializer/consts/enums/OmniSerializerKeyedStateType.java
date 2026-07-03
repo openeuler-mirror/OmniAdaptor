@@ -8,7 +8,7 @@ import org.apache.flink.api.common.state.StateDescriptor;
  */
 
 public enum OmniSerializerKeyedStateType {
-    UNKNOW("0", StateDescriptor.Type.UNKNOWN),
+    UNKNOWN("0", StateDescriptor.Type.UNKNOWN),
     VALUE("1", StateDescriptor.Type.VALUE),
     LIST("2", StateDescriptor.Type.LIST),
     REDUCING("3", StateDescriptor.Type.REDUCING),
