@@ -51,7 +51,7 @@ public class CheckpointConfigPOJO {
     private long fsSmallFileThreshold;
 
     private int fsWriteBufferSize;
-    
+
     /**
      * get checkpoint configs to build CheckpointConfigPOJO
      *

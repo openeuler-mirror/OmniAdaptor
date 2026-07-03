@@ -177,4 +177,3 @@ public class OmniTimeGauge extends TimerGauge implements MetricCloseable {
      */
     private native long getNativeMaxSingleMeasurement(long nativeRef);
 }
-

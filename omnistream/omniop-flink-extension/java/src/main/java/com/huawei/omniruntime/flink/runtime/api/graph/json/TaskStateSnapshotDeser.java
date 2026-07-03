@@ -80,7 +80,7 @@ public class TaskStateSnapshotDeser {
         MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, false);
     }
 
-       
+
 
     private static KeyGroupRange parseKeyGroupRange(JsonNode keyGroupNode) {
         int start = keyGroupNode.get("startKeyGroup").asInt();
@@ -618,7 +618,7 @@ public class TaskStateSnapshotDeser {
             LOG.warn("snapshot is null!");
             return "";
         }
- 
+
 
         JsonNodeFactory factory = JsonNodeFactory.instance;
         ObjectNode rootNode = factory.objectNode();

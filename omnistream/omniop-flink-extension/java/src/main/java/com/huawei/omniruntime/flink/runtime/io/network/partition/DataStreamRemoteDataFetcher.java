@@ -22,7 +22,7 @@ import java.util.List;
 
 public class DataStreamRemoteDataFetcher extends RemoteDataFetcher {
     private static final Logger LOG = LoggerFactory.getLogger(DataStreamRemoteDataFetcher.class);
-    
+
     /**
      * DataStreamRemoteDataFetcher constructor
      *

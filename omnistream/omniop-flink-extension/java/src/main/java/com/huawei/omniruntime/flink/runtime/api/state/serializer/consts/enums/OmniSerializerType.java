@@ -52,7 +52,7 @@ public enum OmniSerializerType {
     ROW(OmniSerializerCategory.ROW, RowData.class, RowDataSerializer.class, 15),
     BINARY_ROW(OmniSerializerCategory.BINARY_ROW, BinaryRowData.class, BinaryRowDataSerializer.class, 16),
 
-    UNKNOW(OmniSerializerCategory.UNKNOWN, null, null, 0);
+    UNKNOWN(OmniSerializerCategory.UNKNOWN, null, null, 0);
 
     private final OmniSerializerCategory category;
     private final Class<?> clazz;

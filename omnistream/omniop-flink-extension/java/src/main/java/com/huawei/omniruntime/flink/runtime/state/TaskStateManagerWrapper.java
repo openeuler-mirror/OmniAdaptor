@@ -164,7 +164,7 @@ public class TaskStateManagerWrapper {
                 LOG.error("get snapshot failed");
                 return "NULL";
             }
-            
+
             snapshotStr = TaskStateSnapshotDeser.serializeTaskStateSnapshot(taskStateSnapshot);
             LOG.info("Successfully retrieved snapshot for checkpointId: {}, snapshot size: {},snapshot str:{}",
                     restoreCheckpointId, snapshotStr.length(), snapshotStr);

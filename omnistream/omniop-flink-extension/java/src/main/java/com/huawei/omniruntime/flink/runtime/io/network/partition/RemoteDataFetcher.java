@@ -40,11 +40,11 @@ public class RemoteDataFetcher implements Runnable {
     protected volatile boolean running = true;
     protected JobType jobType;
     protected Map<Long, Buffer> waitingForRecycleBuffers = new ConcurrentHashMap<>();
-    
+
     private ExecutorService remoteDataFetcherExecutorService = Executors.newSingleThreadExecutor();
     private ExecutorService bufferRecyclingExecutorService = Executors.newSingleThreadExecutor();
-    
-    
+
+
     /**
      * RemoteDataFetcher constructor
      *
@@ -60,8 +60,8 @@ public class RemoteDataFetcher implements Runnable {
         this.jobType = jobType;
         this.remoteInputChannels = remoteInputChannels;
     }
-    
-    
+
+
     public void run() {
         Thread.currentThread().setName("RemoteDataFetcher-----> for task: " + taskName);
         registerRemoteDataFetcherToNative(nativeTaskRef);
@@ -77,13 +77,13 @@ public class RemoteDataFetcher implements Runnable {
             }
         }
     }
-    
+
     public void start() {
         LOG.info("start RemoteDataFetcher thread......................................for {}", taskName);
         startRecycleBuffersThreadForRemote();
         remoteDataFetcherExecutorService.execute(this);
     }
-    
+
     /**
      * finishRunning
      */
@@ -100,8 +100,8 @@ public class RemoteDataFetcher implements Runnable {
         LOG.info("Buffer recycling executor service for task {} has been shut down.", taskName);
         LOG.info(" stop RemoteDataFetcher thread completely......................................for {}", taskName);
     }
-    
-    
+
+
     /**
      * buildRemoteConnection
      */
@@ -184,11 +184,11 @@ public class RemoteDataFetcher implements Runnable {
     public void setRemoteInputChannels(List<OmniRemoteInputChannel> remoteInputChannels) {
         this.remoteInputChannels = remoteInputChannels;
     }
-    
+
     public void startRecycleBuffersThreadForRemote() {
         bufferRecyclingExecutorService.execute(new BufferRecyclingRunnable());
     }
-    
+
     class BufferRecyclingRunnable implements Runnable {
         @Override
         public void run() {
@@ -260,10 +260,10 @@ public class RemoteDataFetcher implements Runnable {
      */
     public native void notifyRemoteDataAvailable(long nativeTaskRef, int inputGateIndex, int channelIndex,
             long bufferAddress, int bufferLength, int readIndex, int sequenceNumber, boolean isBuffer, int bufferType);
-    
+
     public native long getRecycleBufferAddress(long nativeTaskRef);
 
     public native void registerRemoteDataFetcherToNative(long nativeTaskRef);
-    
-    
+
+
 }

@@ -14,12 +14,12 @@ package com.huawei.omniruntime.flink.runtime.taskmanager;
 public class OmniTaskReferenceCounter {
     private OmniTask task  ;
     private int referenceCount = 0;
-    
+
     public OmniTaskReferenceCounter(OmniTask task) {
         this.task = task;
         this.referenceCount = task.getConsumers();
     }
-    
+
     public OmniTask getTask() {
         return task;
     }

@@ -27,14 +27,14 @@ public class LocalNativeDataFetcher implements Runnable {
     private String taskName;
     private volatile boolean running = true;
     private ExecutorService executorService = Executors.newSingleThreadExecutor();
-    
+
     public LocalNativeDataFetcher(long nativeTaskRef, String taskName,
             List<OmniLocalInputChannel> localInputChannels) {
         this.nativeTaskRef = nativeTaskRef;
         this.taskName = taskName;
         this.localInputChannels = localInputChannels;
     }
-    
+
     private void changeNativeLocalInputChannelToOriginal() throws IOException {
         if (localInputChannels != null && localInputChannels.size() > 0) {
             for (OmniLocalInputChannel omniLocalInputChannel : localInputChannels) {
@@ -60,19 +60,19 @@ public class LocalNativeDataFetcher implements Runnable {
             }
         }
     }
-    
+
     public void connectCppLocalInputChannelToJavaPipelinedsubpartition() throws IOException {
         LOG.info("Connecting Cpp Local Input Channel to Java Pipelined Subpartition for task: {}", taskName);
         connectToOriginalPipelinedsubpartition();
         LOG.info("Successfully connected Cpp Local Input Channel to Java Pipelined Subpartition for task: {}",
                 taskName);
     }
-    
+
     public void start() throws IOException {
         changeNativeLocalInputChannelToOriginal();
         executorService.submit(this);
     }
-    
+
     public void run() {
         try {
             Thread.currentThread().setName("LocalNativeDataFetcher-----> for task: " + taskName);
@@ -82,7 +82,7 @@ public class LocalNativeDataFetcher implements Runnable {
             LOG.error("Error starting LocalNativeDataFetcher for task: {}", taskName, e);
         }
     }
-    
+
     public void finishRunning() {
         for (OmniLocalInputChannel omniLocalInputChannel : localInputChannels) {
             try {

@@ -67,7 +67,7 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
 
         // Checks if leftJoinKey and rightJoinKey sizes are the same
         if (leftJoinKey.size() != rightJoinKey.size() || leftJoinKey.size() == 0) {
-            LOG.warn("Join Key indicies do not match or key size is 0");
+            LOG.warn("Join Key indices do not match or key size is 0");
             return false;
         }
 

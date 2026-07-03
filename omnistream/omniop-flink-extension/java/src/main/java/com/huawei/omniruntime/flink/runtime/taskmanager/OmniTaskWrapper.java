@@ -857,7 +857,7 @@ public class OmniTaskWrapper {
     private OperatorStreamStateHandle deserializeOperatorStreamStateHandle(String metaStateHandleStr) {
         try {
             JsonNode rootNode = OBJECT_MAPPER.readTree(metaStateHandleStr);
-            
+
             JsonNode delegateNode = getFirstPresent(
                     rootNode, "metaDataState", "delegateStateHandle", "streamStateHandle");
             if (delegateNode == null) {
@@ -873,7 +873,7 @@ public class OmniTaskWrapper {
                 throw new IOException("OperatorStreamStateHandle delegate parsed to null.");
             }
             JsonNode partitionOffsetsNode = rootNode.get("stateNameToPartitionOffsets");
-            
+
             Map<String, StateMetaInfo> stateMap = new HashMap<>();
 
             if (partitionOffsetsNode != null && partitionOffsetsNode.isObject()) {

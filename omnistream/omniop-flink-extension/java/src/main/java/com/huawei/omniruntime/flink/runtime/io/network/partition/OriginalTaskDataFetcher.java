@@ -37,13 +37,13 @@ public class OriginalTaskDataFetcher {
     private JobType jobType;
     private RemoteDataFetcher remoteDataFetcher;
     private LocalNativeDataFetcher localNativeDataFetcher;
-    
+
     public OriginalTaskDataFetcher(long nativeTaskRef, String taskName, JobType jobType) {
         this.nativeTaskRef = nativeTaskRef;
         this.taskName = taskName;
         this.jobType = jobType;
     }
-    
+
     /**
      * finishRunning
      */
@@ -51,12 +51,12 @@ public class OriginalTaskDataFetcher {
         if (remoteDataFetcher != null) {
             remoteDataFetcher.finishRunning();
         }
-        
+
         if (localNativeDataFetcher != null) {
             localNativeDataFetcher.finishRunning();
         }
     }
-    
+
     public void createAndStartRemoteDataFetcher(List<OmniRemoteInputChannel> remoteInputChannels) {
         if (jobType == JobType.SQL) {
             remoteDataFetcher = new RemoteDataFetcher(nativeTaskRef, taskName, jobType, remoteInputChannels);
@@ -70,7 +70,7 @@ public class OriginalTaskDataFetcher {
             }
         remoteDataFetcher.start();
     }
-    
+
     public void createAndStartLocalDataFetcher(List<OmniLocalInputChannel> localInputChannels) throws IOException {
         localNativeDataFetcher = new LocalNativeDataFetcher(nativeTaskRef, taskName, localInputChannels);
         localNativeDataFetcher.start();

@@ -91,7 +91,7 @@ public final class OmniStreamTaskNetworkInput<T>
     private ByteBuffer outputBuffer;
 
     private ByteBuffer outputBufferStatus;
-    
+
     // long address 8, int capacity 4 , int resultLength (length in bytes) 4 , int num of element 4, int owner 4 (owner =0 java 1 cpp native
     private int resultLength;
     private long statusAddress;
@@ -343,7 +343,7 @@ public final class OmniStreamTaskNetworkInput<T>
     // result [0] the the size of bytebuffer be consumed.
     // TBD
     // if the bytebuffer for output is not big enough, the JNI will return the new ByteBuffer with serialized value, otherwise
-    // the return vaule is null
+    // the return value is null
 
     private native TNELProcessState TNELProcessBuffer(long omniStreamTaskRef, long omniInputProcessorRef, long address, int offset, int numBytes, long channelInfo);
 //    private native int TNELProcessBufferV2(long nOmniStreamTaskRef, long address, int offset, int numBytes, long channelInfo);

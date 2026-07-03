@@ -439,7 +439,7 @@ public class OmniTaskExecutor extends TaskExecutor {
  	         }
  	         return TaskStateSnapshotDeser.serializeTaskStateSnapshot(taskStateSnapshot);
  	     }
- 	 
+
  	     private static boolean containsChannelState(TaskStateSnapshot taskStateSnapshot) {
  	         if (taskStateSnapshot == null) {
  	             return false;
@@ -456,7 +456,7 @@ public class OmniTaskExecutor extends TaskExecutor {
  	         }
  	         return false;
  	     }
- 	 
+
  	     private static boolean hasStateObjects(Iterable<?> stateObjects) {
  	         return stateObjects != null && stateObjects.iterator().hasNext();
  	     }
@@ -639,7 +639,7 @@ public class OmniTaskExecutor extends TaskExecutor {
         }
         return jobManagerConnection;
     }
-    
+
     private synchronized void deleteLeftTaskInTaskMap(ExecutionAttemptID executionAttemptID) {
         if (!taskMap.isEmpty()) {
             ExecutionAttemptID existId = taskMap.keySet().toArray(new ExecutionAttemptID[0])[0];
@@ -650,9 +650,9 @@ public class OmniTaskExecutor extends TaskExecutor {
                 taskMap.clear();
             }
         }
-        
+
     }
-    
+
     public Object getFieldByReflection(Class clazz, Object target, String fieldName) {
         try {
             Field field = clazz.getDeclaredField(fieldName);
