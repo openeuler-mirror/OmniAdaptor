@@ -87,6 +87,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("SEARCH", SpecialExprType.SEARCH);
         specialOperatorMap.put("LOWER", SpecialExprType.LOWER);
         specialOperatorMap.put("HASH_CODE", SpecialExprType.HASH_CODE);
+        specialOperatorMap.put("IS NULL", SpecialExprType.IS_NULL);
         specialOperatorMap.put("IS NOT NULL", SpecialExprType.IS_NOT_NULL);
         specialOperatorMap.put("PROCTIME_MATERIALIZE", SpecialExprType.PROCTIME);
         specialOperatorMap.put("PROCTIME", SpecialExprType.PROCTIME);
@@ -183,6 +184,7 @@ public class RexNodeUtil {
         HASH_CODE,
         SPLIT_INDEX,
         CHAR_LENGTH,
+        IS_NULL,
         IS_NOT_NULL,
         PROCTIME,
         EXTRACT,
@@ -602,6 +604,14 @@ public class RexNodeUtil {
                         List<Map<String, Object>> charLengthArgList = new ArrayList<>();
                         charLengthArgList.add(buildJsonMap(operands.get(0)));
                         jsonMap.put("arguments", charLengthArgList);
+                        break;
+                    case IS_NULL:
+                        jsonMap.put("exprType", "IS_NULL");
+                        setDataType(rexCall,jsonMap, "returnType");
+
+                        List<Map<String, Object>> isNullArgList = new ArrayList<>();
+                        isNullArgList.add(buildJsonMap(operands.get(0)));
+                        jsonMap.put("arguments", isNullArgList);
                         break;
                     case IS_NOT_NULL:
                         jsonMap.put("exprType", "IS_NOT_NULL");
