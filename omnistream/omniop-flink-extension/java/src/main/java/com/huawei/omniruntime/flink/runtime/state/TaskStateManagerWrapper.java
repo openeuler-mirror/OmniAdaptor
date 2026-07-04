@@ -161,7 +161,7 @@ public class TaskStateManagerWrapper {
             taskStateSnapshot = localStateStore.retrieveLocalState(restoreCheckpointId);
 
             if(taskStateSnapshot == null){
-                LOG.error("get snapshot failed");
+                LOG.info("No local state snapshot found for checkpointId: {}", restoreCheckpointId);
                 return "NULL";
             }
 
