@@ -107,11 +107,6 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                 int sequenceNumber = ba.getSequenceNumber();
                 long segmentAddress;
                 if (bufferType == 1) {
-                    if (ba.buffer().getDataType() == Buffer.DataType.RECOVERY_COMPLETION) {
-                        LOG.info("Skipping recovery completion event, taskName: {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
-                        resumeConsumption();
-                        return; // Skip recovery completion events
-                    }
                     ByteBuffer byteBuffer = ByteBuffer.allocateDirect(length);
                     byte[] heapArr = memorySegment.getArray();
                     if (heapArr.length >= 3 && heapArr[3] == 8) {
