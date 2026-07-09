@@ -209,12 +209,19 @@ public class OmniTaskWrapper {
             options = CheckpointOptions.forCheckpointWithDefaultLocation();
         } else {
             int formatType = checkpointTypeNode.get("formatType").intValue();
+            SavepointFormatType sft;
+            switch (formatType) {
+                case 0:  sft = SavepointFormatType.CANONICAL;  break;
+                case 1:  sft = SavepointFormatType.NATIVE;     break;
+                case 2:  sft = SavepointFormatType.COMPATIBLE; break;  // 新增分支
+                default: throw new IllegalArgumentException("Unsupported formatType: " + formatType);
+            }
             if (name.equals("Savepoint")) {
-                type = formatType == 0 ? SavepointType.savepoint(SavepointFormatType.CANONICAL) : SavepointType.savepoint(SavepointFormatType.NATIVE);
+                type = SavepointType.savepoint(sft);
             } else if (name.equals("Terminate Savepoint")){
-                type = formatType == 0 ? SavepointType.terminate(SavepointFormatType.CANONICAL) : SavepointType.terminate(SavepointFormatType.NATIVE);
+                type = SavepointType.terminate(sft);
             } else {
-                type = formatType == 0 ? SavepointType.suspend(SavepointFormatType.CANONICAL) : SavepointType.suspend(SavepointFormatType.NATIVE);
+                type = SavepointType.suspend(sft);
             }
             JsonNode targetLocationNode = root.get("targetLocation");
             if (targetLocationNode == null){
