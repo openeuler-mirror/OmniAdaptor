@@ -14,6 +14,8 @@ package com.huawei.omniruntime.flink.runtime.api.graph.json;
 import org.apache.flink.runtime.executiongraph.JobInformation;
 import org.apache.flink.streaming.runtime.tasks.StreamTaskException;
 
+import com.huawei.omniruntime.flink.configuration.OmniRecoveryOptions;
+
 import java.io.IOException;
 
 /**
@@ -37,6 +39,11 @@ public class JobInformationPOJO {
     private long autoWatermarkInterval;
 
     /**
+     * Savepoint mode used when restoring the job.
+     */
+    private String recoverySavepointFormat;
+
+    /**
      * default none args constructor
      */
     public JobInformationPOJO() {}
@@ -50,6 +57,8 @@ public class JobInformationPOJO {
     public JobInformationPOJO(JobInformation jobInformation, ClassLoader cl) {
         this.jobId = new JobIDPOJO(jobInformation.getJobId());
         this.jobName = jobInformation.getJobName();
+        this.recoverySavepointFormat =
+            jobInformation.getJobConfiguration().getString(OmniRecoveryOptions.RECOVERY_SAVEPOINT_FORMAT_CONFIG_NAME, "");
         try {
             this.autoWatermarkInterval = jobInformation.getSerializedExecutionConfig()
                 .deserializeValue(cl).getAutoWatermarkInterval();
@@ -82,11 +91,20 @@ public class JobInformationPOJO {
         this.autoWatermarkInterval = autoWatermarkInterval;
     }
 
+    public String getRecoverySavepointFormat() {
+        return recoverySavepointFormat;
+    }
+
+    public void setRecoverySavepointFormat(String recoverySavepointFormat) {
+        this.recoverySavepointFormat = recoverySavepointFormat;
+    }
+
     @Override
     public String toString() {
         return "JobInformationPOJO{"
                 + "jobId=" + jobId
                 + ", jobName='" + jobName + '\''
+                + ", recoverySavepointFormat='" + recoverySavepointFormat + '\''
                 + '}';
     }
 }
