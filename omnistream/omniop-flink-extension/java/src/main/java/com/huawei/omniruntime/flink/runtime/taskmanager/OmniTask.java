@@ -860,6 +860,12 @@ public class OmniTask extends Task {
     public void setJobType(JobType jobType) {
         this.jobType = jobType;
     }
+
+    // 新增：暴露 JobType，供 OmniTaskExecutor 校验 savepoint 格式使用
+    public JobType getJobType() {
+        return this.jobType;
+    }
+
     public boolean isOmniStream() {
         return (this.jobType == JobType.SQL || this.jobType == JobType.STREAM);
     }

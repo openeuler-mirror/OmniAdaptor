@@ -47,6 +47,9 @@ import org.apache.flink.contrib.streaming.state.RocksDBMemoryConfiguration;
 import org.apache.flink.contrib.streaming.state.RocksDBOperationUtils;
 import org.apache.flink.contrib.streaming.state.RocksDBSharedResources;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
+import org.apache.flink.core.execution.SavepointFormatType;
+import org.apache.flink.runtime.checkpoint.SavepointType;
+import org.apache.flink.runtime.checkpoint.SnapshotType;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.blob.TaskExecutorBlobService;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
@@ -716,6 +719,15 @@ public class OmniTaskExecutor extends TaskExecutor {
     // Checkpointing RPCs
     // ----------------------------------------------------------------------
 
+    // 新增辅助方法：判断是否为 COMPATIBLE 格式的 savepoint
+    private boolean isCompatibleFormatSavepoint(CheckpointOptions checkpointOptions) {
+        SnapshotType checkpointType = checkpointOptions.getCheckpointType();
+        if (checkpointType instanceof SavepointType) {
+            return ((SavepointType) checkpointType).getFormatType() == SavepointFormatType.COMPATIBLE;
+        }
+        return false;
+    }
+
     @Override
     public CompletableFuture<Acknowledge> triggerCheckpoint(
             ExecutionAttemptID executionAttemptID,
@@ -732,6 +744,16 @@ public class OmniTaskExecutor extends TaskExecutor {
 
         if (task != null) {
             final OmniTask omniTask = (OmniTask) task;
+            // 新增：datastream 场景不支持 --type compatible native 层吞掉
+            if ((!omniTask.isOmniStream() || omniTask.getJobType() == JobType.STREAM)
+                    && isCompatibleFormatSavepoint(checkpointOptions)) {
+                String msg = "Savepoint format 'compatible' (--type compatible) is not supported for "
+                        + "DataStream jobs (JobType.STREAM) or fallback Flink scenarios. "
+                        + "Please use --type native or --type canonical instead.";
+                log.warn(msg);
+                return FutureUtils.completedExceptionally(
+                        new CheckpointException(msg, CheckpointFailureReason.CHECKPOINT_DECLINED));
+            }
             if (omniTask.isOmniStream()) {
                 omniTask.omniTriggerCheckpointBarrier(checkpointId, checkpointTimestamp, checkpointOptions);
             } else {

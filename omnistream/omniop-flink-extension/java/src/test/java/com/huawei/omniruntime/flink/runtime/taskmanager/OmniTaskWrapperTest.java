@@ -255,6 +255,23 @@ public class OmniTaskWrapperTest {
     }
 
     @Test
+    @DisplayName("Savepoint formatType=2 -> savepoint(COMPATIBLE)")
+    void testParseCheckpointOptionsSavepointCompatible() throws Exception {
+        when(omniTask.acquireSavepointOutputStream(eq(CHECKPOINT_ID), any(CheckpointOptions.class)))
+                .thenReturn(acquiredProvider);
+
+        String json = "{\"alignedCheckpointTimeout\":10000,\"alignmentType\":\"ALIGNED\","
+                + "\"checkpointType\":{\"name\":\"Savepoint\",\"formatType\":2},"
+                + "\"targetLocation\":{\"referenceBytes\":\"test-ref-bytes\"}}";
+
+        CheckpointStreamWithResultProvider result =
+                wrapper.acquireSavepointOutputStream(CHECKPOINT_ID, json);
+
+        assertNotNull(result);
+        verify(omniTask).acquireSavepointOutputStream(eq(CHECKPOINT_ID), any(CheckpointOptions.class));
+    }
+
+    @Test
     @DisplayName("Terminate Savepoint formatType=0 -> terminate(CANONICAL)")
     void testParseCheckpointOptionsTerminateSavepointCanonical() throws Exception {
         when(omniTask.acquireSavepointOutputStream(eq(CHECKPOINT_ID), any(CheckpointOptions.class)))
@@ -289,6 +306,23 @@ public class OmniTaskWrapperTest {
     }
 
     @Test
+    @DisplayName("Terminate Savepoint formatType=2 -> terminate(COMPATIBLE)")
+    void testParseCheckpointOptionsTerminateSavepointCompatible() throws Exception {
+        when(omniTask.acquireSavepointOutputStream(eq(CHECKPOINT_ID), any(CheckpointOptions.class)))
+                .thenReturn(acquiredProvider);
+
+        String json = "{\"alignedCheckpointTimeout\":10000,\"alignmentType\":\"ALIGNED\","
+                + "\"checkpointType\":{\"name\":\"Terminate Savepoint\",\"formatType\":2},"
+                + "\"targetLocation\":{\"referenceBytes\":\"test-ref-bytes\"}}";
+
+        CheckpointStreamWithResultProvider result =
+                wrapper.acquireSavepointOutputStream(CHECKPOINT_ID, json);
+
+        assertNotNull(result);
+        verify(omniTask).acquireSavepointOutputStream(eq(CHECKPOINT_ID), any(CheckpointOptions.class));
+    }
+
+    @Test
     @DisplayName("Suspend Savepoint formatType=0 -> suspend(CANONICAL)")
     void testParseCheckpointOptionsSuspendSavepointCanonical() throws Exception {
         when(omniTask.acquireSavepointOutputStream(eq(CHECKPOINT_ID), any(CheckpointOptions.class)))
@@ -313,6 +347,23 @@ public class OmniTaskWrapperTest {
 
         String json = "{\"alignedCheckpointTimeout\":10000,\"alignmentType\":\"ALIGNED\","
                 + "\"checkpointType\":{\"name\":\"Suspend Savepoint\",\"formatType\":1},"
+                + "\"targetLocation\":{\"referenceBytes\":\"test-ref-bytes\"}}";
+
+        CheckpointStreamWithResultProvider result =
+                wrapper.acquireSavepointOutputStream(CHECKPOINT_ID, json);
+
+        assertNotNull(result);
+        verify(omniTask).acquireSavepointOutputStream(eq(CHECKPOINT_ID), any(CheckpointOptions.class));
+    }
+
+    @Test
+    @DisplayName("Suspend Savepoint formatType=2 -> suspend(COMPATIBLE)")
+    void testParseCheckpointOptionsSuspendSavepointCompatible() throws Exception {
+        when(omniTask.acquireSavepointOutputStream(eq(CHECKPOINT_ID), any(CheckpointOptions.class)))
+                .thenReturn(acquiredProvider);
+
+        String json = "{\"alignedCheckpointTimeout\":10000,\"alignmentType\":\"ALIGNED\","
+                + "\"checkpointType\":{\"name\":\"Suspend Savepoint\",\"formatType\":2},"
                 + "\"targetLocation\":{\"referenceBytes\":\"test-ref-bytes\"}}";
 
         CheckpointStreamWithResultProvider result =
