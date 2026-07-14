@@ -23,6 +23,7 @@ package com.huawei.omniruntime.flink.runtime.taskexecutor;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
+import com.huawei.omniruntime.flink.configuration.OmniRecoveryOptions;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.JobInformationPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskStateSnapshotDeser;
@@ -337,9 +338,12 @@ public class OmniTaskExecutor extends TaskExecutor {
         OmniTask task) throws Exception {
         boolean useOmniFlag = taskInformation.getTaskConfiguration().getBoolean("useomni", false);
         int jobType = taskInformation.getTaskConfiguration().getInteger("jobType", 0);
+        String recoverySavepointFormat = jobInformation.getJobConfiguration().getString(OmniRecoveryOptions.RECOVERY_SAVEPOINT_FORMAT_CONFIG_NAME, "");
         boolean checkNative = taskInformation.getTaskConfiguration().getBoolean("checkNative", false);
         log.info("Task name is {} and useOmniFlag is {} ", taskInformation.getTaskName(), checkNative?!useOmniFlag:useOmniFlag);
         if (useOmniFlag) {
+            // only allow SQL job type using FLINK_COMPATIBLE as recovery savepoint format
+            checkJobTypeAndRecoverySavepointFormat(jobType, recoverySavepointFormat);
             // stream config pojo
             Collection<PermanentBlobKey> requiredJarFiles = jobInformation.getRequiredJarFileBlobKeys();
             Collection<URL> requiredClasspaths = jobInformation.getRequiredClasspathURLs();
@@ -709,6 +713,15 @@ public class OmniTaskExecutor extends TaskExecutor {
         }
 
         return rocksDBSharedResources;
+    }
+
+    private void checkJobTypeAndRecoverySavepointFormat(int jobType, String recoverySavepointFormat) {
+        if (OmniRecoveryOptions.RECOVERY_SAVEPOINT_FORMAT_FLINK_COMPATIBLE.equals(recoverySavepointFormat)) {
+            if (jobType == JobType.SQL_STREAM.getValue() || jobType == JobType.STREAM.getValue()) {
+                throw new IllegalArgumentException("Setting the \"" + OmniRecoveryOptions.RECOVERY_SAVEPOINT_FORMAT_CONFIG_NAME
+                        + "\" to \"compatible\" is not allowed in job of type STREAM or SQL_STREAM");
+            }
+        }
     }
 
 
