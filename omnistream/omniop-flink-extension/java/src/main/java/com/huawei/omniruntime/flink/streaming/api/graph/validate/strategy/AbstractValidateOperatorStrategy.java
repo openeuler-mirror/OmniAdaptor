@@ -39,6 +39,7 @@ public abstract class AbstractValidateOperatorStrategy {
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",
             "VARCHAR(9)",
+            "CHAR",
             "STRING",
             "BOOLEAN",
             "DECIMAL64",
@@ -86,6 +87,11 @@ public abstract class AbstractValidateOperatorStrategy {
                     if (type.matches("^VARCHAR\\([^)]*\\)$")) {
                         type = "VARCHAR";
                         LOG.info("converted to VARCHAR");
+                    }
+
+                    if (type.matches("^CHAR\\([^)]*\\)$")) {
+                        type = "CHAR";
+                        LOG.info("converted to CHAR");
                     }
 
                     if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
