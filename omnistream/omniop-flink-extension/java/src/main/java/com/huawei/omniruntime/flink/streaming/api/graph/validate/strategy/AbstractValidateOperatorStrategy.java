@@ -28,8 +28,6 @@ public abstract class AbstractValidateOperatorStrategy {
     protected static final Set<String> SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",
-            "DOUBLE",
-            "DATE",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
@@ -39,7 +37,6 @@ public abstract class AbstractValidateOperatorStrategy {
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",
             "VARCHAR(9)",
-            "CHAR",
             "STRING",
             "BOOLEAN",
             "DECIMAL64",
@@ -87,11 +84,6 @@ public abstract class AbstractValidateOperatorStrategy {
                     if (type.matches("^VARCHAR\\([^)]*\\)$")) {
                         type = "VARCHAR";
                         LOG.info("converted to VARCHAR");
-                    }
-
-                    if (type.matches("^CHAR\\([^)]*\\)$")) {
-                        type = "CHAR";
-                        LOG.info("converted to CHAR");
                     }
 
                     if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
