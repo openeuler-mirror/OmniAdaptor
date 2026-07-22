@@ -142,14 +142,15 @@ public class RemoteDataFetcher implements Runnable {
                         // sent buffer to C++ side
                         boolean isBuffer = buffer.isBuffer();
                         int bufferType = isBuffer ? 0 : 1;
+                        if (bufferType == 1 && buffer.getDataType().isBlockingUpstream()) {
+                            bufferType++;
+                            if (buffer.getDataType().toString() == "ALIGNED_CHECKPOINT_BARRIER") {
+                                bufferType++;
+                            }
+                        }
                         int bufferLength = bufferAndAvailability.buffer().getSize();
                         int sequenceNumber = bufferAndAvailability.getSequenceNumber();
                         if (!isBuffer) {
-                            if (dataType == Buffer.DataType.RECOVERY_COMPLETION) {
-                                LOG.info("!!!!!! Skipping recovery completion event for task: {}", taskName);
-                                remoteInputChannel.resumeConsumption();
-                                return true; // Skip recovery completion events
-                            }
                             ByteBuffer byteBuffer = ByteBuffer.allocateDirect(bufferLength);
                             byte[] heapArr = buffer.getMemorySegment().getArray();
                             byteBuffer.put(heapArr, buffer.getMemorySegmentOffset(), bufferLength);

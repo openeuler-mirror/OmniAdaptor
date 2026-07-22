@@ -100,26 +100,21 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                 BufferAndAvailability ba = bufferAndAvailability.get();
                 ReadOnlySlicedNetworkBuffer readOnlySlicedNetworkBuffer = (ReadOnlySlicedNetworkBuffer) ba.buffer();
                 int bufferType = ba.buffer().isBuffer() ? 0 : 1; // 0 for Buffer, 1 for Event, underline only
+                if (bufferType == 1 && readOnlySlicedNetworkBuffer.getDataType().isBlockingUpstream()) {
+                    bufferType++;
+                    if (readOnlySlicedNetworkBuffer.getDataType().toString() == "ALIGNED_CHECKPOINT_BARRIER") {
+                        bufferType++;;
+                    }
+                }
                 MemorySegment memorySegment = readOnlySlicedNetworkBuffer.getMemorySegment();
                 int readIndex = readOnlySlicedNetworkBuffer.readerIndex();
                 int length = readOnlySlicedNetworkBuffer.readableBytes();
                 int memorySegmentOffset = readOnlySlicedNetworkBuffer.getMemorySegmentOffset();
                 int sequenceNumber = ba.getSequenceNumber();
                 long segmentAddress;
-                if (bufferType == 1) {
-                    if (ba.buffer().getDataType() == Buffer.DataType.RECOVERY_COMPLETION) {
-                        LOG.info("Skipping recovery completion event, taskName: {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
-                        resumeConsumption();
-                        return; // Skip recovery completion events
-                    }
+                if (bufferType != 0) {
                     ByteBuffer byteBuffer = ByteBuffer.allocateDirect(length);
                     byte[] heapArr = memorySegment.getArray();
-                    if (heapArr.length >= 3 && heapArr[3] == 7) {
-                        if (ba.moreAvailable()) {
-                            doGetNextBuffer();
-                        }
-                        return;
-                    }
                     if (heapArr.length >= 3 && heapArr[3] == 8) {
                         getSubpartitionView().acknowledgeAllDataProcessed();
                     }
