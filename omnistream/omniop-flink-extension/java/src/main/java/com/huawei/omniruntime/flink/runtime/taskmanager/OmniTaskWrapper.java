@@ -158,7 +158,7 @@ public class OmniTaskWrapper {
     }
 
     private Throwable deserilizedexception(String exceptionString) {
-        if(exceptionString=="nullptr"){
+        if ("nullptr".equals(exceptionString)) {
             return null;
         }
         String errorCode = null;
@@ -174,6 +174,11 @@ public class OmniTaskWrapper {
             } else if (line.startsWith("Stack:")) {
                 stack = line.substring("Stack:".length()).trim();
             }
+        }
+        // 如果是纯文本字符串（不包含 Error Code: / Reason: / Stack: 格式），
+        // 直接使用原始字符串作为异常消息，保留 C++ 侧传入的真实错误原因
+        if (errorCode == null && reason == null && stack == null) {
+            return new RuntimeException(exceptionString);
         }
         String msg = "[ErrorCode=" + errorCode + "] " + reason + "\nStack: " + stack;
         return new RuntimeException(msg);

@@ -678,12 +678,20 @@ public class OmniTask extends Task {
             CheckpointFailureReason failureReason,
             @Nullable
             Throwable failureCause) {
+        String failMsg = (failureCause != null && failureCause.getMessage() != null)
+            ? " - " + failureCause.getMessage()
+            : "";
+        LOG.info(
+            "OmniTask.declineCheckpoint: checkpointID={}, failureReason={}, failureCause={}",
+            checkpointID,
+            failureReason,
+            failMsg.isEmpty() ? "null" : failMsg);
         checkpointResponder.declineCheckpoint(
                 jobId,
                 executionId,
                 checkpointID,
                 new CheckpointException(
-                        "Task name with subtask : " + taskNameWithSubtask,
+                        "Task name with subtask : " + taskNameWithSubtask + failMsg,
                         failureReason,
                         failureCause));
     }
