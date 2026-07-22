@@ -30,7 +30,8 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "DOUBLE",
             "DATE",
-            "CHAR"));
+            "CHAR",
+            "MAP"));
 
     private static final Set<String> SUPPORT_BINARYOP_NAME = new HashSet<>(Arrays.asList(
             "OR",

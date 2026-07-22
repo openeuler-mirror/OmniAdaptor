@@ -244,6 +244,7 @@ public final class OmniGraphOverride {
             "VARCHAR(9)",
             "CHAR",
             "STRING",
+            "MAP",
             "DECIMAL64",
             "DECIMAL128",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
