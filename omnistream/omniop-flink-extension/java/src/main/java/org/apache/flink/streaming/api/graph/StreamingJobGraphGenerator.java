@@ -743,8 +743,19 @@ public class StreamingJobGraphGenerator {
         } else {
             String backendName = stateBackend.getClass().getSimpleName();
             if ("EmbeddedOckStateBackend".equals(backendName)) {
-                LOG.warn("Unsupported StateBackend in native DataStream and will roll back to Original plan.");
-                return true;
+                boolean ockBackendEnabled = streamGraph.getConfiguration().get(ConfigOptions
+                        .key("omni.statebackend.ock.enabled").booleanType().defaultValue(false));
+                if (!ockBackendEnabled) {
+                    LOG.warn("EmbeddedOckStateBackend is not enabled for native DataStream"
+                            + " (set omni.statebackend.ock.enabled=true to enable)"
+                            + " and will roll back to Original plan.");
+                    return true;
+                }
+                LOG.info("EmbeddedOckStateBackend is enabled for native DataStream"
+                        + " by omni.statebackend.ock.enabled.");
+                // BSS 同时支持 HashMap-only 与 Rocksdb-only 两类算子的状态，
+                // 跳过下方针对单一 backend 的算子冲突回退检查
+                return false;
             }
             if (containOperator.getRight() && !"EmbeddedRocksDBStateBackend".equals(backendName)) {
                 LOG.warn("Fallback to native plan: Non-Rocksdb backend conflicts with a Rocksdb-only operator.");
