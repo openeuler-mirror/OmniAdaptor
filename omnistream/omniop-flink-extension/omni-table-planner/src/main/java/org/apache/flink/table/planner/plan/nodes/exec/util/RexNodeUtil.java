@@ -45,6 +45,10 @@ public class RexNodeUtil {
     public static final Map<String, SpecialExprType> udfOperatorMap = new HashMap<>();
     public static final Map<String, UnaryExprType> unaryOperatorMap = new HashMap<>();
     public static final Map<String, BinaryExprType> binaryOperatorMap = new HashMap<>();
+    // Strategy registry: maps a SpecialExprType to the handler that builds its JSON.
+    // Adding a new special expression = add a handler method + one registration line here,
+    // instead of editing a shared switch-case block (reduces multi-developer merge conflicts).
+    public static final Map<SpecialExprType, SpecialExprHandler> specialHandlerMap = new HashMap<>();
     private static final Logger LOG = LoggerFactory.getLogger(RexNodeUtil.class);
     public static HashMap<Integer, Integer> accessIndexMap = new HashMap<>();
 
@@ -162,12 +166,63 @@ public class RexNodeUtil {
         binaryOperatorMap.put("<>", BinaryExprType.NOT_EQUAL);
     }
 
+    static {
+        // Register one handler per SpecialExprType. Each handler is a self-contained
+        // private static method below. New expressions add a method + a line here.
+        specialHandlerMap.put(SpecialExprType.SWITCH, RexNodeUtil::handleSwitch);
+        specialHandlerMap.put(SpecialExprType.IF, RexNodeUtil::handleSwitch);
+        specialHandlerMap.put(SpecialExprType.REGEXP_EXTRACT, RexNodeUtil::handleRegexpExtract);
+        specialHandlerMap.put(SpecialExprType.COALESCE, RexNodeUtil::handleCoalesce);
+        specialHandlerMap.put(SpecialExprType.JSON_VALUE, RexNodeUtil::handleJsonValue);
+        specialHandlerMap.put(SpecialExprType.JSON_QUERY, RexNodeUtil::handleJsonQuery);
+        specialHandlerMap.put(SpecialExprType.JSON_SPLIT, RexNodeUtil::handleJsonSplit);
+        specialHandlerMap.put(SpecialExprType.SPLIT_INDEX, RexNodeUtil::handleSplitIndex);
+        specialHandlerMap.put(SpecialExprType.COUNT_CHAR, RexNodeUtil::handleCountChar);
+        specialHandlerMap.put(SpecialExprType.SEARCH, RexNodeUtil::handleSearch);
+        specialHandlerMap.put(SpecialExprType.HASH_CODE, RexNodeUtil::handleHashCode);
+        specialHandlerMap.put(SpecialExprType.EXTRACT, RexNodeUtil::handleExtract);
+        specialHandlerMap.put(SpecialExprType.LOWER, RexNodeUtil::handleLower);
+        specialHandlerMap.put(SpecialExprType.CHAR_LENGTH, RexNodeUtil::handleCharLength);
+        specialHandlerMap.put(SpecialExprType.IS_NOT_NULL, RexNodeUtil::handleIsNotNull);
+        specialHandlerMap.put(SpecialExprType.TO_TIMESTAMP_LTZ, RexNodeUtil::handleToTimestampLtz);
+        specialHandlerMap.put(SpecialExprType.PROCTIME, RexNodeUtil::handleProctime);
+        specialHandlerMap.put(SpecialExprType.DATE_FORMAT, RexNodeUtil::handleDateFormat);
+        specialHandlerMap.put(SpecialExprType.CAST, RexNodeUtil::handleCast);
+        specialHandlerMap.put(SpecialExprType.AND, RexNodeUtil::handleAnd);
+        specialHandlerMap.put(SpecialExprType.OR, RexNodeUtil::handleOr);
+        specialHandlerMap.put(SpecialExprType.CURRENT_TIMESTAMP, RexNodeUtil::handleCurrentTimestamp);
+        specialHandlerMap.put(SpecialExprType.DATE_ADD, RexNodeUtil::handleDateAdd);
+        specialHandlerMap.put(SpecialExprType.FROM_UNIXTIME, RexNodeUtil::handleFromUnixtime);
+        // Simple FUNCTION-forwarding expressions share one handler (function_name via simpleFunctionNameMap).
+        specialHandlerMap.put(SpecialExprType.ROUND, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.GREATEST, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.LEAST, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.CONCAT, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.CONCAT_WS, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.REPLACE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.SUBSTR, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.INSTR, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
+    }
+
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
         T operatorType = operatorMap.get(operatorName);
         if (operatorType != null) {
             return operatorType;
         }
         return operatorMap.get(operatorName.toUpperCase(Locale.ROOT));
+    }
+
+    /**
+     * Strategy interface for translating a special RexCall into its OmniOperator JSON map.
+     * Implemented by the private static {@code handleXxx} methods and wired up in
+     * {@link #specialHandlerMap}. This replaces the former monolithic switch-case so that
+     * adding a new special expression does not require editing a shared block.
+     */
+    @FunctionalInterface
+    public interface SpecialExprHandler {
+        Map<String, Object> handle(RexCall rexCall, List<RexNode> operands,
+                Map<String, Object> jsonMap, SpecialExprType specialType);
     }
 
     public enum OperatorExprType {
@@ -340,525 +395,13 @@ public class RexNodeUtil {
                 jsonMap.put("expr", childMap);
                 return jsonMap;
             } else if (specialType != null) {
-                switch (specialType){
-                    case SWITCH: // This is the more general switch
-                    case IF:
-                        jsonMap.put("exprType",  "SWITCH_GENERAL");
-                        setDataType(rexCall,jsonMap, "returnType");
-                        // SWITCH([input_expr, condition1], 'result1', [input_expr, condition2], 'result2', 'optional other')
-                        int numOfCases = (numOperands - 1) / 2;
-                        jsonMap.put("numOfCases", numOfCases);
-
-                        for (int i = 0; i < numOfCases; i++) {
-                            Map<String, Object> caseMap = new LinkedHashMap<>();
-                            caseMap.put("when", buildJsonMap(operands.get(i * 2)));
-                            caseMap.put("result", buildJsonMap(operands.get(i * 2 + 1)));
-                            caseMap.put("exprType", "WHEN");
-                            setDataType(operands.get(i * 2 + 1), caseMap, "returnType");
-                            jsonMap.put("Case"+Integer.toString(i + 1), caseMap);
-                        }
-                        // The else
-                        jsonMap.put("else", buildJsonMap(operands.get(operands.size() - 1)));
-                        break;
-                    case REGEXP_EXTRACT:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall,jsonMap, "returnType");
-                        jsonMap.put("function_name", "regex_extract_null");
-
-                        List<Map<String, Object>> regArgs = new ArrayList<>();
-                        regArgs.add(buildJsonMap(operands.get(0)));
-                        regArgs.add(buildJsonMap(operands.get(1)));
-                        regArgs.add(buildJsonMap(operands.get(2)));
-                        jsonMap.put("arguments", regArgs);
-                        LOG.info("The expression is {} ", rexCall.toString());
-                        break;
-                    case COALESCE:
-                        if (operands.isEmpty()) {
-                            LOG.warn("COALESCE expects at least 1 argument, but got {}", operands.size());
-                            jsonMap.put("exprType", "INVALID");
-                            break;
-                        }
-
-                        if (operands.size() == 1) {
-                            return buildJsonMap(operands.get(0));
-                        }
-
-                        Map<String, Object> nested = null;
-                        for (int i = operands.size() - 1; i >= 1; i--) {
-                            Map<String, Object> node = new LinkedHashMap<>();
-                            node.put("exprType", "COALESCE");
-                            setDataType(rexCall, node, "returnType");
-                            node.put("value1", buildJsonMap(operands.get(i - 1)));
-                            if (nested == null) {
-                                node.put("value2", buildJsonMap(operands.get(i)));
-                            } else {
-                                node.put("value2", nested);
-                            }
-                            nested = node;
-                        }
-
-                        if (nested != null) {
-                            jsonMap.putAll(nested);
-                        } else {
-                            jsonMap.put("exprType", "INVALID");
-                        }
-                        break;
-                    case JSON_VALUE:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall,jsonMap, "returnType");
-                        jsonMap.put("function_name", "json_value");
-
-                        List<Map<String, Object>> jsonArgs = new ArrayList<>();
-                        jsonArgs.add(buildJsonMap(operands.get(0))); // json input
-                        jsonArgs.add(buildJsonMap(operands.get(1))); // path expression
-                        
-                        // Parse ON EMPTY behavior (operands 2-4)
-                        if (operands.size() > 2) {
-                            Map<String, Object> emptyBehavior = parseBehaviorOperands(operands, 2, "emptyBehavior");
-                            if (emptyBehavior != null) {
-                                jsonMap.put("emptyBehavior", emptyBehavior);
-                            }
-                        }
-                        
-                        // Parse ON ERROR behavior (operands 5-7)
-                        if (operands.size() > 5) {
-                            Map<String, Object> errorBehavior = parseBehaviorOperands(operands, 5, "errorBehavior");
-                            if (errorBehavior != null) {
-                                jsonMap.put("errorBehavior", errorBehavior);
-                            }
-                        }
-                        
-                        jsonMap.put("arguments", jsonArgs);
-                        LOG.info("The JSON_VALUE expression is {} ", rexCall.toString());
-                        break;
-                    case JSON_QUERY:
-                        if (operands.size() != 2 && operands.size() != 3 && operands.size() != 5) {
-                            LOG.warn("JSON_QUERY expects 2, 3, or 5 operands, but got {}", operands.size());
-                            jsonMap.put("exprType", "INVALID");
-                            break;
-                        }
-
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", "json_query");
-
-                        List<Map<String, Object>> queryArgs = new ArrayList<>();
-                        queryArgs.add(buildJsonMap(operands.get(0)));
-                        queryArgs.add(buildJsonMap(operands.get(1)));
-
-                        if (operands.size() > 2) {
-                            Map<String, Object> wrapperBehavior = parseJsonQueryWrapperOperand(operands.get(2));
-                            if (wrapperBehavior == null) {
-                                LOG.warn("Failed to parse JSON_QUERY wrapper behavior from operand {}", operands.get(2));
-                                jsonMap.put("exprType", "INVALID");
-                                break;
-                            }
-                            jsonMap.put("wrapperBehavior", wrapperBehavior);
-                        }
-
-                        if (operands.size() > 3) {
-                            Map<String, Object> emptyBehavior = parseJsonQueryBehaviorOperand(operands.get(3));
-                            if (emptyBehavior == null) {
-                                LOG.warn("Failed to parse JSON_QUERY empty behavior from operand {}", operands.get(3));
-                                jsonMap.put("exprType", "INVALID");
-                                break;
-                            }
-                            jsonMap.put("emptyBehavior", emptyBehavior);
-                        }
-
-                        if (operands.size() > 4) {
-                            Map<String, Object> errorBehavior = parseJsonQueryBehaviorOperand(operands.get(4));
-                            if (errorBehavior == null) {
-                                LOG.warn("Failed to parse JSON_QUERY error behavior from operand {}", operands.get(4));
-                                jsonMap.put("exprType", "INVALID");
-                                break;
-                            }
-                            jsonMap.put("errorBehavior", errorBehavior);
-                        }
-
-                        jsonMap.put("arguments", queryArgs);
-                        LOG.info("The JSON_QUERY expression is {} ", rexCall.toString());
-                        break;
-                    case JSON_SPLIT:
-                        // JsonSplit is a ScalarFunction: eval(String input) -> String
-                        // Signature: 1 argument of type STRING, returns STRING
-                        // The UDF registration name is "jsontest", which is mapped to JSON_SPLIT here
-                        if (operands.size() != 1) {
-                            LOG.warn("JSON_SPLIT expects exactly 1 argument, but got {}", operands.size());
-                            jsonMap.put("exprType", "INVALID");
-                            break;
-                        }
-                        // Validate input type is STRING (VARCHAR)
-                        SqlTypeName inputType = operands.get(0).getType().getSqlTypeName();
-                        if (inputType != SqlTypeName.VARCHAR && inputType != SqlTypeName.CHAR) {
-                            LOG.warn("JSON_SPLIT expects STRING input, but got {}", inputType);
-                            jsonMap.put("exprType", "INVALID");
-                            break;
-                        }
-                        // Validate return type is STRING (VARCHAR)
-                        SqlTypeName jsonSplitReturnType = rexCall.getType().getSqlTypeName();
-                        if (jsonSplitReturnType != SqlTypeName.VARCHAR && jsonSplitReturnType != SqlTypeName.CHAR) {
-                            LOG.warn("JSON_SPLIT expects STRING return type, but got {}", jsonSplitReturnType);
-                            jsonMap.put("exprType", "INVALID");
-                            break;
-                        }
-
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", "json_split");
-
-                        List<Map<String, Object>> splitArgs = new ArrayList<>();
-                        splitArgs.add(buildJsonMap(operands.get(0))); // json array input
-
-                        jsonMap.put("arguments", splitArgs);
-
-                        LOG.info("The JSON_SPLIT expression is {} ", rexCall.toString());
-                        break;
-                    case SPLIT_INDEX:
-                        jsonMap.put("exprType", "FUNCTION");
-                        // todo:check VARCHAR(length) mapping to returnTypeID
-                        setDataType(rexCall,jsonMap, "returnType");
-                        jsonMap.put("function_name", "SplitIndex");
-
-                        List<Map<String, Object>> stringList = new ArrayList<>();
-                        stringList.add(buildJsonMap(operands.get(0)));
-                        stringList.add(buildJsonMap(operands.get(1)));
-                        stringList.add(buildJsonMap(operands.get(2)));
-
-                        LOG.info("List is {}", stringList.toString());
-                        jsonMap.put("arguments", stringList);
-                        LOG.info("The expresssion is {} ", rexCall.toString());
-                        break;
-                    case COUNT_CHAR:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", "CountChar");
-
-                        stringList = new ArrayList<>();
-                        stringList.add(buildJsonMap(operands.get(0)));
-                        stringList.add(buildJsonMap(operands.get(1)));
-
-                        LOG.info("List is {}", stringList.toString());
-                        jsonMap.put("arguments", stringList);
-                        LOG.info("The expresssion is {} ", rexCall.toString());
-                        break;
-                    case SEARCH:
-                        RexLiteral searchArg = (RexLiteral) operands.get(1);  // Sarg object
-                        // Get the Sarg value
-                        Sarg<?> sarg = ((RexLiteral) searchArg).getValueAs(Sarg.class);
-                        // Check if its a list or a range
-                        if (sarg.isPoints()) { // A point list
-                            jsonMap.put("exprType", "IN");
-                            setDataType(rexCall,jsonMap, "returnType");
-
-                            stringList = new ArrayList<>();
-                            // first argument is the input
-                            stringList.add(buildJsonMap(operands.get(0)));
-                            // Extract all elements from the list
-                            List<?> values = new ArrayList<>(sarg.rangeSet.asRanges().stream()
-                                    .map(range -> range.lowerEndpoint()).collect(Collectors.toList()));
-
-                            for(int i = 0; i < values.size(); i++) {
-                                Map<String, Object> literalMap = new LinkedHashMap<>();
-                                literalMap.put("exprType", "LITERAL");
-                                literalMap.put("isNull", false);
-                                if (values.get(i) instanceof NlsString) {
-                                    String endpoint = ((NlsString) values.get(i)).getValue();
-                                    literalMap.put("value", endpoint);
-                                    setDataType(operands.get(0), literalMap, "dataType");
-                                } else {
-                                    literalMap.put("value", values.get(i));
-                                    setDataType(operands.get(0), literalMap, "dataType");
-                                }
-                                stringList.add(literalMap);
-                            }
-                            jsonMap.put("arguments", stringList);
-                        } else { // a range
-                            jsonMap.put("exprType", "BETWEEN");
-                            setDataType(rexCall,jsonMap, "returnType");
-                            jsonMap.put("value", buildJsonMap(operands.get(0)));
-                            // TODO: inclusive, exclusive problem not solved!
-
-                            // Extract lower and upper bounds
-                            Object lowerBound = sarg.rangeSet.asRanges().iterator().next().lowerEndpoint();
-                            Object upperBound = sarg.rangeSet.asRanges().iterator().next().upperEndpoint();
-
-                            Map<String, Object> lowMap = new LinkedHashMap<>();
-                            lowMap.put("exprType", "LITERAL");
-                            lowMap.put("isNull", false);
-                            lowMap.put("value", lowerBound);
-                            setDataType(operands.get(0), lowMap, "dataType");
-                            jsonMap.put("lower_bound", lowMap);
-
-                            Map<String, Object> upMap = new LinkedHashMap<>();
-                            upMap.put("exprType", "LITERAL");
-                            upMap.put("isNull", false);
-                            upMap.put("value", upperBound);
-                            setDataType(operands.get(0), upMap, "dataType");
-                            jsonMap.put("upper_bound", upMap);
-                        }
-                        break;
-                    case HASH_CODE:
-                        jsonMap.put("exprType", "FUNCTION");
-                        Integer returnType = RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString());
-                        if (returnType == 1){
-                            jsonMap.put("function_name", "mm3hash");
-                        } else {
-                            jsonMap.put("function_name", "xxhash64");
-                        }
-                        jsonMap.put("function_name", "mm3hash");
-                        setDataType(rexCall,jsonMap, "returnType");
-                        List<Object> arguments = new LinkedList<>();
-                        Map<String, Object> seed = new LinkedHashMap<>();
-                        // Set the seed to 0
-                        seed.put("value", 0);
-                        seed.put("isNull", false);
-                        seed.put("exprType", "LITERAL");
-                        seed.put("dataType", returnType);
-                        arguments.add(buildJsonMap(operands.get(0)));
-                        arguments.add(seed);
-                        jsonMap.put("arguments", arguments);
-                        break;
-                    case EXTRACT:
-                        // Current hardcoded solution for extracting hour
-                        if (operands.get(0).toString().equals("FLAG(HOUR)")) { // && operands.get(1).toString().equals("CAST($2):TIMESTAMP(3)")
-                            jsonMap.put("exprType", "FUNCTION");
-                            // Returns int for 0-24
-                            jsonMap.put("returnType", 1);
-                            List<Object> args = new LinkedList<>();
-                            args.add(buildJsonMap(operands.get(1)));
-                            if (operands.get(1).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-                                jsonMap.put("function_name", "get_hour_with_tz");
-                                Map<String, Object> argMap = new LinkedHashMap<>();
-                                argMap.put("dataType", 15);
-                                argMap.put("exprType", "LITERAL");
-                                argMap.put("isNull", false);
-                                argMap.put("value", CommonExecCalc.getZoneId().getId());
-                                argMap.put("width", CommonExecCalc.getZoneId().getId().length());
-                                args.add(argMap);
-                            } else {
-                                jsonMap.put("function_name", "get_hour");
-                            }
-                            jsonMap.put("arguments", args);
-                        } else {
-                            jsonMap.put("exprType", "INVALID");
-                        }
-                        break;
-                    case LOWER:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall,jsonMap, "returnType");
-                        jsonMap.put("function_name", "lower");
-                        List<Map<String, Object>> lowerArgList = new ArrayList<>();
-                        lowerArgList.add(buildJsonMap(operands.get(0)));
-                        jsonMap.put("arguments", lowerArgList);
-                        break;
-                    case CHAR_LENGTH:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", "char_length");
-                        List<Map<String, Object>> charLengthArgList = new ArrayList<>();
-                        charLengthArgList.add(buildJsonMap(operands.get(0)));
-                        jsonMap.put("arguments", charLengthArgList);
-                        break;
-                    case IS_NOT_NULL:
-                        jsonMap.put("exprType", "IS_NOT_NULL");
-                        setDataType(rexCall,jsonMap, "returnType");
-
-                        List<Map<String, Object>> notnullArgList = new ArrayList<>();
-                        notnullArgList.add(buildJsonMap(operands.get(0)));
-                        jsonMap.put("arguments", notnullArgList);
-                        break;
-                    case TO_TIMESTAMP_LTZ:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", "to_timestamp_ltz");
-                        List<Map<String, Object>> toTimestampLtzArgList = new ArrayList<>();
-                        for (int i = 0; i < operands.size(); i++) {
-                            toTimestampLtzArgList.add(buildJsonMap(operands.get(i)));
-                        }
-                        jsonMap.put("arguments", toTimestampLtzArgList);
-                        break;
-                    case PROCTIME:
-                        jsonMap.put("exprType", SpecialExprType.PROCTIME);
-                        jsonMap.put("returnType", RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString()));
-                        LOG.info("The operator is* {} ", operator.getName());
-                        LOG.info("The type is* {} ", rexCall.getType().getSqlTypeName().toString());
-                        break;
-                    case DATE_FORMAT:
-                        jsonMap.put("exprType", "FUNCTION");
-                        Integer returnDataType = RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString());
-                        jsonMap.put("returnType", returnDataType);
-                        jsonMap.put("width", operands.get(1).getType().getPrecision());
-                        List<Map<String, Object>> argumentsList = new ArrayList<>();
-                        Map<String, Object> argMap1 = buildJsonMap(operands.get(0));
-                        setDataType(operands.get(0), argMap1, "dataType");
-                        if (!argMap1.getOrDefault("dataType", 2).equals(2)) {
-                            argMap1.put("value", "INVALID");
-                        }
-                        argMap1.put("dataType", 2);
-                        argumentsList.add(argMap1);
-                        Map<String, Object> argMap2 = buildJsonMap(operands.get(1));
-                        argMap2.put("dataType", returnDataType);
-                        argumentsList.add(argMap2);
-                        if ("yyyy-MM-dd".equals(argMap2.get("value"))) {
-                            argMap2.put("value", "%Y-%m-%d");
-                        } else if ("HH:mm".equals(argMap2.get("value"))) {
-                            argMap2.put("value", "%H:%M");
-                        } else if ("HH".equals(argMap2.get("value"))) {
-                            argMap2.put("value", "%H");
-                        } else {
-                            argMap2.put("value", "INVALID");
-                        }
-                        if (operands.get(0).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-                            jsonMap.put("function_name", "from_unixtime_with_tz");
-                            Map<String, Object> argMap3 = new LinkedHashMap<>();
-                            argMap3.put("dataType", 15);
-                            argMap3.put("exprType", "LITERAL");
-                            argMap3.put("isNull", false);
-                            argMap3.put("value", CommonExecCalc.getZoneId().getId());
-                            argMap3.put("width", CommonExecCalc.getZoneId().getId().length());
-                            argumentsList.add(argMap3);
-                        } else {
-                            jsonMap.put("function_name", "from_unixtime_without_tz");
-                        }
-                        jsonMap.put("arguments", argumentsList);
-                        break;
-                    case CAST:
-                        jsonMap.put("exprType", "FUNCTION");
-                        Map<String, Object> childMap = buildJsonMap(operands.get(0));
-                        SqlTypeName currentTypeName = rexCall.getType().getSqlTypeName();
-                        SqlTypeName childTypeName = operands.get(0).getType().getSqlTypeName();
-                        boolean decimalSameScale = currentTypeName == SqlTypeName.DECIMAL
-                                && childTypeName == SqlTypeName.DECIMAL
-                                && rexNode.getType().getScale() == operands.get(0).getType().getScale();
-                        boolean nonDecimalSameType = currentTypeName != SqlTypeName.DECIMAL
-                                && childTypeName != SqlTypeName.DECIMAL
-                                && currentTypeName == childTypeName;
-                        if (nonDecimalSameType || decimalSameScale) {
-                            return childMap;
-                        }
-                        setDataType(rexCall,jsonMap, "returnType");
-                        jsonMap.put("function_name", specialType.name());
-                        jsonMap.put("expr", childMap);
-                        List<Map<String, Object>> castArgList = new ArrayList<>();
-                        castArgList.add(buildJsonMap(operands.get(0)));
-                        jsonMap.put("arguments", castArgList);
-                        break;
-                    case AND:
-                        jsonMap.put("exprType", "MULTIPLE_AND_OR");
-                        jsonMap.put("operator", "AND");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        List<Map<String, Object>> cond = new ArrayList<>();
-                        for (int i=0; i < rexCall.operands.size(); i++) {
-                            cond.add(buildJsonMap(operands.get(i)));
-                        }
-                        jsonMap.put("conditions", cond);
-                        LOG.info("List is {}", cond.toString());
-                        LOG.info("The expression is {} ", rexCall.toString());
-                        break;
-                    case OR:
-                        jsonMap.put("exprType", "MULTIPLE_AND_OR");
-                        jsonMap.put("operator", "OR");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        cond = new ArrayList<>();
-                        for (int i=0; i < rexCall.operands.size(); i++) {
-                            cond.add(buildJsonMap(operands.get(i)));
-                        }
-                        jsonMap.put("conditions", cond);
-                        LOG.info("List is {}", cond.toString());
-                        LOG.info("The expression is {} ", rexCall.toString());
-                        break;
-                    case CURRENT_TIMESTAMP:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", "current_timestamp");
-                        List<Map<String, Object>> currentTimestampArgs = new ArrayList<>();
-                        if (operands.size() > 0) {
-                            for (int i = 0; i < operands.size(); i++) {
-                                currentTimestampArgs.add(buildJsonMap(operands.get(i)));
-                            }
-                        }
-                        jsonMap.put("arguments", currentTimestampArgs);
-                        LOG.info("The CURRENT_TIMESTAMP expression is {} ", rexCall.toString());
-                        break;
-                    case DATE_ADD:
-                        jsonMap.put("exprType", "FUNCTION");
-                        jsonMap.put("returnType", 2);
-                        jsonMap.put("function_name", "date_add_days");
-                        List<Map<String, Object>> dateAddArgs = new ArrayList<>();
-                        for (int i = 0; i < operands.size(); i++) {
-                            Map<String, Object> argMap = buildJsonMap(operands.get(i));
-                            if (i == 0) {
-                                SqlTypeName firstArgType = operands.get(0).getType().getSqlTypeName();
-                                if (firstArgType == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
-                                        || SqlTypeName.DATETIME_TYPES.contains(firstArgType)) {
-                                    argMap.put("dataType", 2);
-                                }
-                            }
-                            dateAddArgs.add(argMap);
-                        }
-                        jsonMap.put("arguments", dateAddArgs);
-                        LOG.info("The DATE_ADD expression is {} ", rexCall.toString());
-                        break;
-                    case FROM_UNIXTIME:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", "from_unixtime");
-                        List<Map<String, Object>> fromUnixTimeArgs = new ArrayList<>();
-                        Map<String, Object> fromUnixTimeInputArg = buildJsonMap(operands.get(0));
-                        setDataType(operands.get(0), fromUnixTimeInputArg, "dataType");
-                        normalizeCharLiteralToVarchar(fromUnixTimeInputArg);
-                        fromUnixTimeArgs.add(fromUnixTimeInputArg);
-                        Map<String, Object> fromUnixTimeFormatArg;
-                        if (operands.size() >= 2) {
-                            fromUnixTimeFormatArg = buildJsonMap(operands.get(1));
-                            normalizeCharLiteralToVarchar(fromUnixTimeFormatArg);
-                        } else {
-                            // Flink default: FROM_UNIXTIME(numeric) -> 'yyyy-MM-dd HH:mm:ss'
-                            fromUnixTimeFormatArg = new LinkedHashMap<>();
-                            fromUnixTimeFormatArg.put("exprType", "LITERAL");
-                            fromUnixTimeFormatArg.put("dataType", RexTypeToIdMap.get("VARCHAR"));
-                            fromUnixTimeFormatArg.put("isNull", false);
-                            fromUnixTimeFormatArg.put("value", "yyyy-MM-dd HH:mm:ss");
-                            fromUnixTimeFormatArg.put("width", 19);
-                        }
-                        fromUnixTimeArgs.add(fromUnixTimeFormatArg);
-                        if (operands.get(0).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-                            Map<String, Object> fromUnixTimeTzArg = new LinkedHashMap<>();
-                            fromUnixTimeTzArg.put("dataType", RexTypeToIdMap.get("VARCHAR"));
-                            fromUnixTimeTzArg.put("exprType", "LITERAL");
-                            fromUnixTimeTzArg.put("isNull", false);
-                            fromUnixTimeTzArg.put("value", CommonExecCalc.getZoneId().getId());
-                            fromUnixTimeTzArg.put("width", CommonExecCalc.getZoneId().getId().length());
-                            fromUnixTimeArgs.add(fromUnixTimeTzArg);
-                        }
-                        jsonMap.put("arguments", fromUnixTimeArgs);
-                        break;
-                    case ROUND:
-                    case GREATEST:
-                    case LEAST:
-                    case CONCAT:
-                    case CONCAT_WS:
-                    case REPLACE:
-                    case SUBSTR:
-                    case INSTR:
-                    case UNIX_TIMESTAMP:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", simpleFunctionNameMap.get(specialType));
-                        List<Map<String, Object>> simpleArgList = new ArrayList<>();
-                        for (int i = 0; i < operands.size(); i++) {
-                            Map<String, Object> argMap = buildJsonMap(operands.get(i));
-                            normalizeCharLiteralToVarchar(argMap);
-                            simpleArgList.add(argMap);
-                        }
-                        jsonMap.put("arguments", simpleArgList);
-                        break;
-                    default:
-                        jsonMap.put("exprType", "INVALID");
-                        break;
+                // Strategy dispatch: replaces the former switch(specialType) block.
+                SpecialExprHandler handler = specialHandlerMap.get(specialType);
+                if (handler == null) {
+                    jsonMap.put("exprType", "INVALID");
+                    return jsonMap;
                 }
-                return jsonMap;
+                return handler.handle(rexCall, operands, jsonMap, specialType);
             } else {
                 LOG.info("The operator {} is not supported", operator.toString());
                 LOG.info("The expression is {} ", rexCall.toString());
@@ -909,6 +452,595 @@ public class RexNodeUtil {
             LOG.info("The RexNode is not a RexCall/RexInputRef/RexLiteral. It is not recognized.");
             return jsonMap;
         }
+    }
+
+    // =========================================================================
+    // Special-expression handlers (one per SpecialExprType, wired in specialHandlerMap).
+    // Each handler receives the RexCall, its operands, a pre-created jsonMap and the resolved
+    // SpecialExprType, and returns the fully-populated JSON map for that expression.
+    // =========================================================================
+
+    private static Map<String, Object> handleSwitch(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        int numOperands = operands.size();
+        jsonMap.put("exprType",  "SWITCH_GENERAL");
+        setDataType(rexCall,jsonMap, "returnType");
+        // SWITCH([input_expr, condition1], 'result1', [input_expr, condition2], 'result2', 'optional other')
+        int numOfCases = (numOperands - 1) / 2;
+        jsonMap.put("numOfCases", numOfCases);
+
+        for (int i = 0; i < numOfCases; i++) {
+            Map<String, Object> caseMap = new LinkedHashMap<>();
+            caseMap.put("when", buildJsonMap(operands.get(i * 2)));
+            caseMap.put("result", buildJsonMap(operands.get(i * 2 + 1)));
+            caseMap.put("exprType", "WHEN");
+            setDataType(operands.get(i * 2 + 1), caseMap, "returnType");
+            jsonMap.put("Case"+Integer.toString(i + 1), caseMap);
+        }
+        // The else
+        jsonMap.put("else", buildJsonMap(operands.get(operands.size() - 1)));
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleRegexpExtract(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall,jsonMap, "returnType");
+        jsonMap.put("function_name", "regex_extract_null");
+
+        List<Map<String, Object>> regArgs = new ArrayList<>();
+        regArgs.add(buildJsonMap(operands.get(0)));
+        regArgs.add(buildJsonMap(operands.get(1)));
+        regArgs.add(buildJsonMap(operands.get(2)));
+        jsonMap.put("arguments", regArgs);
+        LOG.info("The expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleCoalesce(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (operands.isEmpty()) {
+            LOG.warn("COALESCE expects at least 1 argument, but got {}", operands.size());
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+
+        if (operands.size() == 1) {
+            return buildJsonMap(operands.get(0));
+        }
+
+        Map<String, Object> nested = null;
+        for (int i = operands.size() - 1; i >= 1; i--) {
+            Map<String, Object> node = new LinkedHashMap<>();
+            node.put("exprType", "COALESCE");
+            setDataType(rexCall, node, "returnType");
+            node.put("value1", buildJsonMap(operands.get(i - 1)));
+            if (nested == null) {
+                node.put("value2", buildJsonMap(operands.get(i)));
+            } else {
+                node.put("value2", nested);
+            }
+            nested = node;
+        }
+
+        if (nested != null) {
+            jsonMap.putAll(nested);
+        } else {
+            jsonMap.put("exprType", "INVALID");
+        }
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleJsonValue(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall,jsonMap, "returnType");
+        jsonMap.put("function_name", "json_value");
+
+        List<Map<String, Object>> jsonArgs = new ArrayList<>();
+        jsonArgs.add(buildJsonMap(operands.get(0))); // json input
+        jsonArgs.add(buildJsonMap(operands.get(1))); // path expression
+
+        // Parse ON EMPTY behavior (operands 2-4)
+        if (operands.size() > 2) {
+            Map<String, Object> emptyBehavior = parseBehaviorOperands(operands, 2, "emptyBehavior");
+            if (emptyBehavior != null) {
+                jsonMap.put("emptyBehavior", emptyBehavior);
+            }
+        }
+
+        // Parse ON ERROR behavior (operands 5-7)
+        if (operands.size() > 5) {
+            Map<String, Object> errorBehavior = parseBehaviorOperands(operands, 5, "errorBehavior");
+            if (errorBehavior != null) {
+                jsonMap.put("errorBehavior", errorBehavior);
+            }
+        }
+
+        jsonMap.put("arguments", jsonArgs);
+        LOG.info("The JSON_VALUE expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleJsonQuery(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (operands.size() != 2 && operands.size() != 3 && operands.size() != 5) {
+            LOG.warn("JSON_QUERY expects 2, 3, or 5 operands, but got {}", operands.size());
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "json_query");
+
+        List<Map<String, Object>> queryArgs = new ArrayList<>();
+        queryArgs.add(buildJsonMap(operands.get(0)));
+        queryArgs.add(buildJsonMap(operands.get(1)));
+
+        if (operands.size() > 2) {
+            Map<String, Object> wrapperBehavior = parseJsonQueryWrapperOperand(operands.get(2));
+            if (wrapperBehavior == null) {
+                LOG.warn("Failed to parse JSON_QUERY wrapper behavior from operand {}", operands.get(2));
+                jsonMap.put("exprType", "INVALID");
+                return jsonMap;
+            }
+            jsonMap.put("wrapperBehavior", wrapperBehavior);
+        }
+
+        if (operands.size() > 3) {
+            Map<String, Object> emptyBehavior = parseJsonQueryBehaviorOperand(operands.get(3));
+            if (emptyBehavior == null) {
+                LOG.warn("Failed to parse JSON_QUERY empty behavior from operand {}", operands.get(3));
+                jsonMap.put("exprType", "INVALID");
+                return jsonMap;
+            }
+            jsonMap.put("emptyBehavior", emptyBehavior);
+        }
+
+        if (operands.size() > 4) {
+            Map<String, Object> errorBehavior = parseJsonQueryBehaviorOperand(operands.get(4));
+            if (errorBehavior == null) {
+                LOG.warn("Failed to parse JSON_QUERY error behavior from operand {}", operands.get(4));
+                jsonMap.put("exprType", "INVALID");
+                return jsonMap;
+            }
+            jsonMap.put("errorBehavior", errorBehavior);
+        }
+
+        jsonMap.put("arguments", queryArgs);
+        LOG.info("The JSON_QUERY expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleJsonSplit(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // JsonSplit is a ScalarFunction: eval(String input) -> String
+        // Signature: 1 argument of type STRING, returns STRING
+        // The UDF registration name is "jsontest", which is mapped to JSON_SPLIT here
+        if (operands.size() != 1) {
+            LOG.warn("JSON_SPLIT expects exactly 1 argument, but got {}", operands.size());
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+        // Validate input type is STRING (VARCHAR)
+        SqlTypeName inputType = operands.get(0).getType().getSqlTypeName();
+        if (inputType != SqlTypeName.VARCHAR && inputType != SqlTypeName.CHAR) {
+            LOG.warn("JSON_SPLIT expects STRING input, but got {}", inputType);
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+        // Validate return type is STRING (VARCHAR)
+        SqlTypeName jsonSplitReturnType = rexCall.getType().getSqlTypeName();
+        if (jsonSplitReturnType != SqlTypeName.VARCHAR && jsonSplitReturnType != SqlTypeName.CHAR) {
+            LOG.warn("JSON_SPLIT expects STRING return type, but got {}", jsonSplitReturnType);
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "json_split");
+
+        List<Map<String, Object>> splitArgs = new ArrayList<>();
+        splitArgs.add(buildJsonMap(operands.get(0))); // json array input
+
+        jsonMap.put("arguments", splitArgs);
+
+        LOG.info("The JSON_SPLIT expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleSplitIndex(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        // todo:check VARCHAR(length) mapping to returnTypeID
+        setDataType(rexCall,jsonMap, "returnType");
+        jsonMap.put("function_name", "SplitIndex");
+
+        List<Map<String, Object>> stringList = new ArrayList<>();
+        stringList.add(buildJsonMap(operands.get(0)));
+        stringList.add(buildJsonMap(operands.get(1)));
+        stringList.add(buildJsonMap(operands.get(2)));
+
+        LOG.info("List is {}", stringList.toString());
+        jsonMap.put("arguments", stringList);
+        LOG.info("The expresssion is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleCountChar(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "CountChar");
+
+        List<Map<String, Object>> stringList = new ArrayList<>();
+        stringList.add(buildJsonMap(operands.get(0)));
+        stringList.add(buildJsonMap(operands.get(1)));
+
+        LOG.info("List is {}", stringList.toString());
+        jsonMap.put("arguments", stringList);
+        LOG.info("The expresssion is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleSearch(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        RexLiteral searchArg = (RexLiteral) operands.get(1);  // Sarg object
+        // Get the Sarg value
+        Sarg<?> sarg = ((RexLiteral) searchArg).getValueAs(Sarg.class);
+        // Check if its a list or a range
+        if (sarg.isPoints()) { // A point list
+            jsonMap.put("exprType", "IN");
+            setDataType(rexCall,jsonMap, "returnType");
+
+            List<Map<String, Object>> stringList = new ArrayList<>();
+            // first argument is the input
+            stringList.add(buildJsonMap(operands.get(0)));
+            // Extract all elements from the list
+            List<?> values = new ArrayList<>(sarg.rangeSet.asRanges().stream()
+                    .map(range -> range.lowerEndpoint()).collect(Collectors.toList()));
+
+            for(int i = 0; i < values.size(); i++) {
+                Map<String, Object> literalMap = new LinkedHashMap<>();
+                literalMap.put("exprType", "LITERAL");
+                literalMap.put("isNull", false);
+                if (values.get(i) instanceof NlsString) {
+                    String endpoint = ((NlsString) values.get(i)).getValue();
+                    literalMap.put("value", endpoint);
+                    setDataType(operands.get(0), literalMap, "dataType");
+                } else {
+                    literalMap.put("value", values.get(i));
+                    setDataType(operands.get(0), literalMap, "dataType");
+                }
+                stringList.add(literalMap);
+            }
+            jsonMap.put("arguments", stringList);
+        } else { // a range
+            jsonMap.put("exprType", "BETWEEN");
+            setDataType(rexCall,jsonMap, "returnType");
+            jsonMap.put("value", buildJsonMap(operands.get(0)));
+            // TODO: inclusive, exclusive problem not solved!
+
+            // Extract lower and upper bounds
+            Object lowerBound = sarg.rangeSet.asRanges().iterator().next().lowerEndpoint();
+            Object upperBound = sarg.rangeSet.asRanges().iterator().next().upperEndpoint();
+
+            Map<String, Object> lowMap = new LinkedHashMap<>();
+            lowMap.put("exprType", "LITERAL");
+            lowMap.put("isNull", false);
+            lowMap.put("value", lowerBound);
+            setDataType(operands.get(0), lowMap, "dataType");
+            jsonMap.put("lower_bound", lowMap);
+
+            Map<String, Object> upMap = new LinkedHashMap<>();
+            upMap.put("exprType", "LITERAL");
+            upMap.put("isNull", false);
+            upMap.put("value", upperBound);
+            setDataType(operands.get(0), upMap, "dataType");
+            jsonMap.put("upper_bound", upMap);
+        }
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleHashCode(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        Integer returnType = RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString());
+        if (returnType == 1){
+            jsonMap.put("function_name", "mm3hash");
+        } else {
+            jsonMap.put("function_name", "xxhash64");
+        }
+        jsonMap.put("function_name", "mm3hash");
+        setDataType(rexCall,jsonMap, "returnType");
+        List<Object> arguments = new LinkedList<>();
+        Map<String, Object> seed = new LinkedHashMap<>();
+        // Set the seed to 0
+        seed.put("value", 0);
+        seed.put("isNull", false);
+        seed.put("exprType", "LITERAL");
+        seed.put("dataType", returnType);
+        arguments.add(buildJsonMap(operands.get(0)));
+        arguments.add(seed);
+        jsonMap.put("arguments", arguments);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleExtract(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // Current hardcoded solution for extracting hour
+        if (operands.get(0).toString().equals("FLAG(HOUR)")) { // && operands.get(1).toString().equals("CAST($2):TIMESTAMP(3)")
+            jsonMap.put("exprType", "FUNCTION");
+            // Returns int for 0-24
+            jsonMap.put("returnType", 1);
+            List<Object> args = new LinkedList<>();
+            args.add(buildJsonMap(operands.get(1)));
+            if (operands.get(1).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                jsonMap.put("function_name", "get_hour_with_tz");
+                Map<String, Object> argMap = new LinkedHashMap<>();
+                argMap.put("dataType", 15);
+                argMap.put("exprType", "LITERAL");
+                argMap.put("isNull", false);
+                argMap.put("value", CommonExecCalc.getZoneId().getId());
+                argMap.put("width", CommonExecCalc.getZoneId().getId().length());
+                args.add(argMap);
+            } else {
+                jsonMap.put("function_name", "get_hour");
+            }
+            jsonMap.put("arguments", args);
+        } else {
+            jsonMap.put("exprType", "INVALID");
+        }
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleLower(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall,jsonMap, "returnType");
+        jsonMap.put("function_name", "lower");
+        List<Map<String, Object>> lowerArgList = new ArrayList<>();
+        lowerArgList.add(buildJsonMap(operands.get(0)));
+        jsonMap.put("arguments", lowerArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleCharLength(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "char_length");
+        List<Map<String, Object>> charLengthArgList = new ArrayList<>();
+        charLengthArgList.add(buildJsonMap(operands.get(0)));
+        jsonMap.put("arguments", charLengthArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleIsNotNull(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "IS_NOT_NULL");
+        setDataType(rexCall,jsonMap, "returnType");
+
+        List<Map<String, Object>> notnullArgList = new ArrayList<>();
+        notnullArgList.add(buildJsonMap(operands.get(0)));
+        jsonMap.put("arguments", notnullArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleToTimestampLtz(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "to_timestamp_ltz");
+        List<Map<String, Object>> toTimestampLtzArgList = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            toTimestampLtzArgList.add(buildJsonMap(operands.get(i)));
+        }
+        jsonMap.put("arguments", toTimestampLtzArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleProctime(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        SqlOperator operator = rexCall.getOperator();
+        jsonMap.put("exprType", SpecialExprType.PROCTIME);
+        jsonMap.put("returnType", RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString()));
+        LOG.info("The operator is* {} ", operator.getName());
+        LOG.info("The type is* {} ", rexCall.getType().getSqlTypeName().toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleDateFormat(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        Integer returnDataType = RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString());
+        jsonMap.put("returnType", returnDataType);
+        jsonMap.put("width", operands.get(1).getType().getPrecision());
+        List<Map<String, Object>> argumentsList = new ArrayList<>();
+        Map<String, Object> argMap1 = buildJsonMap(operands.get(0));
+        setDataType(operands.get(0), argMap1, "dataType");
+        if (!argMap1.getOrDefault("dataType", 2).equals(2)) {
+            argMap1.put("value", "INVALID");
+        }
+        argMap1.put("dataType", 2);
+        argumentsList.add(argMap1);
+        Map<String, Object> argMap2 = buildJsonMap(operands.get(1));
+        argMap2.put("dataType", returnDataType);
+        argumentsList.add(argMap2);
+        if ("yyyy-MM-dd".equals(argMap2.get("value"))) {
+            argMap2.put("value", "%Y-%m-%d");
+        } else if ("HH:mm".equals(argMap2.get("value"))) {
+            argMap2.put("value", "%H:%M");
+        } else if ("HH".equals(argMap2.get("value"))) {
+            argMap2.put("value", "%H");
+        } else {
+            argMap2.put("value", "INVALID");
+        }
+        if (operands.get(0).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+            jsonMap.put("function_name", "from_unixtime_with_tz");
+            Map<String, Object> argMap3 = new LinkedHashMap<>();
+            argMap3.put("dataType", 15);
+            argMap3.put("exprType", "LITERAL");
+            argMap3.put("isNull", false);
+            argMap3.put("value", CommonExecCalc.getZoneId().getId());
+            argMap3.put("width", CommonExecCalc.getZoneId().getId().length());
+            argumentsList.add(argMap3);
+        } else {
+            jsonMap.put("function_name", "from_unixtime_without_tz");
+        }
+        jsonMap.put("arguments", argumentsList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleCast(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        Map<String, Object> childMap = buildJsonMap(operands.get(0));
+        SqlTypeName currentTypeName = rexCall.getType().getSqlTypeName();
+        SqlTypeName childTypeName = operands.get(0).getType().getSqlTypeName();
+        boolean decimalSameScale = currentTypeName == SqlTypeName.DECIMAL
+                && childTypeName == SqlTypeName.DECIMAL
+                && rexCall.getType().getScale() == operands.get(0).getType().getScale();
+        boolean nonDecimalSameType = currentTypeName != SqlTypeName.DECIMAL
+                && childTypeName != SqlTypeName.DECIMAL
+                && currentTypeName == childTypeName;
+        if (nonDecimalSameType || decimalSameScale) {
+            return childMap;
+        }
+        setDataType(rexCall,jsonMap, "returnType");
+        jsonMap.put("function_name", specialType.name());
+        jsonMap.put("expr", childMap);
+        List<Map<String, Object>> castArgList = new ArrayList<>();
+        castArgList.add(buildJsonMap(operands.get(0)));
+        jsonMap.put("arguments", castArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleAnd(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "MULTIPLE_AND_OR");
+        jsonMap.put("operator", "AND");
+        setDataType(rexCall, jsonMap, "returnType");
+        List<Map<String, Object>> cond = new ArrayList<>();
+        for (int i=0; i < rexCall.operands.size(); i++) {
+            cond.add(buildJsonMap(operands.get(i)));
+        }
+        jsonMap.put("conditions", cond);
+        LOG.info("List is {}", cond.toString());
+        LOG.info("The expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleOr(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "MULTIPLE_AND_OR");
+        jsonMap.put("operator", "OR");
+        setDataType(rexCall, jsonMap, "returnType");
+        List<Map<String, Object>> cond = new ArrayList<>();
+        for (int i=0; i < rexCall.operands.size(); i++) {
+            cond.add(buildJsonMap(operands.get(i)));
+        }
+        jsonMap.put("conditions", cond);
+        LOG.info("List is {}", cond.toString());
+        LOG.info("The expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleCurrentTimestamp(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "current_timestamp");
+        List<Map<String, Object>> currentTimestampArgs = new ArrayList<>();
+        if (operands.size() > 0) {
+            for (int i = 0; i < operands.size(); i++) {
+                currentTimestampArgs.add(buildJsonMap(operands.get(i)));
+            }
+        }
+        jsonMap.put("arguments", currentTimestampArgs);
+        LOG.info("The CURRENT_TIMESTAMP expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleDateAdd(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        jsonMap.put("returnType", 2);
+        jsonMap.put("function_name", "date_add_days");
+        List<Map<String, Object>> dateAddArgs = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            Map<String, Object> argMap = buildJsonMap(operands.get(i));
+            if (i == 0) {
+                SqlTypeName firstArgType = operands.get(0).getType().getSqlTypeName();
+                if (firstArgType == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+                        || SqlTypeName.DATETIME_TYPES.contains(firstArgType)) {
+                    argMap.put("dataType", 2);
+                }
+            }
+            dateAddArgs.add(argMap);
+        }
+        jsonMap.put("arguments", dateAddArgs);
+        LOG.info("The DATE_ADD expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleFromUnixtime(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "from_unixtime");
+        List<Map<String, Object>> fromUnixTimeArgs = new ArrayList<>();
+        Map<String, Object> fromUnixTimeInputArg = buildJsonMap(operands.get(0));
+        setDataType(operands.get(0), fromUnixTimeInputArg, "dataType");
+        normalizeCharLiteralToVarchar(fromUnixTimeInputArg);
+        fromUnixTimeArgs.add(fromUnixTimeInputArg);
+        Map<String, Object> fromUnixTimeFormatArg;
+        if (operands.size() >= 2) {
+            fromUnixTimeFormatArg = buildJsonMap(operands.get(1));
+            normalizeCharLiteralToVarchar(fromUnixTimeFormatArg);
+        } else {
+            // Flink default: FROM_UNIXTIME(numeric) -> 'yyyy-MM-dd HH:mm:ss'
+            fromUnixTimeFormatArg = new LinkedHashMap<>();
+            fromUnixTimeFormatArg.put("exprType", "LITERAL");
+            fromUnixTimeFormatArg.put("dataType", RexTypeToIdMap.get("VARCHAR"));
+            fromUnixTimeFormatArg.put("isNull", false);
+            fromUnixTimeFormatArg.put("value", "yyyy-MM-dd HH:mm:ss");
+            fromUnixTimeFormatArg.put("width", 19);
+        }
+        fromUnixTimeArgs.add(fromUnixTimeFormatArg);
+        if (operands.get(0).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+            Map<String, Object> fromUnixTimeTzArg = new LinkedHashMap<>();
+            fromUnixTimeTzArg.put("dataType", RexTypeToIdMap.get("VARCHAR"));
+            fromUnixTimeTzArg.put("exprType", "LITERAL");
+            fromUnixTimeTzArg.put("isNull", false);
+            fromUnixTimeTzArg.put("value", CommonExecCalc.getZoneId().getId());
+            fromUnixTimeTzArg.put("width", CommonExecCalc.getZoneId().getId().length());
+            fromUnixTimeArgs.add(fromUnixTimeTzArg);
+        }
+        jsonMap.put("arguments", fromUnixTimeArgs);
+        return jsonMap;
+    }
+
+    /**
+     * Shared handler for simple FUNCTION-forwarding expressions (ROUND, GREATEST, LEAST,
+     * CONCAT, CONCAT_WS, REPLACE, SUBSTR, INSTR, UNIX_TIMESTAMP): the function_name comes from
+     * {@link #simpleFunctionNameMap} and every operand is forwarded as an argument.
+     */
+    private static Map<String, Object> handleSimpleFunction(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", simpleFunctionNameMap.get(specialType));
+        List<Map<String, Object>> simpleArgList = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            Map<String, Object> argMap = buildJsonMap(operands.get(i));
+            normalizeCharLiteralToVarchar(argMap);
+            simpleArgList.add(argMap);
+        }
+        jsonMap.put("arguments", simpleArgList);
+        return jsonMap;
     }
 
     /**
