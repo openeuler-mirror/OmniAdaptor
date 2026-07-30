@@ -165,12 +165,17 @@ public class RexNodeUtil {
         // Map SpecialExprType to the OmniOperatorJIT C++ registered function_name.
         // Used by the generic FUNCTION case that forwards all operands as arguments.
         simpleFunctionNameMap.put(SpecialExprType.ROUND, "round");
-        simpleFunctionNameMap.put(SpecialExprType.GREATEST, "Greatest");
-        simpleFunctionNameMap.put(SpecialExprType.LEAST, "Least");
+        // "flink_" prefixed natives exist where Flink semantics diverge from Spark's:
+        //   GREATEST/LEAST: Flink propagates NULL, Spark skips NULL arguments.
+        //   REPLACE:        Flink uses Java String.replace, so an empty search string inserts.
+        //   SUBSTR:         Flink returns NULL for a negative length and '' for an
+        //                   out-of-range negative position.
+        simpleFunctionNameMap.put(SpecialExprType.GREATEST, "flink_greatest");
+        simpleFunctionNameMap.put(SpecialExprType.LEAST, "flink_least");
         simpleFunctionNameMap.put(SpecialExprType.CONCAT, "concat");
         simpleFunctionNameMap.put(SpecialExprType.CONCAT_WS, "concat_ws");
-        simpleFunctionNameMap.put(SpecialExprType.REPLACE, "replace");
-        simpleFunctionNameMap.put(SpecialExprType.SUBSTR, "substr");
+        simpleFunctionNameMap.put(SpecialExprType.REPLACE, "flink_replace");
+        simpleFunctionNameMap.put(SpecialExprType.SUBSTR, "flink_substr");
         simpleFunctionNameMap.put(SpecialExprType.INSTR, "instr");
         simpleFunctionNameMap.put(SpecialExprType.UNIX_TIMESTAMP, "unix_timestamp");
         simpleFunctionNameMap.put(SpecialExprType.RPAD, "rpad");
