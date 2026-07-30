@@ -152,14 +152,30 @@
   {"func_name": "ROUND", "is_support_func": true,
    "is_supported_type": ["DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
-  {"func_name": "PI", "is_support_func": false},
-  {"func_name": "E", "is_support_func": false},
-  {"func_name": "RAND", "is_support_func": false},
-  {"func_name": "RAND_INTEGER", "is_support_func": false},
-  {"func_name": "UUID", "is_support_func": false},
-  {"func_name": "BIN", "is_support_func": false},
-  {"func_name": "HEX", "is_support_func": false},
-  {"func_name": "TRUNCATE", "is_support_func": false},
+  {"func_name": "PI", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "E", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "RAND", "is_support_func": true,
+   "is_supported_type": ["INT", "BIGINT", "DOUBLE"]
+  },
+  {"func_name": "RAND_INTEGER", "is_support_func": true,
+   "is_supported_type": ["INT"]
+  },
+  {"func_name": "UUID", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "BIN", "is_support_func": true,
+   "is_supported_type": ["INT", "BIGINT"]
+  },
+  {"func_name": "HEX", "is_support_func": true,
+   "is_supported_type": ["INT", "BIGINT", "STRING", "VARCHAR"]
+  },
+  {"func_name": "TRUNCATE", "is_support_func": true,
+   "is_supported_type": ["INT", "BIGINT", "DOUBLE"]
+  },
 
   {"func_name": "||", "is_support_func": false},
   {"func_name": "CHAR_LENGTH", "is_support_func": true,

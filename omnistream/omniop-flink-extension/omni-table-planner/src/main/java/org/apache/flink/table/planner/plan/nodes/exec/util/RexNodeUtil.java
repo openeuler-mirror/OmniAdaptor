@@ -141,6 +141,14 @@ public class RexNodeUtil {
         specialOperatorMap.put("TAN", SpecialExprType.TAN);
         specialOperatorMap.put("TANH", SpecialExprType.TANH);
         specialOperatorMap.put("RADIANS", SpecialExprType.RADIANS);
+        specialOperatorMap.put("PI", SpecialExprType.PI);
+        specialOperatorMap.put("E", SpecialExprType.E);
+        specialOperatorMap.put("RAND", SpecialExprType.RAND);
+        specialOperatorMap.put("RAND_INTEGER", SpecialExprType.RAND_INTEGER);
+        specialOperatorMap.put("UUID", SpecialExprType.UUID);
+        specialOperatorMap.put("BIN", SpecialExprType.BIN);
+        specialOperatorMap.put("HEX", SpecialExprType.HEX);
+        specialOperatorMap.put("TRUNCATE", SpecialExprType.TRUNCATE);
     }
 
     static {
@@ -173,6 +181,11 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.TAN, "tan");
         simpleFunctionNameMap.put(SpecialExprType.TANH, "tanh");
         simpleFunctionNameMap.put(SpecialExprType.RADIANS, "radians");
+        simpleFunctionNameMap.put(SpecialExprType.PI, "pi");
+        simpleFunctionNameMap.put(SpecialExprType.E, "e");
+        simpleFunctionNameMap.put(SpecialExprType.RAND, "rand");
+        simpleFunctionNameMap.put(SpecialExprType.RAND_INTEGER, "rand_integer");
+        simpleFunctionNameMap.put(SpecialExprType.TRUNCATE, "truncate");
     }
 
     static {
@@ -229,6 +242,9 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.AND, RexNodeUtil::handleAnd);
         specialHandlerMap.put(SpecialExprType.OR, RexNodeUtil::handleOr);
         specialHandlerMap.put(SpecialExprType.CURRENT_TIMESTAMP, RexNodeUtil::handleCurrentTimestamp);
+        specialHandlerMap.put(SpecialExprType.UUID, RexNodeUtil::handleUuid);
+        specialHandlerMap.put(SpecialExprType.BIN, RexNodeUtil::handleBin);
+        specialHandlerMap.put(SpecialExprType.HEX, RexNodeUtil::handleHex);
         specialHandlerMap.put(SpecialExprType.DATE_ADD, RexNodeUtil::handleDateAdd);
         specialHandlerMap.put(SpecialExprType.FROM_UNIXTIME, RexNodeUtil::handleFromUnixtime);
         specialHandlerMap.put(SpecialExprType.OVERLAY, RexNodeUtil::handleOverlay);
@@ -260,6 +276,11 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.TAN, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.TANH, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.RADIANS, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.PI, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.E, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.RAND, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.RAND_INTEGER, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.TRUNCATE, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -372,7 +393,15 @@ public class RexNodeUtil {
         SIN,
         TAN,
         TANH,
-        RADIANS
+        RADIANS,
+        PI,
+        E,
+        RAND,
+        RAND_INTEGER,
+        UUID,
+        BIN,
+        HEX,
+        TRUNCATE
     }
 
 
@@ -1070,6 +1099,67 @@ public class RexNodeUtil {
         }
         jsonMap.put("arguments", currentTimestampArgs);
         LOG.info("The CURRENT_TIMESTAMP expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleUuid(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // UUID() -> VARCHAR (RFC4122 v4). 0-arg non-deterministic; maps to native "uuid" (0-arg overload).
+        // Flink types UUID() as CHAR(36), so setDataType would emit OMNI_CHAR and miss the native
+        // {}->OMNI_VARCHAR signature; the return type is pinned to VARCHAR instead.
+        jsonMap.put("exprType", "FUNCTION");
+        jsonMap.put("returnType", RexTypeToIdMap.get("VARCHAR"));
+        jsonMap.put("function_name", "uuid");
+        jsonMap.put("arguments", new ArrayList<>());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleBin(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // BIN(integer) -> VARCHAR (binary string). Maps to native "bin" ({INT}/{LONG}).
+        // Flink derives the return type as VARCHAR with default precision (Integer.MAX_VALUE), so
+        // the return type is set directly to avoid emitting that width.
+        jsonMap.put("exprType", "FUNCTION");
+        jsonMap.put("returnType", RexTypeToIdMap.get("VARCHAR"));
+        jsonMap.put("function_name", "bin");
+        List<Map<String, Object>> binArgs = new ArrayList<>();
+        Map<String, Object> binInputArg = buildJsonMap(operands.get(0));
+        binArgs.add(binInputArg);
+        jsonMap.put("arguments", binArgs);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleHex(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // HEX(numeric|string) -> VARCHAR (hex string). Maps to native "hex".
+        // Native numeric overload is registered on {OMNI_LONG} only (HexBigintFunction
+        // takes int64_t), so an INT-family input that is not BIGINT must be CAST to
+        // BIGINT to match the native signature. String inputs ({VARCHAR}/{CHAR}) map
+        // directly; normalizeCharLiteralToVarchar coerces CHAR literals to OMNI_VARCHAR.
+        jsonMap.put("exprType", "FUNCTION");
+        jsonMap.put("returnType", RexTypeToIdMap.get("VARCHAR"));
+        jsonMap.put("function_name", "hex");
+        List<Map<String, Object>> hexArgs = new ArrayList<>();
+        Map<String, Object> hexInputArg = buildJsonMap(operands.get(0));
+        normalizeCharLiteralToVarchar(hexInputArg);
+        SqlTypeName hexInputTypeName = operands.get(0).getType().getSqlTypeName();
+        if (hexInputTypeName == SqlTypeName.INTEGER
+                || hexInputTypeName == SqlTypeName.TINYINT
+                || hexInputTypeName == SqlTypeName.SMALLINT) {
+            // Wrap the arg in CAST(... AS BIGINT) so native hex({LONG}) resolves.
+            Map<String, Object> hexCastArg = new LinkedHashMap<>();
+            hexCastArg.put("exprType", "FUNCTION");
+            hexCastArg.put("returnType", RexTypeToIdMap.get("BIGINT"));
+            hexCastArg.put("function_name", "CAST");
+            hexCastArg.put("expr", hexInputArg);
+            List<Map<String, Object>> hexCastArgList = new ArrayList<>();
+            hexCastArgList.add(hexInputArg);
+            hexCastArg.put("arguments", hexCastArgList);
+            hexArgs.add(hexCastArg);
+        } else {
+            hexArgs.add(hexInputArg);
+        }
+        jsonMap.put("arguments", hexArgs);
         return jsonMap;
     }
 
