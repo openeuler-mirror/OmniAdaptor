@@ -148,9 +148,13 @@
   {"func_name": "TRIM", "is_support_func": false},
   {"func_name": "LTRIM", "is_support_func": false},
   {"func_name": "RTRIM", "is_support_func": false},
-  {"func_name": "REPEAT", "is_support_func": false},
+  {"func_name": "REPEAT", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "REGEXP_REPLACE", "is_support_func": false},
-  {"func_name": "OVERLAY", "is_support_func": false},
+  {"func_name": "OVERLAY", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "SUBSTRING", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
@@ -168,8 +172,12 @@
    "is_supported_type": ["STRING", "VARCHAR"]
   },
   {"func_name": "LPAD", "is_support_func": false},
-  {"func_name": "RPAD", "is_support_func": false},
-  {"func_name": "FROM_BASE64", "is_support_func": false},
+  {"func_name": "RPAD", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "FROM_BASE64", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "TO_BASE64", "is_support_func": false},
   {"func_name": "ASCII", "is_support_func": false},
   {"func_name": "CHR", "is_support_func": false},

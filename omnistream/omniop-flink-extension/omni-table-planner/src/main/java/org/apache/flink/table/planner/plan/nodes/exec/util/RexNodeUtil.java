@@ -86,6 +86,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("CASE", SpecialExprType.SWITCH);
         specialOperatorMap.put("REGEXP_EXTRACT", SpecialExprType.REGEXP_EXTRACT);
         specialOperatorMap.put("SPLIT_INDEX", SpecialExprType.SPLIT_INDEX);
+        specialOperatorMap.put("FROM_BASE64", SpecialExprType.FROM_BASE64);
         specialOperatorMap.put("CHAR_LENGTH", SpecialExprType.CHAR_LENGTH);
         specialOperatorMap.put("CHARACTER_LENGTH", SpecialExprType.CHAR_LENGTH);
         specialOperatorMap.put("count_char", SpecialExprType.COUNT_CHAR);
@@ -121,6 +122,9 @@ public class RexNodeUtil {
         specialOperatorMap.put("INSTR", SpecialExprType.INSTR);
         specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
+        specialOperatorMap.put("RPAD", SpecialExprType.RPAD);
+        specialOperatorMap.put("REPEAT", SpecialExprType.REPEAT);
+        specialOperatorMap.put("OVERLAY", SpecialExprType.OVERLAY);
     }
 
     static {
@@ -135,7 +139,9 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.SUBSTR, "substr");
         simpleFunctionNameMap.put(SpecialExprType.INSTR, "instr");
         simpleFunctionNameMap.put(SpecialExprType.UNIX_TIMESTAMP, "unix_timestamp");
-        simpleFunctionNameMap.put(SpecialExprType.FROM_UNIXTIME, "from_unixtime");
+        simpleFunctionNameMap.put(SpecialExprType.RPAD, "rpad");
+        simpleFunctionNameMap.put(SpecialExprType.REPEAT, "repeat");
+        simpleFunctionNameMap.put(SpecialExprType.FROM_BASE64, "unbase64");
     }
 
     static {
@@ -193,6 +199,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.CURRENT_TIMESTAMP, RexNodeUtil::handleCurrentTimestamp);
         specialHandlerMap.put(SpecialExprType.DATE_ADD, RexNodeUtil::handleDateAdd);
         specialHandlerMap.put(SpecialExprType.FROM_UNIXTIME, RexNodeUtil::handleFromUnixtime);
+        specialHandlerMap.put(SpecialExprType.OVERLAY, RexNodeUtil::handleOverlay);
         // Simple FUNCTION-forwarding expressions share one handler (function_name via simpleFunctionNameMap).
         specialHandlerMap.put(SpecialExprType.ROUND, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.GREATEST, RexNodeUtil::handleSimpleFunction);
@@ -203,6 +210,9 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.SUBSTR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.INSTR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.RPAD, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.REPEAT, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.FROM_BASE64, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -268,6 +278,7 @@ public class RexNodeUtil {
         LOWER,
         HASH_CODE,
         SPLIT_INDEX,
+        FROM_BASE64,
         CHAR_LENGTH,
         IS_NOT_NULL,
         PROCTIME,
@@ -295,7 +306,10 @@ public class RexNodeUtil {
         SUBSTR,
         INSTR,
         UNIX_TIMESTAMP,
-        FROM_UNIXTIME
+        FROM_UNIXTIME,
+        RPAD,
+        REPEAT,
+        OVERLAY
     }
 
 
@@ -1023,10 +1037,56 @@ public class RexNodeUtil {
         return jsonMap;
     }
 
+    private static Map<String, Object> handleOverlay(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // OVERLAY(string1 PLACING string2 FROM integer1 [FOR integer2]) -> string.
+        // Calcite lowers PLACING/FROM/FOR syntax to a RexCall named "OVERLAY" with
+        // operands [string1, string2, integer1] (3-arg, FOR omitted) or
+        // [string1, string2, integer1, integer2] (4-arg). Maps to the vectorized
+        // "overlay" registered in OmniOperatorJIT vectorization as
+        // {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_INT, OMNI_INT} -> OMNI_VARCHAR
+        // (functions/String.h, OverlayFunction). pos is 1-based, aligned with Flink.
+        // The vectorized layer only registers the 4-arg overload; when FOR is
+        // omitted, Flink defaults length to CHAR_LENGTH(string2). The native
+        // OverlayFunction treats len < 0 as "use replace string length" (Unicode
+        // chars), so we synthesize len = -1 to express that default, which is
+        // semantically equivalent to Flink's behavior.
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "overlay");
+        List<Map<String, Object>> overlayArgs = new ArrayList<>();
+        Map<String, Object> overlayInputArg = buildJsonMap(operands.get(0));
+        normalizeCharLiteralToVarchar(overlayInputArg);
+        overlayArgs.add(overlayInputArg);
+        Map<String, Object> overlayReplaceArg = buildJsonMap(operands.get(1));
+        normalizeCharLiteralToVarchar(overlayReplaceArg);
+        overlayArgs.add(overlayReplaceArg);
+        Map<String, Object> overlayPosArg = buildJsonMap(operands.get(2));
+        overlayArgs.add(overlayPosArg);
+        Map<String, Object> overlayLenArg;
+        if (operands.size() >= 4) {
+            overlayLenArg = buildJsonMap(operands.get(3));
+        } else {
+            // Flink default: omitted FOR length == CHAR_LENGTH(string2).
+            // Native treats len < 0 as "use replace length", so -1 expresses it.
+            overlayLenArg = new LinkedHashMap<>();
+            overlayLenArg.put("exprType", "LITERAL");
+            overlayLenArg.put("dataType", RexTypeToIdMap.get("INTEGER"));
+            overlayLenArg.put("isNull", false);
+            overlayLenArg.put("value", -1);
+        }
+        overlayArgs.add(overlayLenArg);
+        jsonMap.put("arguments", overlayArgs);
+        LOG.info("The OVERLAY expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
     /**
-     * Shared handler for simple FUNCTION-forwarding expressions (ROUND, GREATEST, LEAST,
-     * CONCAT, CONCAT_WS, REPLACE, SUBSTR, INSTR, UNIX_TIMESTAMP): the function_name comes from
-     * {@link #simpleFunctionNameMap} and every operand is forwarded as an argument.
+     * Shared handler for expressions that translate to a plain FUNCTION node: the function_name
+     * comes from {@link #simpleFunctionNameMap} and every operand is forwarded as an argument,
+     * with CHAR literals normalized to VARCHAR. Any expression whose native signature matches
+     * its Flink operands one-to-one can reuse this by registering a name in
+     * {@link #simpleFunctionNameMap} plus a handler entry in {@link #specialHandlerMap}.
      */
     private static Map<String, Object> handleSimpleFunction(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
