@@ -99,6 +99,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("EXTRACT", SpecialExprType.EXTRACT);
         specialOperatorMap.put("DATE_FORMAT", SpecialExprType.DATE_FORMAT);
         specialOperatorMap.put("TO_TIMESTAMP_LTZ", SpecialExprType.TO_TIMESTAMP_LTZ);
+        specialOperatorMap.put("TO_DATE", SpecialExprType.TO_DATE);
         specialOperatorMap.put("CAST", SpecialExprType.CAST);
         specialOperatorMap.put("AND", SpecialExprType.AND);
         specialOperatorMap.put("OR", SpecialExprType.OR);
@@ -123,8 +124,19 @@ public class RexNodeUtil {
         specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
         specialOperatorMap.put("RPAD", SpecialExprType.RPAD);
+        specialOperatorMap.put("LPAD", SpecialExprType.LPAD);
         specialOperatorMap.put("REPEAT", SpecialExprType.REPEAT);
         specialOperatorMap.put("OVERLAY", SpecialExprType.OVERLAY);
+        specialOperatorMap.put("SINH", SpecialExprType.SINH);
+        specialOperatorMap.put("COS", SpecialExprType.COS);
+        specialOperatorMap.put("COT", SpecialExprType.COT);
+        specialOperatorMap.put("ASIN", SpecialExprType.ASIN);
+        specialOperatorMap.put("ACOS", SpecialExprType.ACOS);
+        specialOperatorMap.put("ATAN", SpecialExprType.ATAN);
+        specialOperatorMap.put("ATAN2", SpecialExprType.ATAN2);
+        specialOperatorMap.put("COSH", SpecialExprType.COSH);
+        specialOperatorMap.put("DEGREES", SpecialExprType.DEGREES);
+        specialOperatorMap.put("SIGN", SpecialExprType.SIGN);
     }
 
     static {
@@ -140,8 +152,19 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.INSTR, "instr");
         simpleFunctionNameMap.put(SpecialExprType.UNIX_TIMESTAMP, "unix_timestamp");
         simpleFunctionNameMap.put(SpecialExprType.RPAD, "rpad");
+        simpleFunctionNameMap.put(SpecialExprType.LPAD, "lpad");
         simpleFunctionNameMap.put(SpecialExprType.REPEAT, "repeat");
         simpleFunctionNameMap.put(SpecialExprType.FROM_BASE64, "unbase64");
+        simpleFunctionNameMap.put(SpecialExprType.SINH, "sinh");
+        simpleFunctionNameMap.put(SpecialExprType.COS, "cos");
+        simpleFunctionNameMap.put(SpecialExprType.COT, "cot");
+        simpleFunctionNameMap.put(SpecialExprType.ASIN, "asin");
+        simpleFunctionNameMap.put(SpecialExprType.ACOS, "acos");
+        simpleFunctionNameMap.put(SpecialExprType.ATAN, "atan");
+        simpleFunctionNameMap.put(SpecialExprType.ATAN2, "atan2");
+        simpleFunctionNameMap.put(SpecialExprType.COSH, "cosh");
+        simpleFunctionNameMap.put(SpecialExprType.DEGREES, "degrees");
+        simpleFunctionNameMap.put(SpecialExprType.SIGN, "sign");
     }
 
     static {
@@ -191,6 +214,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.CHAR_LENGTH, RexNodeUtil::handleCharLength);
         specialHandlerMap.put(SpecialExprType.IS_NOT_NULL, RexNodeUtil::handleIsNotNull);
         specialHandlerMap.put(SpecialExprType.TO_TIMESTAMP_LTZ, RexNodeUtil::handleToTimestampLtz);
+        specialHandlerMap.put(SpecialExprType.TO_DATE, RexNodeUtil::handleToDate);
         specialHandlerMap.put(SpecialExprType.PROCTIME, RexNodeUtil::handleProctime);
         specialHandlerMap.put(SpecialExprType.DATE_FORMAT, RexNodeUtil::handleDateFormat);
         specialHandlerMap.put(SpecialExprType.CAST, RexNodeUtil::handleCast);
@@ -211,8 +235,19 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.INSTR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.RPAD, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.LPAD, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.REPEAT, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.FROM_BASE64, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.SINH, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.COS, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.COT, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.ASIN, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.ACOS, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.ATAN, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.ATAN2, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.COSH, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.DEGREES, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.SIGN, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -307,9 +342,21 @@ public class RexNodeUtil {
         INSTR,
         UNIX_TIMESTAMP,
         FROM_UNIXTIME,
+        TO_DATE,
         RPAD,
+        LPAD,
         REPEAT,
-        OVERLAY
+        OVERLAY,
+        SINH,
+        COS,
+        COT,
+        ASIN,
+        ACOS,
+        ATAN,
+        ATAN2,
+        COSH,
+        DEGREES,
+        SIGN
     }
 
 
@@ -853,6 +900,38 @@ public class RexNodeUtil {
             toTimestampLtzArgList.add(buildJsonMap(operands.get(i)));
         }
         jsonMap.put("arguments", toTimestampLtzArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleToDate(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // TO_DATE(string1[, string2]) -> DATE, default format 'yyyy-MM-dd'.
+        // Maps to the vectorized to_date({VARCHAR,VARCHAR}) -> DATE32 function.
+        jsonMap.put("exprType", "FUNCTION");
+        // to_date is registered to return OMNI_DATE32(8); setDataType would collapse
+        // the DATE return type to LONG(2), so set it explicitly.
+        jsonMap.put("returnType", RexTypeToIdMap.get("DATE"));
+        jsonMap.put("function_name", "to_date");
+        List<Map<String, Object>> toDateArgs = new ArrayList<>();
+        Map<String, Object> toDateInputArg = buildJsonMap(operands.get(0));
+        normalizeCharLiteralToVarchar(toDateInputArg);
+        toDateArgs.add(toDateInputArg);
+        Map<String, Object> toDateFormatArg;
+        if (operands.size() >= 2) {
+            toDateFormatArg = buildJsonMap(operands.get(1));
+            normalizeCharLiteralToVarchar(toDateFormatArg);
+        } else {
+            // Flink default: TO_DATE(string) -> 'yyyy-MM-dd'
+            toDateFormatArg = new LinkedHashMap<>();
+            toDateFormatArg.put("exprType", "LITERAL");
+            toDateFormatArg.put("dataType", RexTypeToIdMap.get("VARCHAR"));
+            toDateFormatArg.put("isNull", false);
+            toDateFormatArg.put("value", "yyyy-MM-dd");
+            toDateFormatArg.put("width", 10);
+        }
+        toDateArgs.add(toDateFormatArg);
+        jsonMap.put("arguments", toDateArgs);
+        LOG.info("The TO_DATE expression is {} ", rexCall.toString());
         return jsonMap;
     }
 

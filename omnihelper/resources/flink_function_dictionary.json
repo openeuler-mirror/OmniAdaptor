@@ -108,19 +108,39 @@
   {"func_name": "CEILING", "is_support_func": false},
   {"func_name": "FLOOR", "is_support_func": false},
   {"func_name": "SIN", "is_support_func": false},
-  {"func_name": "SINH", "is_support_func": false},
-  {"func_name": "COS", "is_support_func": false},
+  {"func_name": "SINH", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "COS", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
   {"func_name": "TAN", "is_support_func": false},
   {"func_name": "TANH", "is_support_func": false},
-  {"func_name": "COT", "is_support_func": false},
-  {"func_name": "ASIN", "is_support_func": false},
-  {"func_name": "ACOS", "is_support_func": false},
-  {"func_name": "ATAN", "is_support_func": false},
-  {"func_name": "ATAN2", "is_support_func": false},
-  {"func_name": "COSH", "is_support_func": false},
-  {"func_name": "DEGREES", "is_support_func": false},
+  {"func_name": "COT", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "ASIN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "ACOS", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "ATAN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "ATAN2", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "COSH", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "DEGREES", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
   {"func_name": "RADIANS", "is_support_func": false},
-  {"func_name": "SIGN", "is_support_func": false},
+  {"func_name": "SIGN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
   {"func_name": "ROUND", "is_support_func": true,
    "is_supported_type": ["DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
@@ -171,7 +191,9 @@
   {"func_name": "CONCAT_WS", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
-  {"func_name": "LPAD", "is_support_func": false},
+  {"func_name": "LPAD", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "RPAD", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
@@ -239,7 +261,9 @@
   {"func_name": "UNIX_TIMESTAMP", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
-  {"func_name": "TO_DATE", "is_support_func": false},
+  {"func_name": "TO_DATE", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "TO_TIMESTAMP_LTZ", "is_support_func": false},
   {"func_name": "TO_TIMESTAMP", "is_support_func": false},
   {"func_name": "CURRENT_WATERMARK", "is_support_func": false},
