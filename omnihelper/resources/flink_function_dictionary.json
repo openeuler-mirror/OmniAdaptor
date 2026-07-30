@@ -465,7 +465,12 @@
   {"func_name": "JSON_EXISTS", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR", "CHAR"]
   },
-  {"func_name": "JSON_STRING", "is_support_func": false},
+  {"func_name": "JSON_STRING", "is_support_func": true,
+   "is_supported_type": [
+      "BOOLEAN", "TINYINT", "SMALLINT", "INT", "BIGINT", 
+      "DOUBLE", "VARCHAR", "STRING", "CHAR", "ARRAY", "MAP", "ROW"
+    ]
+  },
   {"func_name": "JSON_VALUE", "is_support_func": false},
   {"func_name": "JSON_QUERY", "is_support_func": false},
   {"func_name": "JSON_OBJECT", "is_support_func": true,
