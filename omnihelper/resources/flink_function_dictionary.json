@@ -107,15 +107,21 @@
   {"func_name": "CEIL", "is_support_func": false},
   {"func_name": "CEILING", "is_support_func": false},
   {"func_name": "FLOOR", "is_support_func": false},
-  {"func_name": "SIN", "is_support_func": false},
+  {"func_name": "SIN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
   {"func_name": "SINH", "is_support_func": true,
    "is_supported_type": ["DOUBLE"]
   },
   {"func_name": "COS", "is_support_func": true,
    "is_supported_type": ["DOUBLE"]
   },
-  {"func_name": "TAN", "is_support_func": false},
-  {"func_name": "TANH", "is_support_func": false},
+  {"func_name": "TAN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "TANH", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
   {"func_name": "COT", "is_support_func": true,
    "is_supported_type": ["DOUBLE"]
   },
@@ -137,7 +143,9 @@
   {"func_name": "DEGREES", "is_support_func": true,
    "is_supported_type": ["DOUBLE"]
   },
-  {"func_name": "RADIANS", "is_support_func": false},
+  {"func_name": "RADIANS", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
   {"func_name": "SIGN", "is_support_func": true,
    "is_supported_type": ["DOUBLE"]
   },

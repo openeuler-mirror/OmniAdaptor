@@ -137,6 +137,10 @@ public class RexNodeUtil {
         specialOperatorMap.put("COSH", SpecialExprType.COSH);
         specialOperatorMap.put("DEGREES", SpecialExprType.DEGREES);
         specialOperatorMap.put("SIGN", SpecialExprType.SIGN);
+        specialOperatorMap.put("SIN", SpecialExprType.SIN);
+        specialOperatorMap.put("TAN", SpecialExprType.TAN);
+        specialOperatorMap.put("TANH", SpecialExprType.TANH);
+        specialOperatorMap.put("RADIANS", SpecialExprType.RADIANS);
     }
 
     static {
@@ -165,6 +169,10 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.COSH, "cosh");
         simpleFunctionNameMap.put(SpecialExprType.DEGREES, "degrees");
         simpleFunctionNameMap.put(SpecialExprType.SIGN, "sign");
+        simpleFunctionNameMap.put(SpecialExprType.SIN, "sin");
+        simpleFunctionNameMap.put(SpecialExprType.TAN, "tan");
+        simpleFunctionNameMap.put(SpecialExprType.TANH, "tanh");
+        simpleFunctionNameMap.put(SpecialExprType.RADIANS, "radians");
     }
 
     static {
@@ -248,6 +256,10 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.COSH, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.DEGREES, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.SIGN, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.SIN, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.TAN, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.TANH, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.RADIANS, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -356,7 +368,11 @@ public class RexNodeUtil {
         ATAN2,
         COSH,
         DEGREES,
-        SIGN
+        SIGN,
+        SIN,
+        TAN,
+        TANH,
+        RADIANS
     }
 
 
