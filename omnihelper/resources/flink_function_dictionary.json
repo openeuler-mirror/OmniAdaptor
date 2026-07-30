@@ -43,7 +43,14 @@
       "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "DECIMAL64", "DECIMAL128"
     ]
   },
-  {"func_name": "IS NULL", "is_support_func": false},
+  {"func_name": "IS NULL", "is_support_func":  true,
+    "is_supported_type": [
+      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
+      "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
+      "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
+    ]
+  },
   {"func_name": "IS NOT NULL", "is_support_func": true,
     "is_supported_type": [
       "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
@@ -78,7 +85,9 @@
   {"func_name": "IS TRUE", "is_support_func": true,
    "is_supported_type": ["BOOLEAN"]
   },
-  {"func_name": "IS NOT TRUE", "is_support_func": false},
+  {"func_name": "IS NOT TRUE", "is_support_func": true,
+   "is_supported_type": ["BOOLEAN"]
+  },
   {"func_name": "IS UNKNOWN", "is_support_func": true,
    "is_supported_type": ["BOOLEAN"]
   },
@@ -90,13 +99,13 @@
    "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
   {"func_name": "+", "func_type": "binary", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "INT", "DECIMAL64", "DECIMAL128"]
+   "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
   {"func_name": "-", "func_type": "unary", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
   {"func_name": "-", "func_type": "binary", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "INT", "DECIMAL64", "DECIMAL128"]
+   "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
   {"func_name": "*", "func_type": "binary", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DECIMAL64", "DECIMAL128"]
@@ -115,11 +124,7 @@
   {"func_name": "LOG2", "is_support_func": false},
   {"func_name": "LOG", "is_support_func": false},
   {"func_name": "EXP", "is_support_func": false},
-  {"func_name": "CEIL", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "DOUBLE"]},
   {"func_name": "CEILING", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "DOUBLE"]},
-  {"func_name": "FLOOR", "is_support_func": true,
    "is_supported_type": ["BIGINT", "DOUBLE"]
   },
   {"func_name": "SIN", "is_support_func": false},
@@ -232,10 +237,10 @@
   {"func_name": "MINUTE", "is_support_func": false},
   {"func_name": "SECOND", "is_support_func": false},
   {"func_name": "FLOOR", "is_support_func": true,
-  "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
+  "is_supported_type": ["BIGINT", "DOUBLE", "TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
   },
   {"func_name": "CEIL", "is_support_func": true,
-  "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
+  "is_supported_type": ["BIGINT", "DOUBLE", "TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
   },
   {"func_name": "OVERLAPS", "is_support_func": false},
   {"func_name": "DATE_FORMAT", "is_support_func": true,
