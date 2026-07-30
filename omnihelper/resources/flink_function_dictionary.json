@@ -320,8 +320,18 @@
       "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
     ]
   },
-  {"func_name": "IS_ALPHA", "is_support_func": false},
-  {"func_name": "IS_DECIMAL", "is_support_func": false},
+  {"func_name": "IS_ALPHA", "is_support_func": true,
+   "is_supported_type": [
+      "VARCHAR", "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "CHAR",
+      "BYTE", "SHORT", "INT", "BIGINT", "DOUBLE", "DECIMAL64", "DECIMAL128"
+    ]
+  },
+  {"func_name": "IS_DECIMAL", "is_support_func": true,
+   "is_supported_type": [
+      "VARCHAR", "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "CHAR",
+      "BYTE", "SHORT", "INT", "BIGINT", "DOUBLE", "DECIMAL64", "DECIMAL128"
+    ]
+  },
   {"func_name": "IS_DIGIT", "is_support_func": false},
   {"func_name": "GREATEST", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DOUBLE"]

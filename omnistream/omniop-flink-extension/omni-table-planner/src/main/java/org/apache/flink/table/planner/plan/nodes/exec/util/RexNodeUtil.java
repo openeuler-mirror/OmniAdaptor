@@ -149,6 +149,8 @@ public class RexNodeUtil {
         specialOperatorMap.put("BIN", SpecialExprType.BIN);
         specialOperatorMap.put("HEX", SpecialExprType.HEX);
         specialOperatorMap.put("TRUNCATE", SpecialExprType.TRUNCATE);
+        specialOperatorMap.put("IS_ALPHA", SpecialExprType.IS_ALPHA);
+        specialOperatorMap.put("IS_DECIMAL", SpecialExprType.IS_DECIMAL);
     }
 
     static {
@@ -186,6 +188,8 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.RAND, "rand");
         simpleFunctionNameMap.put(SpecialExprType.RAND_INTEGER, "rand_integer");
         simpleFunctionNameMap.put(SpecialExprType.TRUNCATE, "truncate");
+        simpleFunctionNameMap.put(SpecialExprType.IS_ALPHA, "is_alpha");
+        simpleFunctionNameMap.put(SpecialExprType.IS_DECIMAL, "is_decimal");
     }
 
     static {
@@ -281,6 +285,8 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.RAND, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.RAND_INTEGER, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.TRUNCATE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_ALPHA, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_DECIMAL, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -401,7 +407,9 @@ public class RexNodeUtil {
         UUID,
         BIN,
         HEX,
-        TRUNCATE
+        TRUNCATE,
+        IS_ALPHA,
+        IS_DECIMAL
     }
 
 
