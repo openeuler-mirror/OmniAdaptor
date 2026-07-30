@@ -94,6 +94,10 @@ public class RexNodeUtil {
         specialOperatorMap.put("LOWER", SpecialExprType.LOWER);
         specialOperatorMap.put("HASH_CODE", SpecialExprType.HASH_CODE);
         specialOperatorMap.put("IS NOT NULL", SpecialExprType.IS_NOT_NULL);
+        specialOperatorMap.put("IS JSON VALUE", SpecialExprType.IS_JSON_VALUE);
+        specialOperatorMap.put("IS JSON SCALAR", SpecialExprType.IS_JSON_SCALAR);
+        specialOperatorMap.put("IS JSON ARRAY", SpecialExprType.IS_JSON_ARRAY);
+        specialOperatorMap.put("IS JSON OBJECT", SpecialExprType.IS_JSON_OBJECT);
         specialOperatorMap.put("PROCTIME_MATERIALIZE", SpecialExprType.PROCTIME);
         specialOperatorMap.put("PROCTIME", SpecialExprType.PROCTIME);
         specialOperatorMap.put("EXTRACT", SpecialExprType.EXTRACT);
@@ -190,6 +194,10 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.TRUNCATE, "truncate");
         simpleFunctionNameMap.put(SpecialExprType.IS_ALPHA, "is_alpha");
         simpleFunctionNameMap.put(SpecialExprType.IS_DECIMAL, "is_decimal");
+        simpleFunctionNameMap.put(SpecialExprType.IS_JSON_VALUE, "is_json_value");
+        simpleFunctionNameMap.put(SpecialExprType.IS_JSON_SCALAR, "is_json_scalar");
+        simpleFunctionNameMap.put(SpecialExprType.IS_JSON_ARRAY, "is_json_array");
+        simpleFunctionNameMap.put(SpecialExprType.IS_JSON_OBJECT, "is_json_object");
     }
 
     static {
@@ -287,6 +295,10 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.TRUNCATE, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.IS_ALPHA, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.IS_DECIMAL, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_JSON_VALUE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_JSON_SCALAR, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_JSON_ARRAY, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_JSON_OBJECT, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -409,7 +421,11 @@ public class RexNodeUtil {
         HEX,
         TRUNCATE,
         IS_ALPHA,
-        IS_DECIMAL
+        IS_DECIMAL,
+        IS_JSON_VALUE,
+        IS_JSON_SCALAR,
+        IS_JSON_ARRAY,
+        IS_JSON_OBJECT
     }
 
 
