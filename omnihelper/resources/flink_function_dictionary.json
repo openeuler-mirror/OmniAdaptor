@@ -52,8 +52,6 @@
       "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
     ]
   },
-  {"func_name": "IS DISTINCT FROM", "is_support_func": false},
-  {"func_name": "IS NOT DISTINCT FROM", "is_support_func": false},
   {"func_name": "BETWEEN", "is_support_func": false},
   {"func_name": "NOT BETWEEN", "is_support_func": false},
   {"func_name": "LIKE", "is_support_func": false},
@@ -71,20 +69,31 @@
     "is_supported_type": ["BOOLEAN"]
   },
   {"func_name": "NOT", "is_support_func": true, "is_supported_type": ["BOOLEAN"]},
-  {"func_name": "IS FALSE", "is_support_func": false},
-  {"func_name": "IS NOT FALSE", "is_support_func": false},
+  {"func_name": "IS FALSE", "is_support_func": true,
+   "is_supported_type": ["BOOLEAN"]
+  },
+  {"func_name": "IS NOT FALSE", "is_support_func": true,
+   "is_supported_type": ["BOOLEAN"]
+  },
   {"func_name": "IS TRUE", "is_support_func": true,
    "is_supported_type": ["BOOLEAN"]
   },
   {"func_name": "IS NOT TRUE", "is_support_func": false},
-  {"func_name": "IS UNKNOWN", "is_support_func": false},
-  {"func_name": "IS NOT UNKNOWN", "is_support_func": false},
+  {"func_name": "IS UNKNOWN", "is_support_func": true,
+   "is_supported_type": ["BOOLEAN"]
+  },
+  {"func_name": "IS NOT UNKNOWN", "is_support_func": true,
+   "is_supported_type": ["BOOLEAN"]
+  },
 
+  {"func_name": "+", "func_type": "unary", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
+  },
   {"func_name": "+", "func_type": "binary", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DECIMAL64", "DECIMAL128"]
   },
   {"func_name": "-", "func_type": "unary", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "INT", "DECIMAL64", "DECIMAL128"]
+   "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
   {"func_name": "-", "func_type": "binary", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DECIMAL64", "DECIMAL128"]
@@ -99,14 +108,20 @@
   {"func_name": "POWER", "is_support_func": false},
   {"func_name": "ABS", "is_support_func": false},
   {"func_name": "SQRT", "is_support_func": false},
-  {"func_name": "LN", "is_support_func": false},
+  {"func_name": "LN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
   {"func_name": "LOG10", "is_support_func": false},
   {"func_name": "LOG2", "is_support_func": false},
   {"func_name": "LOG", "is_support_func": false},
   {"func_name": "EXP", "is_support_func": false},
-  {"func_name": "CEIL", "is_support_func": false},
-  {"func_name": "CEILING", "is_support_func": false},
-  {"func_name": "FLOOR", "is_support_func": false},
+  {"func_name": "CEIL", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "DOUBLE"]},
+  {"func_name": "CEILING", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "DOUBLE"]},
+  {"func_name": "FLOOR", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "DOUBLE"]
+  },
   {"func_name": "SIN", "is_support_func": false},
   {"func_name": "SINH", "is_support_func": false},
   {"func_name": "COS", "is_support_func": false},
@@ -196,13 +211,13 @@
   {"func_name": "TIME", "is_support_func": false},
   {"func_name": "TIMESTAMP", "is_support_func": false},
   {"func_name": "INTERVAL", "is_support_func": false},
-  {"func_name": "LOCALTIME", "is_support_func": false},
-  {"func_name": "LOCALTIMESTAMP", "is_support_func": false},
-  {"func_name": "CURRENT_TIME", "is_support_func": false},
+  {"func_name": "LOCALTIME", "is_support_func": true},
+  {"func_name": "LOCALTIMESTAMP", "is_support_func": true},
+  {"func_name": "CURRENT_TIME", "is_support_func": true},
   {"func_name": "CURRENT_DATE", "is_support_func": false},
-  {"func_name": "CURRENT_TIMESTAMP", "is_support_func": false},
-  {"func_name": "NOW", "is_support_func": false},
-  {"func_name": "CURRENT_ROW_TIMESTAMP", "is_support_func": false},
+  {"func_name": "CURRENT_TIMESTAMP", "is_support_func": true},
+  {"func_name": "NOW", "is_support_func": true},
+  {"func_name": "CURRENT_ROW_TIMESTAMP", "is_support_func": true},
   {"func_name": "EXTRACT", "is_support_func": true,
    "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ" ,"STRING"]
   },
@@ -216,8 +231,12 @@
   {"func_name": "HOUR", "is_support_func": false},
   {"func_name": "MINUTE", "is_support_func": false},
   {"func_name": "SECOND", "is_support_func": false},
-  {"func_name": "FLOOR", "is_support_func": false},
-  {"func_name": "CEIL", "is_support_func": false},
+  {"func_name": "FLOOR", "is_support_func": true,
+  "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
+  },
+  {"func_name": "CEIL", "is_support_func": true,
+  "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
+  },
   {"func_name": "OVERLAPS", "is_support_func": false},
   {"func_name": "DATE_FORMAT", "is_support_func": true,
   "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
@@ -244,7 +263,14 @@
       "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
     ]
   },
-  {"func_name": "NULLIF", "is_support_func": false},
+  {"func_name": "NULLIF", "is_support_func": true,
+  "is_supported_type": [
+      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
+      "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
+      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
+      "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
+    ]
+  },
   {"func_name": "COALESCE", "is_support_func": true,
   "is_supported_type": [
       "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",

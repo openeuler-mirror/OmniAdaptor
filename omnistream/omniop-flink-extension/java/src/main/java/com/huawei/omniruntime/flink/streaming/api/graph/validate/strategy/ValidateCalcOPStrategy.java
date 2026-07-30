@@ -24,6 +24,11 @@ import java.util.Set;
 public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateCalcOPStrategy.class);
 
+    private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(  //嘉荣的修改，提mr时记得删除
+ 	             "DOUBLE",
+ 	             "DATE",
+ 	             "CHAR"));
+ 	
     private static final Set<String> SUPPORT_BINARYOP_NAME = new HashSet<>(Arrays.asList(
             "OR",
             "AND",
@@ -41,6 +46,41 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             "DATE_FORMAT",
             "count_char"));
     private static final Set<String> SUPPORT_UNARYOP_NAME = new HashSet<>(Arrays.asList("CAST", "NEGATION", "NOT"));
+
+     /**  //嘉荣的修改，提mr时记得删除
+     * Calc-only type validation: shared whitelist plus CALC_EXTRA_SUPPORT_DATA_TYPE.
+     */
+    @Override
+    public boolean validateDataTypes(List<List<String>> dataTypesList) {
+        return dataTypesList.stream()
+                .flatMap(List::stream)
+                .allMatch(type -> {
+                    if (type.matches("^VARCHAR\\([^)]*\\)$")) {
+                        type = "VARCHAR";
+                        LOG.info("converted to VARCHAR");
+                    }
+
+                    if (type.matches("^CHAR\\([^)]*\\)$")) {
+                        type = "CHAR";
+                        LOG.info("converted to CHAR");
+                    }
+
+                    if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                        type = "DECIMAL64";
+                        LOG.info("converted to DECIMAL64");
+                    }
+
+                    if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                        type = "DECIMAL128";
+                        LOG.info("converted to DECIMAL128");
+                    }
+                    if (!SUPPORT_DATA_TYPE.contains(type) && !CALC_EXTRA_SUPPORT_DATA_TYPE.contains(type)) {
+                        LOG.info("The data type {} is not supported.", type);
+                        return false;
+                    }
+                    return true;
+                });
+    }
 
     @SuppressWarnings("unchecked")
     @Override
@@ -418,6 +458,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
                 return true;
             case "IS_NOT_NULL":
+            case "IS_NULL":
                 return validateReturnTypeAndArguments(exprMap, inputSize);
             case "MULTIPLE_AND_OR":
                 if (!exprMap.containsKey("returnType") || !exprMap.containsKey("conditions")) {
