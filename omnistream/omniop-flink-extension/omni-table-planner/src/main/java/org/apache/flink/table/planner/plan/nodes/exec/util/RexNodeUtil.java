@@ -115,6 +115,9 @@ public class RexNodeUtil {
         specialOperatorMap.put("JSON_QUERY", SpecialExprType.JSON_QUERY);
         specialOperatorMap.put("JSON_EXISTS", SpecialExprType.JSON_EXISTS);
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
+        specialOperatorMap.put("JSON_STRING", SpecialExprType.JSON_STRING);
+        specialOperatorMap.put("JSON_ARRAY", SpecialExprType.JSON_ARRAY);
+        specialOperatorMap.put("JSON_OBJECT", SpecialExprType.JSON_OBJECT);
         specialOperatorMap.put("CURRENT_TIMESTAMP", SpecialExprType.CURRENT_TIMESTAMP);
         specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
         specialOperatorMap.put("ROUND", SpecialExprType.ROUND);
@@ -199,6 +202,7 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.IS_JSON_SCALAR, "is_json_scalar");
         simpleFunctionNameMap.put(SpecialExprType.IS_JSON_ARRAY, "is_json_array");
         simpleFunctionNameMap.put(SpecialExprType.IS_JSON_OBJECT, "is_json_object");
+        simpleFunctionNameMap.put(SpecialExprType.JSON_STRING, "json_string");
     }
 
     static {
@@ -240,6 +244,8 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.JSON_QUERY, RexNodeUtil::handleJsonQuery);
         specialHandlerMap.put(SpecialExprType.JSON_EXISTS, RexNodeUtil::handleJsonExists);
         specialHandlerMap.put(SpecialExprType.JSON_SPLIT, RexNodeUtil::handleJsonSplit);
+        specialHandlerMap.put(SpecialExprType.JSON_ARRAY, RexNodeUtil::handleJsonArray);
+        specialHandlerMap.put(SpecialExprType.JSON_OBJECT, RexNodeUtil::handleJsonObject);
         specialHandlerMap.put(SpecialExprType.SPLIT_INDEX, RexNodeUtil::handleSplitIndex);
         specialHandlerMap.put(SpecialExprType.COUNT_CHAR, RexNodeUtil::handleCountChar);
         specialHandlerMap.put(SpecialExprType.SEARCH, RexNodeUtil::handleSearch);
@@ -301,6 +307,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.IS_JSON_SCALAR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.IS_JSON_ARRAY, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.IS_JSON_OBJECT, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.JSON_STRING, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -384,6 +391,9 @@ public class RexNodeUtil {
         JSON_QUERY,
         JSON_EXISTS,
         JSON_SPLIT,
+        JSON_STRING,
+        JSON_ARRAY,
+        JSON_OBJECT,
         CURRENT_TIMESTAMP,
         DATE_ADD,
         ROUND,
@@ -836,6 +846,101 @@ public class RexNodeUtil {
 
         LOG.info("The JSON_SPLIT expression is {} ", rexCall.toString());
         return jsonMap;
+    }
+
+    /**
+     * JSON_ARRAY([value]* [ { NULL | ABSENT } ON NULL ]) -> native json_array.
+     *
+     * Calcite RexCall layout: operand[0] is the ON NULL symbol clause
+     * (NULL_ON_NULL / ABSENT_ON_NULL), operands[1..] are the value expressions (raw, NOT
+     * wrapped by JSON_STRING; the native json_array serializes each value via json_string).
+     *
+     * Native argument layout (aligned with json_object / JsonArrayFunction::Apply):
+     *   arg[0]    : VARCHAR literal "NULL" or "ABSENT" (ON NULL behavior)
+     *   arg[1..]  : each value forwarded via buildJsonMap, in call order
+     */
+    private static Map<String, Object> handleJsonArray(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (operands.isEmpty()) {
+            LOG.warn("JSON_ARRAY expects at least the ON NULL clause operand, but got {}", operands.size());
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "json_array");
+
+        List<Map<String, Object>> arrayArgs = new ArrayList<>();
+        // arg[0]: ON NULL flag as a synthetic VARCHAR literal ("NULL" / "ABSENT").
+        arrayArgs.add(buildOnNullFlagLiteral(operands.get(0)));
+        // arg[1..]: value expressions, preserving call order.
+        for (int i = 1; i < operands.size(); i++) {
+            arrayArgs.add(buildJsonMap(operands.get(i)));
+        }
+        jsonMap.put("arguments", arrayArgs);
+
+        LOG.info("The JSON_ARRAY expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    /**
+     * JSON_OBJECT([[KEY] key VALUE value]* [ { NULL | ABSENT } ON NULL ]) -> native json_object.
+     *
+     * Calcite RexCall layout: operand[0] is the ON NULL symbol clause, then (key, value) pairs:
+     * operands[1]=key1, [2]=value1, [3]=key2, [4]=value2, ... Values are raw (NOT wrapped by
+     * JSON_STRING); the native json_object serializes each value via json_string, and inserts
+     * nested JSON_OBJECT / JSON_ARRAY values as raw nodes (detected in OmniOperator's FuncExpr
+     * constructor by inspecting the value child).
+     *
+     * Native argument layout (aligned with json_object / JsonObjectFunction::Apply):
+     *   arg[0]         : VARCHAR literal "NULL" or "ABSENT" (ON NULL behavior)
+     *   arg[1,3,5,...] : key (VARCHAR literal)
+     *   arg[2,4,6,...] : value (any supported type), in call order
+     */
+    private static Map<String, Object> handleJsonObject(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (operands.isEmpty() || (operands.size() - 1) % 2 != 0) {
+            LOG.warn("JSON_OBJECT expects the ON NULL clause plus key/value pairs, but got {} operands",
+                    operands.size());
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "json_object");
+
+        List<Map<String, Object>> objectArgs = new ArrayList<>();
+        // arg[0]: ON NULL flag as a synthetic VARCHAR literal ("NULL" / "ABSENT").
+        objectArgs.add(buildOnNullFlagLiteral(operands.get(0)));
+        // arg[1..]: key/value pairs, preserving call order.
+        for (int i = 1; i < operands.size(); i++) {
+            objectArgs.add(buildJsonMap(operands.get(i)));
+        }
+        jsonMap.put("arguments", objectArgs);
+
+        LOG.info("The JSON_OBJECT expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    /**
+     * Build a synthetic VARCHAR literal carrying the ON NULL behavior ("NULL" / "ABSENT") for the
+     * JSON constructor functions. The symbol name contains "ABSENT" for ABSENT ON NULL; anything
+     * else (including NULL_ON_NULL) maps to "NULL". The native side (JsonArrayFunction /
+     * JsonObjectFunction IsAbsentOnNull) only recognizes "ABSENT", defaulting to NULL ON NULL.
+     */
+    private static Map<String, Object> buildOnNullFlagLiteral(RexNode onNullNode) {
+        String symbolName = getSymbolLiteralName(onNullNode);
+        String flag = (symbolName != null && symbolName.toUpperCase(Locale.ROOT).contains("ABSENT"))
+                ? "ABSENT" : "NULL";
+        Map<String, Object> flagMap = new LinkedHashMap<>();
+        flagMap.put("exprType", "LITERAL");
+        flagMap.put("dataType", RexTypeToIdMap.get("VARCHAR"));
+        flagMap.put("width", flag.length());
+        flagMap.put("isNull", false);
+        flagMap.put("value", flag);
+        return flagMap;
     }
 
     private static Map<String, Object> handleSplitIndex(RexCall rexCall, List<RexNode> operands,
