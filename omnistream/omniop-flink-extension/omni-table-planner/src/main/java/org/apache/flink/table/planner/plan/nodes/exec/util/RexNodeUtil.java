@@ -113,6 +113,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("IFNULL", SpecialExprType.COALESCE);
         specialOperatorMap.put("JSON_VALUE", SpecialExprType.JSON_VALUE);
         specialOperatorMap.put("JSON_QUERY", SpecialExprType.JSON_QUERY);
+        specialOperatorMap.put("JSON_EXISTS", SpecialExprType.JSON_EXISTS);
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
         specialOperatorMap.put("CURRENT_TIMESTAMP", SpecialExprType.CURRENT_TIMESTAMP);
         specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
@@ -237,6 +238,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.COALESCE, RexNodeUtil::handleCoalesce);
         specialHandlerMap.put(SpecialExprType.JSON_VALUE, RexNodeUtil::handleJsonValue);
         specialHandlerMap.put(SpecialExprType.JSON_QUERY, RexNodeUtil::handleJsonQuery);
+        specialHandlerMap.put(SpecialExprType.JSON_EXISTS, RexNodeUtil::handleJsonExists);
         specialHandlerMap.put(SpecialExprType.JSON_SPLIT, RexNodeUtil::handleJsonSplit);
         specialHandlerMap.put(SpecialExprType.SPLIT_INDEX, RexNodeUtil::handleSplitIndex);
         specialHandlerMap.put(SpecialExprType.COUNT_CHAR, RexNodeUtil::handleCountChar);
@@ -380,6 +382,7 @@ public class RexNodeUtil {
         COALESCE,
         JSON_VALUE,
         JSON_QUERY,
+        JSON_EXISTS,
         JSON_SPLIT,
         CURRENT_TIMESTAMP,
         DATE_ADD,
@@ -740,6 +743,60 @@ public class RexNodeUtil {
 
         jsonMap.put("arguments", queryArgs);
         LOG.info("The JSON_QUERY expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleJsonExists(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // JSON_EXISTS(jsonValue, path [, { TRUE | FALSE | UNKNOWN | ERROR } ON ERROR]) -> BOOLEAN.
+        // Calcite models ON ERROR as a 3rd SYMBOL literal operand (see JsonExistsConverter).
+        // The native json_exists takes it as an optional 3rd VARCHAR literal argument
+        // (Flink itself passes ON ERROR as a method parameter, not operator identity), so we
+        // synthesize a VARCHAR literal for the SYMBOL flag. When omitted, native defaults to
+        // FALSE (2-arg form). NULL input -> NULL output (Flink argsNullable=false short-circuit).
+        if (operands.size() != 2 && operands.size() != 3) {
+            LOG.warn("JSON_EXISTS expects 2 or 3 operands, but got {}", operands.size());
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "json_exists");
+
+        List<Map<String, Object>> jsonExistsArgs = new ArrayList<>();
+        Map<String, Object> jsonInputArg = buildJsonMap(operands.get(0));
+        normalizeCharLiteralToVarchar(jsonInputArg);
+        jsonExistsArgs.add(jsonInputArg); // json value
+        Map<String, Object> pathArg = buildJsonMap(operands.get(1));
+        normalizeCharLiteralToVarchar(pathArg);
+        jsonExistsArgs.add(pathArg); // path expression
+
+        // Optional ON ERROR behavior (operand 2): SYMBOL literal -> synthesized VARCHAR literal.
+        if (operands.size() == 3) {
+            String onErrorName = getSymbolLiteralName(operands.get(2));
+            if (onErrorName == null
+                    || (!onErrorName.equalsIgnoreCase("TRUE")
+                            && !onErrorName.equalsIgnoreCase("FALSE")
+                            && !onErrorName.equalsIgnoreCase("UNKNOWN")
+                            && !onErrorName.equalsIgnoreCase("ERROR"))) {
+                LOG.warn("JSON_EXISTS has unsupported ON ERROR behavior: {}", onErrorName);
+                jsonMap.put("exprType", "INVALID");
+                return jsonMap;
+            }
+            // Native expects the canonical uppercase name (matches JsonExistsOnError).
+            onErrorName = onErrorName.toUpperCase(Locale.ROOT);
+            Map<String, Object> onErrorArg = new LinkedHashMap<>();
+            onErrorArg.put("exprType", "LITERAL");
+            onErrorArg.put("dataType", RexTypeToIdMap.get("VARCHAR"));
+            onErrorArg.put("isNull", false);
+            onErrorArg.put("value", onErrorName);
+            onErrorArg.put("width", onErrorName.length());
+            jsonExistsArgs.add(onErrorArg);
+        }
+
+        jsonMap.put("arguments", jsonExistsArgs);
+        LOG.info("The JSON_EXISTS expression is {} ", rexCall.toString());
         return jsonMap;
     }
 
