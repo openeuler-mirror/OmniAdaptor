@@ -121,6 +121,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("INSTR", SpecialExprType.INSTR);
         specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
+        specialOperatorMap.put("LIKE", SpecialExprType.LIKE);
     }
 
     static {
@@ -203,6 +204,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.SUBSTR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.INSTR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.LIKE, RexNodeUtil::handleLike);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -295,7 +297,8 @@ public class RexNodeUtil {
         SUBSTR,
         INSTR,
         UNIX_TIMESTAMP,
-        FROM_UNIXTIME
+        FROM_UNIXTIME,
+        LIKE
     }
 
 
@@ -1020,6 +1023,27 @@ public class RexNodeUtil {
             fromUnixTimeArgs.add(fromUnixTimeTzArg);
         }
         jsonMap.put("arguments", fromUnixTimeArgs);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleLike(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // LIKE: 2-arg native via LikeFunction (vectorized); 3-arg ESCAPE -> INVALID fallback.
+        // NOT LIKE arrives as NOT(LIKE(..)) via sql2rel convertlet, reuses UNARY/NOT branch.
+        if (operands.size() != 2) {
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "LIKE");
+        List<Map<String, Object>> likeArgList = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            Map<String, Object> argMap = buildJsonMap(operands.get(i));
+            normalizeCharLiteralToVarchar(argMap);
+            likeArgList.add(argMap);
+        }
+        jsonMap.put("arguments", likeArgList);
         return jsonMap;
     }
 
