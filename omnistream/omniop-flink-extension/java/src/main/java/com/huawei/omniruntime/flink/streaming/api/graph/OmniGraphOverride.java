@@ -197,6 +197,8 @@ public final class OmniGraphOverride {
     private static final Set<String> SOURCE_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",
+            "DOUBLE",
+            "DATE",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
@@ -206,6 +208,7 @@ public final class OmniGraphOverride {
             "VARCHAR(2000)",
             "VARCHAR(9)",
             "VARCHAR",
+            "CHAR",
             "STRING",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(0)",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(1)",
@@ -215,6 +218,8 @@ public final class OmniGraphOverride {
     private static final Set<String> SINK_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",
+            "DOUBLE",
+            "DATE",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
@@ -223,6 +228,7 @@ public final class OmniGraphOverride {
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",
             "VARCHAR(9)",
+            "CHAR",
             "STRING",
             "DECIMAL64",
             "DECIMAL128",
