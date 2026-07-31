@@ -18,10 +18,30 @@
         <maven.compiler.version>1.8</maven.compiler.version>
     </properties>
 
-    <modules>
-        <module>../omni-table-planner</module>
-        <module>../java</module>
-    </modules>
+    <profiles>
+        <profile>
+            <id>omnistream-java</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <modules>
+                <module>../omni-table-planner</module>
+                <module>../java</module>
+            </modules>
+        </profile>
+        <profile>
+            <id>depth-boost</id>
+            <activation>
+                <property>
+                    <name>package.content</name>
+                    <value>depth-boost</value>
+                </property>
+            </activation>
+            <modules>
+                <module>../depth-boost</module>
+            </modules>
+        </profile>
+    </profiles>
 <!-- pom.xml：Spotless + Checkstyle + PMD + SpotBugs + ErrorProne -->
 	<build>
 	  <plugins>
