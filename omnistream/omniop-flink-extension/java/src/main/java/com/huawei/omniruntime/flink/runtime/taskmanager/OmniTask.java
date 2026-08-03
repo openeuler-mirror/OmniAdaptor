@@ -678,12 +678,20 @@ public class OmniTask extends Task {
             CheckpointFailureReason failureReason,
             @Nullable
             Throwable failureCause) {
+        String failMsg = (failureCause != null && failureCause.getMessage() != null)
+            ? " - " + failureCause.getMessage()
+            : "";
+        LOG.info(
+            "OmniTask.declineCheckpoint: checkpointID={}, failureReason={}, failureCause={}",
+            checkpointID,
+            failureReason,
+            failMsg.isEmpty() ? "null" : failMsg);
         checkpointResponder.declineCheckpoint(
                 jobId,
                 executionId,
                 checkpointID,
                 new CheckpointException(
-                        "Task name with subtask : " + taskNameWithSubtask,
+                        "Task name with subtask : " + taskNameWithSubtask + failMsg,
                         failureReason,
                         failureCause));
     }
@@ -860,6 +868,12 @@ public class OmniTask extends Task {
     public void setJobType(JobType jobType) {
         this.jobType = jobType;
     }
+
+    // 新增：暴露 JobType，供 OmniTaskExecutor 校验 savepoint 格式使用
+    public JobType getJobType() {
+        return this.jobType;
+    }
+
     public boolean isOmniStream() {
         return (this.jobType == JobType.SQL || this.jobType == JobType.STREAM);
     }
