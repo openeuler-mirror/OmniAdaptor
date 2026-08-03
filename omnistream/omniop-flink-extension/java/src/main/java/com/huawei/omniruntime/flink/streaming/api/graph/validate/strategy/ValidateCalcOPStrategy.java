@@ -24,7 +24,7 @@ import java.util.Set;
 public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateCalcOPStrategy.class);
 
-    private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(  //嘉荣的修改，提mr时记得删除
+    private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
  	             "DOUBLE",
  	             "DATE",
  	             "CHAR"));
@@ -47,7 +47,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             "count_char"));
     private static final Set<String> SUPPORT_UNARYOP_NAME = new HashSet<>(Arrays.asList("CAST", "NEGATION", "NOT"));
 
-     /**  //嘉荣的修改，提mr时记得删除
+     /**
      * Calc-only type validation: shared whitelist plus CALC_EXTRA_SUPPORT_DATA_TYPE.
      */
     @Override

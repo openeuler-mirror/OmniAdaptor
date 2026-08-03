@@ -196,9 +196,9 @@ public final class OmniGraphOverride {
 
     private static final Set<String> SOURCE_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
-            "DOUBLE", //嘉荣的修改，提mr时记得删除
-            "DATE", //嘉荣的修改，提mr时记得删除
             "INTEGER",
+            "DOUBLE",
+            "DATE",
             "BOOLEAN",
             "TIME_WITHOUT_TIME_ZONE",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
@@ -210,8 +210,8 @@ public final class OmniGraphOverride {
             "VARCHAR(2000)",
             "VARCHAR(9)",
             "VARCHAR",
+            "CHAR",
             "STRING",
-            "CHAR", //嘉荣的修改，提mr时记得删除
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(0)",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(1)",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
@@ -219,9 +219,9 @@ public final class OmniGraphOverride {
 
     private static final Set<String> SINK_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
-            "DOUBLE", //嘉荣的修改，提mr时记得删除
-            "DATE", //嘉荣的修改，提mr时记得删除
             "INTEGER",
+            "DOUBLE",
+            "DATE",
             "BOOLEAN",
             "TIME_WITHOUT_TIME_ZONE",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
@@ -232,8 +232,8 @@ public final class OmniGraphOverride {
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",
             "VARCHAR(9)",
+            "CHAR",
             "STRING",
-            "CHAR", //嘉荣的修改，提mr时记得删除
             "DECIMAL64",
             "DECIMAL128",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));

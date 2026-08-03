@@ -133,10 +133,12 @@ public class RexNodeUtil {
         specialOperatorMap.put("LOCALTIME", SpecialExprType.LOCALTIME);
         specialOperatorMap.put("LOCALTIMESTAMP", SpecialExprType.LOCALTIMESTAMP);
         specialOperatorMap.put("CURRENT_TIME", SpecialExprType.LOCALTIME);
+        specialOperatorMap.put("CURRENT_DATE", SpecialExprType.CURRENT_DATE);
         specialOperatorMap.put("CURRENT_ROW_TIMESTAMP", SpecialExprType.CURRENT_ROW_TIMESTAMP);
         specialOperatorMap.put("NULLIF", SpecialExprType.NULLIF);
         specialOperatorMap.put("IS NULL", SpecialExprType.IS_NULL);
         specialOperatorMap.put("IS NOT TRUE", SpecialExprType.IS_NOT_TRUE);
+        specialOperatorMap.put("LIKE", SpecialExprType.LIKE);
     }
 
     static {
@@ -155,9 +157,10 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.IS_FALSE, "is_false");
         simpleFunctionNameMap.put(SpecialExprType.IS_NOT_FALSE, "is_not_false");
         simpleFunctionNameMap.put(SpecialExprType.IS_NOT_UNKNOWN, "is_not_unknown");
-        simpleFunctionNameMap.put(SpecialExprType.LOCALTIME, "localtime");
-        simpleFunctionNameMap.put(SpecialExprType.LOCALTIMESTAMP, "localtimestamp");
-        simpleFunctionNameMap.put(SpecialExprType.CURRENT_ROW_TIMESTAMP, "current_row_timestamp");
+        simpleFunctionNameMap.put(SpecialExprType.LOCALTIME, "flink_localtime");
+        simpleFunctionNameMap.put(SpecialExprType.LOCALTIMESTAMP, "flink_localtimestamp");
+        simpleFunctionNameMap.put(SpecialExprType.CURRENT_ROW_TIMESTAMP, "flink_current_row_timestamp");
+        simpleFunctionNameMap.put(SpecialExprType.CURRENT_DATE, "flink_current_date");
         simpleFunctionNameMap.put(SpecialExprType.NULLIF, "nullif");
         simpleFunctionNameMap.put(SpecialExprType.IS_NOT_TRUE, "is_not_true");
     }
@@ -238,8 +241,10 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.LOCALTIME, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.LOCALTIMESTAMP, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.CURRENT_ROW_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.CURRENT_DATE, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.NULLIF, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.IS_NOT_TRUE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.LIKE, RexNodeUtil::handleLike);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -344,8 +349,10 @@ public class RexNodeUtil {
         LOCALTIME,
         LOCALTIMESTAMP,
         CURRENT_ROW_TIMESTAMP,
+        CURRENT_DATE,
         NULLIF,
-        IS_NOT_TRUE
+        IS_NOT_TRUE,
+        LIKE
     }
 
 
@@ -387,7 +394,7 @@ public class RexNodeUtil {
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
             jsonMap.put("width", precision);
         } else if (rexNode.getType().getSqlTypeName() == SqlTypeName.DATE) {
-            jsonMap.put(keyStr, RexTypeToIdMap.get("DATE"));
+            jsonMap.put(keyStr, 1);
         } else if (SqlTypeName.DATETIME_TYPES.contains(rexNode.getType().getSqlTypeName())) {
             jsonMap.put(keyStr, 2);
         } else if (SqlTypeName.INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName())) {
@@ -1083,7 +1090,7 @@ public class RexNodeUtil {
             floorArgList.add(buildJsonMap(operands.get(0)));
             jsonMap.put("arguments", floorArgList);
         } else {
-            jsonMap.put("function_name", "floor_time");
+            jsonMap.put("function_name", "flink_floor_time");
             List<Map<String, Object>> floorTimeArgList = new ArrayList<>();
             floorTimeArgList.add(buildJsonMap(operands.get(0)));
             Map<String, Object> unitMap = buildJsonMap(operands.get(1));
@@ -1101,6 +1108,9 @@ public class RexNodeUtil {
                     case "YEAR":
                         jsonMap.put("exprType", "INVALID");
                         LOG.info("FLOOR function need HOUR, MINUTE or SECOND when use Time type");
+                        break;
+                    default:
+                        break;
                 }
             }
         }
@@ -1117,7 +1127,7 @@ public class RexNodeUtil {
             ceilArgList.add(buildJsonMap(operands.get(0)));
             jsonMap.put("arguments", ceilArgList);
         } else {
-            jsonMap.put("function_name", "ceil_time");
+            jsonMap.put("function_name", "flink_ceil_time");
             List<Map<String, Object>> ceilTimeArgList = new ArrayList<>();
             ceilTimeArgList.add(buildJsonMap(operands.get(0)));
             Map<String, Object> ceilMap = buildJsonMap(operands.get(1));
@@ -1135,6 +1145,9 @@ public class RexNodeUtil {
                     case "YEAR":
                         jsonMap.put("exprType", "INVALID");
                         LOG.info("CEIL function need HOUR, MINUTE or SECOND when use Time type");
+                        break;
+                    default:
+                        break;
                 }
             }
         }
@@ -1171,6 +1184,27 @@ public class RexNodeUtil {
         List<Map<String, Object>> isnullArgList = new ArrayList<>();
         isnullArgList.add(buildJsonMap(operands.get(0)));
         jsonMap.put("arguments", isnullArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleLike(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // LIKE: 2-arg native via LikeFunction (vectorized); 3-arg ESCAPE -> INVALID fallback.
+        // NOT LIKE arrives as NOT(LIKE(..)) via sql2rel convertlet, reuses UNARY/NOT branch.
+        if (operands.size() != 2) {
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "LIKE");
+        List<Map<String, Object>> likeArgList = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            Map<String, Object> argMap = buildJsonMap(operands.get(i));
+            normalizeCharLiteralToVarchar(argMap);
+            likeArgList.add(argMap);
+        }
+        jsonMap.put("arguments", likeArgList);
         return jsonMap;
     }
 

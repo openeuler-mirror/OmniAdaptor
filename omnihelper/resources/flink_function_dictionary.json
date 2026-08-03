@@ -61,8 +61,12 @@
   },
   {"func_name": "BETWEEN", "is_support_func": false},
   {"func_name": "NOT BETWEEN", "is_support_func": false},
-  {"func_name": "LIKE", "is_support_func": false},
-  {"func_name": "NOT LIKE", "is_support_func": false},
+  {"func_name": "LIKE", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "NOT LIKE", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "SIMILAR TO", "is_support_func": false},
   {"func_name": "NOT SIMILAR TO", "is_support_func": false},
   {"func_name": "IN", "is_support_func": false},
@@ -219,7 +223,7 @@
   {"func_name": "LOCALTIME", "is_support_func": true},
   {"func_name": "LOCALTIMESTAMP", "is_support_func": true},
   {"func_name": "CURRENT_TIME", "is_support_func": true},
-  {"func_name": "CURRENT_DATE", "is_support_func": false},
+  {"func_name": "CURRENT_DATE", "is_support_func": true},
   {"func_name": "CURRENT_TIMESTAMP", "is_support_func": true},
   {"func_name": "NOW", "is_support_func": true},
   {"func_name": "CURRENT_ROW_TIMESTAMP", "is_support_func": true},

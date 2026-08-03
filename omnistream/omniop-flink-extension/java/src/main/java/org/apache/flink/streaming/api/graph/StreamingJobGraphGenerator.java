@@ -26,6 +26,7 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
+import com.huawei.omniruntime.flink.configuration.OmniRecoveryOptions;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.CheckpointConfigPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.ExecutionCheckpointConfigPOJO;
 import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
@@ -207,6 +208,11 @@ public class StreamingJobGraphGenerator {
         this.chainInfos = new HashMap<>();
 
         jobGraph = new JobGraph(jobID, streamGraph.getJobName());
+        
+        jobGraph.getJobConfiguration()
+                .setString(
+                        OmniRecoveryOptions.RECOVERY_SAVEPOINT_FORMAT_CONFIG_NAME,
+                        OmniRecoveryOptions.resolveRecoverySavepointFormat(streamGraph.getConfiguration()));
     }
 
     @VisibleForTesting
@@ -718,7 +724,7 @@ public class StreamingJobGraphGenerator {
         CheckpointingMode chkMode = streamGraph.getCheckpointConfig().getCheckpointingMode();
         boolean unalignedCheckpointsEnabled = streamGraph.getCheckpointConfig().isUnalignedCheckpointsEnabled();
         boolean timeoutEnabled = streamGraph.getCheckpointConfig().getAlignedCheckpointTimeout().toMillis() > 0;
-        boolean useOmni = chkMode == CheckpointingMode.EXACTLY_ONCE && (!unalignedCheckpointsEnabled || timeoutEnabled);
+        boolean useOmni = chkMode == CheckpointingMode.EXACTLY_ONCE;
         if (!useOmni) {
             LOG.warn("flink CheckpointConfig parameter value is not supported by native.");
         }
