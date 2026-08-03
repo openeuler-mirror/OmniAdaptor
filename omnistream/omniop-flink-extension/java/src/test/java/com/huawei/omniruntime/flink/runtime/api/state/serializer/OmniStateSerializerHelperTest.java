@@ -20,6 +20,11 @@ import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.runtime.typeutils.ExternalSerializer;
+import org.apache.flink.table.runtime.typeutils.ExternalTypeInfo;
+import org.apache.flink.table.types.DataType;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -39,7 +44,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link OmniStateSerializerHelper}.
@@ -230,6 +234,31 @@ public class OmniStateSerializerHelperTest {
         }
     }
 
+    @Test
+    @DisplayName("legacy POJO JSON without serializerAttributes builds descriptor")
+    void testBuildStateDescriptorLegacyPojoWithoutSerializerAttributes() {
+        ExecutionConfig config = new ExecutionConfig();
+        String legacyJson = "{\"type\":7,\"element_type\":\"" + LegacyPojo.class.getName() + "\"}";
+
+        StateDescriptor<?, ?> result = OmniStateSerializerHelper.buildStateDescriptor(
+                "testState", "key", legacyJson, config, getClass().getClassLoader());
+
+        assertNotNull(result);
+    }
+
+    @Test
+    @DisplayName("legacy TUPLE JSON without serializerAttributes builds descriptor")
+    void testBuildStateDescriptorLegacyTupleWithoutSerializerAttributes() {
+        ExecutionConfig config = new ExecutionConfig();
+        String legacyJson = "{\"type\":13,\"element_type\":\"org.apache.flink.api.java.tuple.Tuple2\","
+                + "\"fieldSerializers\":[\"{\\\"type\\\":8}\",\"{\\\"type\\\":4}\"]}";
+
+        StateDescriptor<?, ?> result = OmniStateSerializerHelper.buildStateDescriptor(
+                "testState", "key", legacyJson, config, getClass().getClassLoader());
+
+        assertNotNull(result);
+    }
+
     // ========== buildSerializerJsonInfo tests ==========
 
     @Test
@@ -284,6 +313,27 @@ public class OmniStateSerializerHelperTest {
         OmniSerializerJsonInfo result = OmniStateSerializerHelper.buildJsonInfo(serializer);
 
         assertNotNull(result);
+    }
+
+    @Test
+    @DisplayName("ExternalSerializer round-trip preserves conversion class")
+    void testExternalSerializerRoundTripPreservesConversionClass() {
+        DataType dataType = DataTypes.ROW(
+                DataTypes.FIELD("name", DataTypes.STRING()),
+                DataTypes.FIELD("count", DataTypes.INT()))
+                .bridgedTo(RowData.class);
+        TypeSerializer<?> serializer = ExternalTypeInfo.of(dataType, false).createSerializer(new ExecutionConfig());
+        OmniSerializerJsonInfo jsonInfo = OmniStateSerializerHelper.buildJsonInfo(serializer);
+        String json = "{\"type\":17,"
+                + "\"logicalType\":" + JsonHelper.toJson(jsonInfo.getLogicalType()) + ","
+                + "\"serializerAttributes\":" + JsonHelper.toJson(jsonInfo.getSerializerAttributes()) + "}";
+
+        StateDescriptor<?, ?> result = OmniStateSerializerHelper.buildStateDescriptor(
+                "testState", "value", json, new ExecutionConfig(), getClass().getClassLoader());
+        TypeSerializer<?> restoredSerializer = result.getSerializer();
+
+        assertTrue(restoredSerializer instanceof ExternalSerializer);
+        assertSame(RowData.class, ((ExternalSerializer<?, ?>) restoredSerializer).getDataType().getConversionClass());
     }
 
     @Test
@@ -384,5 +434,10 @@ public class OmniStateSerializerHelperTest {
 
             assertNull(OmniStateSerializerHelper.getStateBackendKeySerializer(streamTask));
         }
+    }
+
+    public static class LegacyPojo {
+        public String name;
+        public int count;
     }
 }
