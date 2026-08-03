@@ -54,8 +54,8 @@
   },
   {"func_name": "IS DISTINCT FROM", "is_support_func": false},
   {"func_name": "IS NOT DISTINCT FROM", "is_support_func": false},
-  {"func_name": "BETWEEN", "is_support_func": false},
-  {"func_name": "NOT BETWEEN", "is_support_func": false},
+  {"func_name": "BETWEEN", "is_support_func": true},
+  {"func_name": "NOT BETWEEN", "is_support_func": true},
   {"func_name": "LIKE", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
