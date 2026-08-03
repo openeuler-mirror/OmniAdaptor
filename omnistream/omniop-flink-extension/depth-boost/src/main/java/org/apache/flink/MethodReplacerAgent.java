@@ -24,20 +24,26 @@ public class MethodReplacerAgent {
         }
         loadNativeLibrary();
         LOG.info(
-                "MethodReplacerAgent config: targets={}, replaceMethods={}",
+                "MethodReplacerAgent config: targets={}, replaceMethods={}, lowerMethods={}",
                 join(config.targetClasses),
-                join(config.replaceMethods));
+                join(config.replaceMethods),
+                join(config.lowerMethods));
 
         MethodDescription replaceMethod =
                 new MethodDescription.ForLoadedMethod(
                         ReplaceHelper.class.getMethod("replaceAllFast", String.class, String.class, String.class)
                 );
 
+        MethodDescription lowerMethod =
+                new MethodDescription.ForLoadedMethod(
+                        LowerCaseHelper.class.getMethod("toLowerCaseFast", String.class)
+                );
+
         // CRC32: in Utils class, replace Crc32.crc32(byte[],int,int) -> Crc32Helper.crc32Fast
         MethodDescription crc32Method =
                 new MethodDescription.ForLoadedMethod(
                         Crc32Helper.class.getMethod("crc32Fast", byte[].class, int.class, int.class)
-        );
+                );
 
         new AgentBuilder.Default()
                 .type(namedAny(config.targetClasses))
@@ -70,6 +76,21 @@ public class MethodReplacerAgent {
                                                 .on(namedAny(config.replaceMethods))
                                 );
                             }
+
+                            // toLowerCase
+                            if (config.lowerMethods.length > 0) {
+                                builder = builder.visit(
+                                        MemberSubstitution.strict()
+                                                .method(
+                                                        ElementMatchers.named("toLowerCase")
+                                                                .and(ElementMatchers.takesArguments(0))
+                                                                .and(ElementMatchers.isDeclaredBy(String.class))
+                                                )
+                                                .replaceWith(lowerMethod)
+                                                .on(namedAny(config.lowerMethods))
+                                );
+                            }
+
                             return builder;
                         }
                 )
@@ -82,7 +103,8 @@ public class MethodReplacerAgent {
             System.loadLibrary("regex");
             LOG.info("Successfully loaded native library regex");
         } catch (Exception e) {
-            LOG.error("Native code library failed to load regex");
+            LOG.info("Native code library failed to load regex");
+            e.printStackTrace();
         }
     }
 
@@ -151,7 +173,8 @@ public class MethodReplacerAgent {
             Map<String, String> agentArgs = parseAgentArgs(args);
             return new AgentConfig(
                     configuredValues(agentArgs, "targets", "agent.targets"),
-                    configuredValues(agentArgs, "replaceMethods", "agent.replaceMethods"));
+                    configuredValues(agentArgs, "replaceMethods", "agent.replaceMethods"),
+                    configuredValues(agentArgs, "lowerMethods", "agent.lowerMethods"));
         }
 
         private boolean hasTransformConfig() {
