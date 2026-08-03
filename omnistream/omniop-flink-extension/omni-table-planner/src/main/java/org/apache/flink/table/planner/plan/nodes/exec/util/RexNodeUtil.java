@@ -225,6 +225,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.CEIL, RexNodeUtil::handleCeil);
         specialHandlerMap.put(SpecialExprType.LN, RexNodeUtil::handleLn);
         specialHandlerMap.put(SpecialExprType.IS_NULL, RexNodeUtil::handleIsNull);
+        specialHandlerMap.put(SpecialExprType.LIKE, RexNodeUtil::handleLike);
         // Simple FUNCTION-forwarding expressions share one handler (function_name via simpleFunctionNameMap).
         specialHandlerMap.put(SpecialExprType.ROUND, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.GREATEST, RexNodeUtil::handleSimpleFunction);
@@ -244,7 +245,6 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.CURRENT_DATE, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.NULLIF, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.IS_NOT_TRUE, RexNodeUtil::handleSimpleFunction);
-        specialHandlerMap.put(SpecialExprType.LIKE, RexNodeUtil::handleLike);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {

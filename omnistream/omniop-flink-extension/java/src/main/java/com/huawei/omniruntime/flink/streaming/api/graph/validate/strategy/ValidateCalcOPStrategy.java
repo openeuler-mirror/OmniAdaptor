@@ -25,10 +25,10 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateCalcOPStrategy.class);
 
     private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
- 	             "DOUBLE",
- 	             "DATE",
- 	             "CHAR"));
- 	
+                 "DOUBLE",
+                 "DATE",
+                 "CHAR"));
+    
     private static final Set<String> SUPPORT_BINARYOP_NAME = new HashSet<>(Arrays.asList(
             "OR",
             "AND",
