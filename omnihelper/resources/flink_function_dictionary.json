@@ -111,31 +111,75 @@
   {"func_name": "CEIL", "is_support_func": false},
   {"func_name": "CEILING", "is_support_func": false},
   {"func_name": "FLOOR", "is_support_func": false},
-  {"func_name": "SIN", "is_support_func": false},
-  {"func_name": "SINH", "is_support_func": false},
-  {"func_name": "COS", "is_support_func": false},
-  {"func_name": "TAN", "is_support_func": false},
-  {"func_name": "TANH", "is_support_func": false},
-  {"func_name": "COT", "is_support_func": false},
-  {"func_name": "ASIN", "is_support_func": false},
-  {"func_name": "ACOS", "is_support_func": false},
-  {"func_name": "ATAN", "is_support_func": false},
-  {"func_name": "ATAN2", "is_support_func": false},
-  {"func_name": "COSH", "is_support_func": false},
-  {"func_name": "DEGREES", "is_support_func": false},
-  {"func_name": "RADIANS", "is_support_func": false},
-  {"func_name": "SIGN", "is_support_func": false},
+  {"func_name": "SIN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "SINH", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "COS", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "TAN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "TANH", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "COT", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "ASIN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "ACOS", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "ATAN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "ATAN2", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "COSH", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "DEGREES", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "RADIANS", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "SIGN", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
   {"func_name": "ROUND", "is_support_func": true,
    "is_supported_type": ["DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
-  {"func_name": "PI", "is_support_func": false},
-  {"func_name": "E", "is_support_func": false},
-  {"func_name": "RAND", "is_support_func": false},
-  {"func_name": "RAND_INTEGER", "is_support_func": false},
-  {"func_name": "UUID", "is_support_func": false},
-  {"func_name": "BIN", "is_support_func": false},
-  {"func_name": "HEX", "is_support_func": false},
-  {"func_name": "TRUNCATE", "is_support_func": false},
+  {"func_name": "PI", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "E", "is_support_func": true,
+   "is_supported_type": ["DOUBLE"]
+  },
+  {"func_name": "RAND", "is_support_func": true,
+   "is_supported_type": ["INT", "BIGINT", "DOUBLE"]
+  },
+  {"func_name": "RAND_INTEGER", "is_support_func": true,
+   "is_supported_type": ["INT"]
+  },
+  {"func_name": "UUID", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "BIN", "is_support_func": true,
+   "is_supported_type": ["INT", "BIGINT"]
+  },
+  {"func_name": "HEX", "is_support_func": true,
+   "is_supported_type": ["INT", "BIGINT", "STRING", "VARCHAR"]
+  },
+  {"func_name": "TRUNCATE", "is_support_func": true,
+   "is_supported_type": ["INT", "BIGINT", "DOUBLE"]
+  },
 
   {"func_name": "||", "is_support_func": false},
   {"func_name": "CHAR_LENGTH", "is_support_func": true,
@@ -152,9 +196,13 @@
   {"func_name": "TRIM", "is_support_func": false},
   {"func_name": "LTRIM", "is_support_func": false},
   {"func_name": "RTRIM", "is_support_func": false},
-  {"func_name": "REPEAT", "is_support_func": false},
+  {"func_name": "REPEAT", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "REGEXP_REPLACE", "is_support_func": false},
-  {"func_name": "OVERLAY", "is_support_func": false},
+  {"func_name": "OVERLAY", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "SUBSTRING", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
@@ -171,9 +219,15 @@
   {"func_name": "CONCAT_WS", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
-  {"func_name": "LPAD", "is_support_func": false},
-  {"func_name": "RPAD", "is_support_func": false},
-  {"func_name": "FROM_BASE64", "is_support_func": false},
+  {"func_name": "LPAD", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "RPAD", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "FROM_BASE64", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "TO_BASE64", "is_support_func": false},
   {"func_name": "ASCII", "is_support_func": false},
   {"func_name": "CHR", "is_support_func": false},
@@ -235,7 +289,9 @@
   {"func_name": "UNIX_TIMESTAMP", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
-  {"func_name": "TO_DATE", "is_support_func": false},
+  {"func_name": "TO_DATE", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "TO_TIMESTAMP_LTZ", "is_support_func": false},
   {"func_name": "TO_TIMESTAMP", "is_support_func": false},
   {"func_name": "CURRENT_WATERMARK", "is_support_func": false},
@@ -268,8 +324,18 @@
       "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
     ]
   },
-  {"func_name": "IS_ALPHA", "is_support_func": false},
-  {"func_name": "IS_DECIMAL", "is_support_func": false},
+  {"func_name": "IS_ALPHA", "is_support_func": true,
+   "is_supported_type": [
+      "VARCHAR", "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "CHAR",
+      "BYTE", "SHORT", "INT", "BIGINT", "DOUBLE", "DECIMAL64", "DECIMAL128"
+    ]
+  },
+  {"func_name": "IS_DECIMAL", "is_support_func": true,
+   "is_supported_type": [
+      "VARCHAR", "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "CHAR",
+      "BYTE", "SHORT", "INT", "BIGINT", "DOUBLE", "DECIMAL64", "DECIMAL128"
+    ]
+  },
   {"func_name": "IS_DIGIT", "is_support_func": false},
   {"func_name": "GREATEST", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DOUBLE"]
@@ -397,13 +463,32 @@
   {"func_name": "SPLIT", "is_support_func": false},
 
 
-  {"func_name": "IS JSON", "is_support_func": false},
-  {"func_name": "JSON_EXISTS", "is_support_func": false},
-  {"func_name": "JSON_STRING", "is_support_func": false},
+  {"func_name": "IS JSON", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR", "CHAR"]
+  },
+  {"func_name": "JSON_EXISTS", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR", "CHAR"]
+  },
+  {"func_name": "JSON_STRING", "is_support_func": true,
+   "is_supported_type": [
+      "BOOLEAN", "TINYINT", "SMALLINT", "INT", "BIGINT", 
+      "DOUBLE", "VARCHAR", "STRING", "CHAR", "ARRAY", "MAP", "ROW"
+    ]
+  },
   {"func_name": "JSON_VALUE", "is_support_func": false},
   {"func_name": "JSON_QUERY", "is_support_func": false},
-  {"func_name": "JSON_OBJECT", "is_support_func": false},
-  {"func_name": "JSON_ARRAY", "is_support_func": false},
+  {"func_name": "JSON_OBJECT", "is_support_func": true,
+    "is_supported_type": [
+      "BOOLEAN", "TINYINT", "SMALLINT", "INT", "BIGINT",
+      "DOUBLE", "VARCHAR", "STRING", "CHAR", "ARRAY", "MAP", "ROW"
+    ]
+  },
+  {"func_name": "JSON_ARRAY", "is_support_func": true,
+    "is_supported_type": [
+      "BOOLEAN", "TINYINT", "SMALLINT", "INT", "BIGINT",
+      "DOUBLE", "VARCHAR", "STRING", "CHAR", "ARRAY", "MAP", "ROW"
+    ]
+  },
 
 
   {"func_name": "ROW", "is_support_func": false},
