@@ -28,5 +28,9 @@ Java Agent 通过 JVM 系统属性`-Dagent.xxx` 配置拦截范围。
 可以在 `flink-conf.yaml` 中通过 `env.java.opts` 或其他flink提供的JVM配置参数进行配置：
 
 ```yaml
-env.java.opts: "-javaagent:/opt/flink-tnel-0.1-SNAPSHOT.jar -Dagent.targets=com.demo.pipeline.CleanJob,com.demo.pipeline.FilterJob,com.demo.runtime.RuleFunction -Dagent.replaceMethods=normalizeText,cleanPayload -Dagent.lowerMethods=matchKeyword,buildIndex"
+env.java.opts: "-javaagent:/opt/flink-tnel-0.1-SNAPSHOT.jar 
+-Dagent.targets=com.demo.pipeline.CleanJob 
+-Dagent.replaceMethods=cleanPayload 
+-Dagent.lowerMethods=buildIndex"
 ```
+上述配置将会把 `CleanJob` 类中的 `cleanPayload` 方法调用的 `replaceAll` 方法进行替换。把`CleanJob` 类中的 `buildIndex` 方法调用的 `toLowerCase` 方法进行替换。
