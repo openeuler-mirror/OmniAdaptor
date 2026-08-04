@@ -119,6 +119,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("SUBSTRING", SpecialExprType.SUBSTR);
         specialOperatorMap.put("SUBSTR", SpecialExprType.SUBSTR);
         specialOperatorMap.put("INSTR", SpecialExprType.INSTR);
+        specialOperatorMap.put("PARSE_URL", SpecialExprType.PARSE_URL);
         specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
         specialOperatorMap.put("LIKE", SpecialExprType.LIKE);
@@ -135,6 +136,7 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.REPLACE, "replace");
         simpleFunctionNameMap.put(SpecialExprType.SUBSTR, "substr");
         simpleFunctionNameMap.put(SpecialExprType.INSTR, "instr");
+        simpleFunctionNameMap.put(SpecialExprType.PARSE_URL, "parse_url");
         simpleFunctionNameMap.put(SpecialExprType.UNIX_TIMESTAMP, "unix_timestamp");
         simpleFunctionNameMap.put(SpecialExprType.FROM_UNIXTIME, "from_unixtime");
     }
@@ -203,6 +205,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.REPLACE, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.SUBSTR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.INSTR, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.PARSE_URL, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.LIKE, RexNodeUtil::handleLike);
     }
@@ -296,6 +299,7 @@ public class RexNodeUtil {
         REPLACE,
         SUBSTR,
         INSTR,
+        PARSE_URL,
         UNIX_TIMESTAMP,
         FROM_UNIXTIME,
         LIKE
@@ -1049,8 +1053,8 @@ public class RexNodeUtil {
 
     /**
      * Shared handler for simple FUNCTION-forwarding expressions (ROUND, GREATEST, LEAST,
-     * CONCAT, CONCAT_WS, REPLACE, SUBSTR, INSTR, UNIX_TIMESTAMP): the function_name comes from
-     * {@link #simpleFunctionNameMap} and every operand is forwarded as an argument.
+     * CONCAT, CONCAT_WS, REPLACE, SUBSTR, INSTR, PARSE_URL, UNIX_TIMESTAMP): the function_name
+     * comes from {@link #simpleFunctionNameMap} and every operand is forwarded as an argument.
      */
     private static Map<String, Object> handleSimpleFunction(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
