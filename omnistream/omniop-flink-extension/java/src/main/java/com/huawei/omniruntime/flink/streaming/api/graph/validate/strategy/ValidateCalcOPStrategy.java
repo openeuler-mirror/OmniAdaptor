@@ -483,6 +483,17 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 return true;
             case "IS_NOT_NULL":
                 return validateReturnTypeAndArguments(exprMap, inputSize);
+            case "SIMILAR_TO":
+                Object similarValue = exprMap.get("value");
+                Object similarPattern = exprMap.get("pattern");
+                if (!exprMap.containsKey("returnType")
+                        || !(similarValue instanceof Map)
+                        || !(similarPattern instanceof Map)) {
+                    LOG.info("SIMILAR_TO's value or pattern is not a map");
+                    return false;
+                }
+                return validateCalcExpr((Map<String, Object>) similarValue, inputSize)
+                        && validateCalcExpr((Map<String, Object>) similarPattern, inputSize);
             case "MULTIPLE_AND_OR":
                 if (!exprMap.containsKey("returnType") || !exprMap.containsKey("conditions")) {
                     return false;

@@ -130,6 +130,8 @@ public class RexNodeUtil {
         specialOperatorMap.put("TYPEOF", SpecialExprType.TYPEOF);
         specialOperatorMap.put("LEFT", SpecialExprType.LEFT);
         specialOperatorMap.put("RIGHT", SpecialExprType.RIGHT);
+        // SIMILAR TO: SQL regex match, Type B vectorized path (SimilarExpr + SimilarFunction)
+        specialOperatorMap.put("SIMILAR TO", SpecialExprType.SIMILAR_TO);
     }
 
     static {
@@ -221,6 +223,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.TYPEOF, RexNodeUtil::handleTypeOf);
         specialHandlerMap.put(SpecialExprType.LEFT, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.RIGHT, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.SIMILAR_TO, RexNodeUtil::handleSimilarTo);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -319,7 +322,8 @@ public class RexNodeUtil {
         LIKE,
         TYPEOF,
         LEFT,
-        RIGHT
+        RIGHT,
+        SIMILAR_TO
     }
 
 
@@ -1205,6 +1209,20 @@ public class RexNodeUtil {
         if (typeString != null) {
             jsonMap.put("value", typeString);
         }
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleSimilarTo(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // SIMILAR TO: 2-arg native via SimilarExpr (vectorized); 3-arg with ESCAPE not supported -> fallback.
+        if (operands.size() != 2) {
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+        jsonMap.put("exprType", "SIMILAR_TO");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("value", buildJsonMap(operands.get(0)));
+        jsonMap.put("pattern", buildJsonMap(operands.get(1)));
         return jsonMap;
     }
 
