@@ -73,14 +73,15 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
 
         // Checks if key types are equal and must be BIGINT
         for (int i = 0; i < leftJoinKey.size(); i++) {
-            String leftType = leftInputTypes.get(leftJoinKey.get(i));
-            String rightType = rightInputTypes.get(rightJoinKey.get(i));
+            String leftType = stripNotNull(leftInputTypes.get(leftJoinKey.get(i)));
+            String rightType = stripNotNull(rightInputTypes.get(rightJoinKey.get(i)));
             if (!SUPPORT_JOIN_KEY_TYPES.contains(leftType)) {
-                LOG.warn("Join Key type must be BIGINT. leftType = {}", leftType);
+                LOG.warn("Join Key type must be BIGINT. leftType = {} (original: {})", leftType, leftInputTypes.get(leftJoinKey.get(i)));
                 return false;
             }
             if (!leftType.equals(rightType)) {
-                LOG.warn("Join Key types are not equal. leftType = {}, rightType = {}", leftType, rightType);
+                LOG.warn("Join Key types are not equal. leftType = {}, rightType = {}",
+                        leftInputTypes.get(leftJoinKey.get(i)), rightInputTypes.get(rightJoinKey.get(i)));
                 return false;
             }
         }
