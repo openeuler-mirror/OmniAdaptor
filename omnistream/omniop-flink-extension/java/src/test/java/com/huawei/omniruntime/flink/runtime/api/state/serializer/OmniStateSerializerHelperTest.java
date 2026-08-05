@@ -22,6 +22,7 @@ import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.runtime.operators.window.TimeWindow;
 import org.apache.flink.table.runtime.typeutils.ExternalSerializer;
 import org.apache.flink.table.runtime.typeutils.ExternalTypeInfo;
 import org.apache.flink.table.types.DataType;
@@ -34,6 +35,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -259,6 +261,21 @@ public class OmniStateSerializerHelperTest {
         assertNotNull(result);
     }
 
+    @Test
+    @DisplayName("TIME_WINDOW JSON with clazzName restores TimeWindow serializer")
+    void testBuildStateDescriptorWithTimeWindowSerializer() {
+        String json = "{\"type\":18,"
+                + "\"serializerAttributes\":{\"clazzName\":\""
+                + TimeWindow.class.getName()
+                + "\"}}";
+
+        StateDescriptor<?, ?> result = OmniStateSerializerHelper.buildStateDescriptor(
+                "testState", "value", json, new ExecutionConfig(), getClass().getClassLoader());
+
+        assertNotNull(result);
+        assertTrue(result.getSerializer() instanceof TimeWindow.Serializer);
+    }
+
     // ========== buildSerializerJsonInfo tests ==========
 
     @Test
@@ -313,6 +330,18 @@ public class OmniStateSerializerHelperTest {
         OmniSerializerJsonInfo result = OmniStateSerializerHelper.buildJsonInfo(serializer);
 
         assertNotNull(result);
+    }
+
+    @Test
+    @DisplayName("TimeWindow serializer JSON uses TimeWindow class when createInstance returns null")
+    void testBuildJsonInfoWithTimeWindowSerializer() {
+        TypeSerializer<?> serializer = new TimeWindow.Serializer();
+
+        OmniSerializerJsonInfo result = OmniStateSerializerHelper.buildJsonInfo(serializer);
+
+        assertNotNull(result);
+        assertEquals(TimeWindow.Serializer.class.getName(), result.getSerializerName());
+        assertEquals(TimeWindow.class.getName(), result.getSerializerInstanceClazz());
     }
 
     @Test
