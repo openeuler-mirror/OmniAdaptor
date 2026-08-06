@@ -57,18 +57,6 @@ public class OmniSerializerAttributesInfo implements Serializable {
         return info;
     }
 
-    public static OmniSerializerAttributesInfo ofList(String clazzName) {
-        return ofClazz(clazzName);
-    }
-
-    public static OmniSerializerAttributesInfo ofPojo(String clazzName) {
-        return ofClazz(clazzName);
-    }
-
-    public static OmniSerializerAttributesInfo ofTuple(String clazzName) {
-        return ofClazz(clazzName);
-    }
-
     public static OmniSerializerAttributesInfo ofExternal(Boolean IsInternalInput, String clazzName) {
         OmniSerializerAttributesInfo info = ofClazz(clazzName);
         info.setExternalIsInternalInput(IsInternalInput);
