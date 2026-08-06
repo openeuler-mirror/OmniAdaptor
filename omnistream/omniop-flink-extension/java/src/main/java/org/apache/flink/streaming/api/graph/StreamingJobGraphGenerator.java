@@ -724,7 +724,7 @@ public class StreamingJobGraphGenerator {
         CheckpointingMode chkMode = streamGraph.getCheckpointConfig().getCheckpointingMode();
         boolean unalignedCheckpointsEnabled = streamGraph.getCheckpointConfig().isUnalignedCheckpointsEnabled();
         boolean timeoutEnabled = streamGraph.getCheckpointConfig().getAlignedCheckpointTimeout().toMillis() > 0;
-        boolean useOmni = chkMode == CheckpointingMode.EXACTLY_ONCE && (!unalignedCheckpointsEnabled || timeoutEnabled);
+        boolean useOmni = chkMode == CheckpointingMode.EXACTLY_ONCE;
         if (!useOmni) {
             LOG.warn("flink CheckpointConfig parameter value is not supported by native.");
         }
