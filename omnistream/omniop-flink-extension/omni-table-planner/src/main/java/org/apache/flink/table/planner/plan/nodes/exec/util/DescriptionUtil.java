@@ -84,6 +84,10 @@ public class DescriptionUtil {
                 typeName += "(" + precision.toString() + "," + scale.toString() + ")";
             }
         }
+        // 追加 NOT NULL 后缀，保留 nullable 信息供 C++ 侧 SavepointAdaptor 解析
+        if (!fieldType.isNullable()) {
+            typeName += " NOT NULL";
+        }
         return typeName;
     }
 

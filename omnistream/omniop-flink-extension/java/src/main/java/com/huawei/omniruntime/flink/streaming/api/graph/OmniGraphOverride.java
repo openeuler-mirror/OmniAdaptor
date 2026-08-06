@@ -654,6 +654,7 @@ public final class OmniGraphOverride {
             newJobType = jobType.getCombinationsJobType(JobType.STREAM);
         }
         for (String type : inputTypeList) {
+            type = AbstractValidateOperatorStrategy.stripNotNull(type);
             isSourceSupportNative = SOURCE_SUPPORT_DATA_TYPE.contains(type);
             if (!isSourceSupportNative) {
                 break;
@@ -673,17 +674,20 @@ public final class OmniGraphOverride {
         }
         boolean isSupportNative = false;
         for (String type : inputTypeList) {
+            String originalType = type;
+            type = AbstractValidateOperatorStrategy.stripNotNull(type);
             if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                LOG.info("getInputTypes normalized DECIMAL64: '{}' -> 'DECIMAL64'", type);
                 type = "DECIMAL64";
-                LOG.info("converted to DECIMAL64");
             }
 
             if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                LOG.info("getInputTypes normalized DECIMAL128: '{}' -> 'DECIMAL128'", type);
                 type = "DECIMAL128";
-                LOG.info("converted to DECIMAL128");
             }
             isSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);
             if (!isSupportNative) {
+                LOG.info("getInputTypes unsupported sink type for operator '{}': '{}' (original: '{}')", operatorName, type, originalType);
                 break;
             }
         }

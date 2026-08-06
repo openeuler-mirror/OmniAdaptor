@@ -64,8 +64,8 @@ public class ValidateWindowJoinOPStrategy extends AbstractValidateOperatorStrate
         }
 
         for (int i = 0; i < leftJoinKey.size(); i++) {
-            String leftType = leftInputTypes.get(leftJoinKey.get(i));
-            String rightType = rightInputTypes.get(rightJoinKey.get(i));
+            String leftType = stripNotNull(leftInputTypes.get(leftJoinKey.get(i)));
+            String rightType = stripNotNull(rightInputTypes.get(rightJoinKey.get(i)));
             if (!leftType.equals(rightType)) {
                 LOG.warn("WindowJoin Key types are not equal. leftType = {}, rightType = {}", leftType, rightType);
                 return false;
