@@ -23,6 +23,8 @@ import java.util.Set;
 
 public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateCalcOPStrategy.class);
+    private static final String DATETIME_PLUS_DAY_TIME = "datetime_plus_day_time";
+    private static final String DATETIME_MINUS_DAY_TIME = "datetime_minus_day_time";
 
     private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "DOUBLE",
@@ -149,6 +151,37 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             }
         }
         return true;
+    }
+
+    private static boolean isLongTypedExpression(Object expression) {
+        if (!(expression instanceof Map)) {
+            return false;
+        }
+        Map<?, ?> expressionMap = (Map<?, ?>) expression;
+        return RexTypeToIdMap.get("BIGINT").equals(expressionMap.get("dataType"))
+                || RexTypeToIdMap.get("BIGINT").equals(expressionMap.get("returnType"));
+    }
+
+    private static boolean validateTimestampDayTimeFunction(Map<String, Object> exprMap) {
+        if (!RexTypeToIdMap.get("BIGINT").equals(exprMap.get("returnType"))) {
+            return false;
+        }
+        Object argumentsObject = exprMap.get("arguments");
+        if (!(argumentsObject instanceof List)) {
+            return false;
+        }
+        List<?> arguments = (List<?>) argumentsObject;
+        if (arguments.size() != 2 || !isLongTypedExpression(arguments.get(0))) {
+            return false;
+        }
+        if (!(arguments.get(1) instanceof Map)) {
+            return false;
+        }
+        Map<?, ?> intervalLiteral = (Map<?, ?>) arguments.get(1);
+        return "LITERAL".equals(intervalLiteral.get("exprType"))
+                && Boolean.FALSE.equals(intervalLiteral.get("isNull"))
+                && RexTypeToIdMap.get("BIGINT").equals(intervalLiteral.get("dataType"))
+                && intervalLiteral.get("value") instanceof Long;
     }
 
     /**
@@ -320,6 +353,12 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
 
                 // Validate json_split function signature: 1 STRING argument, STRING return type
                 String functionName = (String) exprMap.get("function_name");
+                if ((DATETIME_PLUS_DAY_TIME.equals(functionName)
+                                || DATETIME_MINUS_DAY_TIME.equals(functionName))
+                        && !validateTimestampDayTimeFunction(exprMap)) {
+                    LOG.info("Invalid {} internal function signature.", functionName);
+                    return false;
+                }
                 if ("json_split".equals(functionName)) {
                     Object argumentsObj = exprMap.get("arguments");
                     if (!(argumentsObj instanceof List)) {
