@@ -16,10 +16,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateCalcOPStrategy.class);
@@ -89,8 +91,9 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {
         // check input/output fields.
         int inputSize = 0;
+        List<String> inputTypes;
         if (operatorInfoMap.containsKey("inputTypes")) {
-            List<String> inputTypes = (List<String>) operatorInfoMap.get("inputTypes");
+            inputTypes = (List<String>) operatorInfoMap.get("inputTypes");
             inputSize = inputTypes.size();
             if (CollectionUtil.isNullOrEmpty(inputTypes)) {
                 return false;
@@ -99,8 +102,9 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             LOG.info("Missing inputTypes field.");
             return false;
         }
+        List<String> outputTypes;
         if (operatorInfoMap.containsKey("outputTypes")) {
-            List<String> outputTypes = (List<String>) operatorInfoMap.get("outputTypes");
+            outputTypes = (List<String>) operatorInfoMap.get("outputTypes");
             if (CollectionUtil.isNullOrEmpty(outputTypes)) {
                 return false;
             }
@@ -121,7 +125,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
         }
 
         for (Map<String, Object> indexmap : indicesList) {
-            if (!validateCalcExpr(indexmap, inputSize)) {
+            if (!validateCalcProjectionExpr(indexmap, inputSize)) {
                 return false;
             }
         }
@@ -134,7 +138,19 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             }
         }
         // check dataTypes
-        return validateDataTypes(getDataTypes(operatorInfoMap, "inputTypes", "outputTypes"));
+        return validateDataTypes(Collections.singletonList(inputTypes))
+                && validateCalcOutputDataTypes(outputTypes);
+    }
+
+    private static boolean isIntervalOutputType(String type) {
+        return type != null && type.matches("^INTERVAL(?: |_).*$");
+    }
+
+    private boolean validateCalcOutputDataTypes(List<String> outputTypes) {
+        List<String> nonIntervalOutputTypes = outputTypes.stream()
+                .filter(type -> !isIntervalOutputType(type))
+                .collect(Collectors.toList());
+        return validateDataTypes(Collections.singletonList(nonIntervalOutputTypes));
     }
 
 
@@ -160,6 +176,36 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
         Map<?, ?> expressionMap = (Map<?, ?>) expression;
         return RexTypeToIdMap.get("BIGINT").equals(expressionMap.get("dataType"))
                 || RexTypeToIdMap.get("BIGINT").equals(expressionMap.get("returnType"));
+    }
+
+    private static boolean isIntervalTypeId(Object typeId) {
+        return RexTypeToIdMap.get("INTERVAL_MONTH").equals(typeId)
+                || RexTypeToIdMap.get("INTERVAL_DAY").equals(typeId);
+    }
+
+    private static boolean isIntervalTypedExpression(Map<String, Object> exprMap) {
+        return isIntervalTypeId(exprMap.get("dataType"))
+                || isIntervalTypeId(exprMap.get("returnType"));
+    }
+
+    private static boolean validateIntervalLiteralProjection(Map<String, Object> exprMap) {
+        if (!"LITERAL".equals(exprMap.get("exprType"))
+                || !Boolean.FALSE.equals(exprMap.get("isNull"))) {
+            return false;
+        }
+        Object typeId = exprMap.get("dataType");
+        Object value = exprMap.get("value");
+        if (RexTypeToIdMap.get("INTERVAL_MONTH").equals(typeId)) {
+            return value instanceof Integer;
+        }
+        return RexTypeToIdMap.get("INTERVAL_DAY").equals(typeId) && value instanceof Long;
+    }
+
+    private static boolean validateCalcProjectionExpr(Map<String, Object> exprMap, int inputSize) {
+        if (isIntervalTypedExpression(exprMap)) {
+            return validateIntervalLiteralProjection(exprMap);
+        }
+        return validateCalcExpr(exprMap, inputSize);
     }
 
     private static boolean validateTimestampDayTimeFunction(Map<String, Object> exprMap) {
@@ -194,6 +240,10 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     public static boolean validateCalcExpr(Map<String, Object> exprMap, int inputSize) {
         if (!exprMap.containsKey("exprType")) {
             return false; // If any map doesn't contain "expr", return false
+        }
+        if (isIntervalTypedExpression(exprMap)) {
+            LOG.info("INTERVAL is supported only as a top-level Calc literal projection.");
+            return false;
         }
         String exprType = (String) exprMap.get("exprType");
         switch (exprType) {

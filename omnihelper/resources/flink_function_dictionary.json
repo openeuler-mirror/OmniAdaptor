@@ -199,7 +199,7 @@
   {"func_name": "DATE", "is_support_func": true, "is_supported_type": ["VARCHAR", "CHAR"]},
   {"func_name": "TIME", "is_support_func": false},
   {"func_name": "TIMESTAMP", "is_support_func": false},
-  {"func_name": "INTERVAL", "is_support_func": false},
+  {"func_name": "INTERVAL", "is_support_func": true},
   {"func_name": "LOCALTIME", "is_support_func": false},
   {"func_name": "LOCALTIMESTAMP", "is_support_func": false},
   {"func_name": "CURRENT_TIME", "is_support_func": false},
