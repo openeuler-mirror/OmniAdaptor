@@ -212,6 +212,7 @@ public class RexNodeUtil {
         EXTRACT,
         DATE_FORMAT,
         TO_TIMESTAMP_LTZ,
+        TO_TIMESTAMP,
         COUNT_CHAR,
         CAST,
         OTHERS,
@@ -313,7 +314,7 @@ public class RexNodeUtil {
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
             jsonMap.put("width", precision);
         } else if (rexNode.getType().getSqlTypeName() == SqlTypeName.DATE) {
-            jsonMap.put(keyStr, RexTypeToIdMap.get("DATE"));
+            jsonMap.put(keyStr, 1);
         } else if (SqlTypeName.DATETIME_TYPES.contains(rexNode.getType().getSqlTypeName())) {
             jsonMap.put(keyStr, 2);
         } else if (SqlTypeName.INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName())) {
