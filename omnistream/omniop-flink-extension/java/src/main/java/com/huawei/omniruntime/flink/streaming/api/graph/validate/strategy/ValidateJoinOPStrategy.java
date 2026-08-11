@@ -27,7 +27,9 @@ import java.util.Set;
 public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
 
     private static final Logger LOG = LoggerFactory.getLogger(ValidateJoinOPStrategy.class);
-    private static final Set<String> SUPPORT_JOIN_TYPE = new HashSet<>(Arrays.asList("InnerJoin", "LeftOuterJoin"));
+    // LeftSemiJoin (EXISTS) / LeftAntiJoin (NOT EXISTS) share StreamingSemiAntiJoinOperator.
+    private static final Set<String> SUPPORT_JOIN_TYPE =
+        new HashSet<>(Arrays.asList("InnerJoin", "LeftOuterJoin", "LeftSemiJoin", "LeftAntiJoin"));
     private static final List<String> SUPPORT_JOIN_KEY_TYPES = Collections.singletonList("BIGINT");
 
     private static boolean nonEquiConditionCheck(Map<String, Object> condition, int inputSize) {
@@ -100,6 +102,12 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
         // Checks if condition is valid
         Object condition = operatorInfoMap.get("nonEquiCondition");
         if (condition != null) {
+            // v1: semi/anti join supports equi-key only (numAssociate tracking assumes key-only match);
+            // non-equi semi/anti falls back to vanilla.
+            if (joinType.equals("LeftSemiJoin") || joinType.equals("LeftAntiJoin")) {
+                LOG.warn("Semi/anti join supports equi-key only in v1, fall back for non-equi condition");
+                return false;
+            }
             if (!nonEquiConditionCheck((Map<String, Object>) condition, outputTypes.size())) {
                 return false;
             }
