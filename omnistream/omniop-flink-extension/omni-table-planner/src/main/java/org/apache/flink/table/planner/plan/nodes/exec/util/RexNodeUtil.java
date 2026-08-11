@@ -122,6 +122,8 @@ public class RexNodeUtil {
         specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
         specialOperatorMap.put("LIKE", SpecialExprType.LIKE);
+        specialOperatorMap.put("LEFT", SpecialExprType.LEFT);
+        specialOperatorMap.put("RIGHT", SpecialExprType.RIGHT);
     }
 
     static {
@@ -137,6 +139,8 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.INSTR, "instr");
         simpleFunctionNameMap.put(SpecialExprType.UNIX_TIMESTAMP, "unix_timestamp");
         simpleFunctionNameMap.put(SpecialExprType.FROM_UNIXTIME, "from_unixtime");
+        simpleFunctionNameMap.put(SpecialExprType.LEFT, "left");
+        simpleFunctionNameMap.put(SpecialExprType.RIGHT, "right");
     }
 
     static {
@@ -205,6 +209,8 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.INSTR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.LIKE, RexNodeUtil::handleLike);
+        specialHandlerMap.put(SpecialExprType.LEFT, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.RIGHT, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -298,7 +304,9 @@ public class RexNodeUtil {
         INSTR,
         UNIX_TIMESTAMP,
         FROM_UNIXTIME,
-        LIKE
+        LIKE,
+        LEFT,
+        RIGHT
     }
 
 
