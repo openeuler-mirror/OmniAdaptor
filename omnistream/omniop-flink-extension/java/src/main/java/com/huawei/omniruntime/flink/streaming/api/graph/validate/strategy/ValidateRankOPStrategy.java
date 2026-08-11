@@ -60,7 +60,7 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
         }
 
         for (int partitionKey : partitionKeys) {
-            String keyType = inputTypeList.get(partitionKey);
+            String keyType = stripNotNull(inputTypeList.get(partitionKey));
             if (!SUPPORT_GROUP_KEY_TYPES.contains(keyType)) {
                 LOG.info("failed inside group key type check {} ", keyType);
                 return false;
@@ -92,7 +92,7 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
             return false;
         }
         for (int sortId : sortFieldIds) {
-            if (!SUPPORT_ORDER_BY_TYPES.contains(inputTypeList.get(sortId))) {
+            if (!SUPPORT_ORDER_BY_TYPES.contains(stripNotNull(inputTypeList.get(sortId)))) {
                 return false;
             }
         }
@@ -107,7 +107,7 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
             return true;
         }
 
-        return sortFieldIds.size() <= 1 && inputTypeList.get(sortFieldIds.get(0)).equals("BIGINT")
+        return sortFieldIds.size() <= 1 && stripNotNull(inputTypeList.get(sortFieldIds.get(0))).equals("BIGINT")
                 && !sortAscendingOrders.get(0);
     }
 }

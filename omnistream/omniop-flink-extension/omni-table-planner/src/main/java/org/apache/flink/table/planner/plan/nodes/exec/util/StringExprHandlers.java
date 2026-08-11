@@ -62,6 +62,9 @@ final class StringExprHandlers {
         RexNodeUtil.specialOperatorMap.put("UUID", SpecialExprType.UUID);
         RexNodeUtil.specialOperatorMap.put("IS_ALPHA", SpecialExprType.IS_ALPHA);
         RexNodeUtil.specialOperatorMap.put("IS_DECIMAL", SpecialExprType.IS_DECIMAL);
+        RexNodeUtil.specialOperatorMap.put("PARSE_URL", SpecialExprType.PARSE_URL);
+        RexNodeUtil.specialOperatorMap.put("LEFT", SpecialExprType.LEFT);
+        RexNodeUtil.specialOperatorMap.put("RIGHT", SpecialExprType.RIGHT);
 
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.CONCAT, "concat");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.CONCAT_WS, "concat_ws");
@@ -78,6 +81,9 @@ final class StringExprHandlers {
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.FROM_BASE64, "unbase64");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.IS_ALPHA, "is_alpha");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.IS_DECIMAL, "is_decimal");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.PARSE_URL, "parse_url");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.LEFT, "left");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.RIGHT, "right");
 
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.REGEXP_EXTRACT, StringExprHandlers::handleRegexpExtract);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.SPLIT_INDEX, StringExprHandlers::handleSplitIndex);
@@ -100,6 +106,9 @@ final class StringExprHandlers {
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.FROM_BASE64, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.IS_ALPHA, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.IS_DECIMAL, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.PARSE_URL, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.LEFT, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.RIGHT, RexNodeUtil::handleSimpleFunction);
     }
 
     static Map<String, Object> handleRegexpExtract(RexCall rexCall, List<RexNode> operands,
