@@ -65,6 +65,7 @@ final class StringExprHandlers {
         RexNodeUtil.specialOperatorMap.put("PARSE_URL", SpecialExprType.PARSE_URL);
         RexNodeUtil.specialOperatorMap.put("LEFT", SpecialExprType.LEFT);
         RexNodeUtil.specialOperatorMap.put("RIGHT", SpecialExprType.RIGHT);
+        RexNodeUtil.specialOperatorMap.put("STR_TO_MAP", SpecialExprType.STR_TO_MAP);
 
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.CONCAT, "concat");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.CONCAT_WS, "concat_ws");
@@ -109,6 +110,7 @@ final class StringExprHandlers {
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.PARSE_URL, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.LEFT, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.RIGHT, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.STR_TO_MAP, StringExprHandlers::handleStrToMap);
     }
 
     static Map<String, Object> handleRegexpExtract(RexCall rexCall, List<RexNode> operands,
@@ -293,6 +295,50 @@ final class StringExprHandlers {
             hexArgs.add(hexInputArg);
         }
         jsonMap.put("arguments", hexArgs);
+        return jsonMap;
+    }
+
+    static Map<String, Object> handleStrToMap(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        // setDataType's else-branch would resolve MAP to id 25, but set it
+        // explicitly (like TO_DATE/TO_TIMESTAMP) for clarity and safety.
+        jsonMap.put("returnType", RexNodeUtil.RexTypeToIdMap.get("MAP"));
+        jsonMap.put("function_name", "str_to_map");
+        List<Map<String, Object>> strToMapArgs = new ArrayList<>();
+        Map<String, Object> strToMapInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
+        RexNodeUtil.normalizeCharLiteralToVarchar(strToMapInputArg);
+        strToMapArgs.add(strToMapInputArg);
+        // entry delimiter (string2), default ','
+        Map<String, Object> strToMapEntryDelimArg;
+        if (operands.size() >= 2) {
+            strToMapEntryDelimArg = RexNodeUtil.buildJsonMap(operands.get(1));
+            RexNodeUtil.normalizeCharLiteralToVarchar(strToMapEntryDelimArg);
+        } else {
+            strToMapEntryDelimArg = new LinkedHashMap<>();
+            strToMapEntryDelimArg.put("exprType", "LITERAL");
+            strToMapEntryDelimArg.put("dataType", RexNodeUtil.RexTypeToIdMap.get("VARCHAR"));
+            strToMapEntryDelimArg.put("isNull", false);
+            strToMapEntryDelimArg.put("value", ",");
+            strToMapEntryDelimArg.put("width", 1);
+        }
+        strToMapArgs.add(strToMapEntryDelimArg);
+        // kv delimiter (string3), default '='
+        Map<String, Object> strToMapKvDelimArg;
+        if (operands.size() >= 3) {
+            strToMapKvDelimArg = RexNodeUtil.buildJsonMap(operands.get(2));
+            RexNodeUtil.normalizeCharLiteralToVarchar(strToMapKvDelimArg);
+        } else {
+            strToMapKvDelimArg = new LinkedHashMap<>();
+            strToMapKvDelimArg.put("exprType", "LITERAL");
+            strToMapKvDelimArg.put("dataType", RexNodeUtil.RexTypeToIdMap.get("VARCHAR"));
+            strToMapKvDelimArg.put("isNull", false);
+            strToMapKvDelimArg.put("value", "=");
+            strToMapKvDelimArg.put("width", 1);
+        }
+        strToMapArgs.add(strToMapKvDelimArg);
+        jsonMap.put("arguments", strToMapArgs);
+        LOG.info("The STR_TO_MAP expression is {} ", rexCall.toString());
         return jsonMap;
     }
 

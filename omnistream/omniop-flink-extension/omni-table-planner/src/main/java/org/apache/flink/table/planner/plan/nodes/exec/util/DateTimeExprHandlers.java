@@ -53,10 +53,14 @@ final class DateTimeExprHandlers {
         RexNodeUtil.specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
         RexNodeUtil.specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         RexNodeUtil.specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
+        RexNodeUtil.specialOperatorMap.put("CONVERT_TZ", SpecialExprType.CONVERT_TZ);
         RexNodeUtil.udfOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
 
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.TO_TIMESTAMP, "flink_to_timestamp");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.CONVERT_TZ, "convert_tz");
+
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.TO_TIMESTAMP_LTZ, DateTimeExprHandlers::handleToTimestampLtz);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.TO_TIMESTAMP, DateTimeExprHandlers::handleToTimestamp);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.TO_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.TO_DATE, DateTimeExprHandlers::handleToDate);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.PROCTIME, DateTimeExprHandlers::handleProctime);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.DATE_FORMAT, DateTimeExprHandlers::handleDateFormat);
@@ -65,6 +69,7 @@ final class DateTimeExprHandlers {
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.FROM_UNIXTIME, DateTimeExprHandlers::handleFromUnixtime);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.EXTRACT, DateTimeExprHandlers::handleExtract);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, DateTimeExprHandlers::handleUnixTimestamp);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.CONVERT_TZ, RexNodeUtil::handleSimpleFunction);
     }
 
     static Map<String, Object> handleToTimestampLtz(RexCall rexCall, List<RexNode> operands,
@@ -80,37 +85,15 @@ final class DateTimeExprHandlers {
         return jsonMap;
     }
 
-    static Map<String, Object> handleToTimestamp(RexCall rexCall, List<RexNode> operands,
-            Map<String, Object> jsonMap, SpecialExprType specialType) {
-        jsonMap.put("exprType", "FUNCTION");
-        // TO_TIMESTAMP returns TIMESTAMP(3) -> OMNI_LONG (millis, dataType id 2).
-        jsonMap.put("returnType", RexNodeUtil.RexTypeToIdMap.get("BIGINT"));
-        jsonMap.put("function_name", "flink_to_timestamp");
-        List<Map<String, Object>> args = new LinkedList<>();
-        // Input string.
-        Map<String, Object> inputArg = RexNodeUtil.buildJsonMap(operands.get(0));
-        RexNodeUtil.normalizeCharLiteralToVarchar(inputArg);
-        args.add(inputArg);
-        // Optional format (2-arg form); 1-arg form lets the native side use
-        // its built-in default 'yyyy-MM-dd HH:mm:ss'.
-        if (operands.size() >= 2) {
-            Map<String, Object> formatArg = RexNodeUtil.buildJsonMap(operands.get(1));
-            RexNodeUtil.normalizeCharLiteralToVarchar(formatArg);
-            args.add(formatArg);
-        }
-        jsonMap.put("arguments", args);
-        LOG.info("The TO_TIMESTAMP expression is {} ", rexCall.toString());
-        return jsonMap;
-    }
-
     static Map<String, Object> handleToDate(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         // TO_DATE(string1[, string2]) -> DATE, default format 'yyyy-MM-dd'.
-        // Maps to the vectorized to_date({VARCHAR,VARCHAR}) -> DATE32 function.
+        // Maps to the vectorized to_date({VARCHAR,VARCHAR}) -> OMNI_INT function
+        // (days since epoch carried as INT).
         jsonMap.put("exprType", "FUNCTION");
-        // to_date is registered to return OMNI_DATE32(8); setDataType would collapse
-        // the DATE return type to LONG(2), so set it explicitly.
-        jsonMap.put("returnType", RexNodeUtil.RexTypeToIdMap.get("DATE"));
+        // to_date is registered to return OMNI_INT(1); set it explicitly so
+        // setDataType does not collapse the DATE return type to LONG(2).
+        jsonMap.put("returnType", RexNodeUtil.RexTypeToIdMap.get("INT"));
         jsonMap.put("function_name", "to_date");
         List<Map<String, Object>> toDateArgs = new ArrayList<>();
         Map<String, Object> toDateInputArg = RexNodeUtil.buildJsonMap(operands.get(0));

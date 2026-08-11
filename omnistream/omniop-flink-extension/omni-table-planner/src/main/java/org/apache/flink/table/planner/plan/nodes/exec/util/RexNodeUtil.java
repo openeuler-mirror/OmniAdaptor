@@ -276,7 +276,9 @@ public class RexNodeUtil {
         IS_JSON_ARRAY,
         IS_JSON_OBJECT,
         LEFT,
-        RIGHT
+        RIGHT,
+        STR_TO_MAP,
+        CONVERT_TZ
     }
 
 

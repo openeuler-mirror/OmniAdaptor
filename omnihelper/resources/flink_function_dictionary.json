@@ -251,7 +251,9 @@
   {"func_name": "SPLIT_INDEX", "is_support_func": true,
    "is_supported_type": ["STRING", "INT"]
   },
-  {"func_name": "STR_TO_MAP", "is_support_func": false},
+  {"func_name": "STR_TO_MAP", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "SUBSTR", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
@@ -288,7 +290,9 @@
   },
   {"func_name": "TIMESTAMPADD", "is_support_func": false},
   {"func_name": "TIMESTAMPDIFF", "is_support_func": false},
-  {"func_name": "CONVERT_TZ", "is_support_func": false},
+  {"func_name": "CONVERT_TZ", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "FROM_UNIXTIME", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT"]
   },
