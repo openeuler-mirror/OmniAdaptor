@@ -189,7 +189,9 @@
    "is_supported_type": ["STRING", "VARCHAR", "INT"]
   },
   {"func_name": "LOCATE", "is_support_func": false},
-  {"func_name": "PARSE_URL", "is_support_func": false},
+  {"func_name": "PARSE_URL", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "REGEXP", "is_support_func": false},
   {"func_name": "REVERSE", "is_support_func": false},
   {"func_name": "SPLIT_INDEX", "is_support_func": true,
