@@ -707,7 +707,7 @@ public class OperatorDescriptorHelper {
         try {
             jsonObject = new JSONObject(description);
         } catch (JSONException e) {
-            LOG.error("Description is not JSON format {}", description, e);
+            LOG.warn("Description is not JSON format {}", description);
         }
         return jsonObject;
     }
