@@ -39,7 +39,7 @@ public class ValidateDeduplicateOPStrategy extends AbstractValidateOperatorStrat
         List<Integer> uniqueKeys = (ArrayList<Integer>) operatorInfoMap.get("grouping");
         if (!CollectionUtil.isNullOrEmpty(uniqueKeys) && !CollectionUtil.isNullOrEmpty(inputTypeList)) {
             for (int uniqueKey : uniqueKeys) {
-                String keyType = inputTypeList.get(uniqueKey);
+                String keyType = stripNotNull(inputTypeList.get(uniqueKey));
                 if (!SUPPORT_GROUP_KEY_TYPES.contains(keyType)) {
                     return false;
                 }

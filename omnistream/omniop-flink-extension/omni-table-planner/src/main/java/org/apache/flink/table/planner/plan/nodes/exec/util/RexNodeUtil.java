@@ -22,6 +22,7 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
+import org.apache.calcite.util.TimestampString;
 import org.apache.calcite.util.Sarg;
 import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecCalc;
 import org.slf4j.Logger;
@@ -124,6 +125,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("SUBSTRING", SpecialExprType.SUBSTR);
         specialOperatorMap.put("SUBSTR", SpecialExprType.SUBSTR);
         specialOperatorMap.put("INSTR", SpecialExprType.INSTR);
+        specialOperatorMap.put("PARSE_URL", SpecialExprType.PARSE_URL);
         specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
         specialOperatorMap.put("IS FALSE", SpecialExprType.IS_FALSE);
@@ -139,6 +141,8 @@ public class RexNodeUtil {
         specialOperatorMap.put("IS NULL", SpecialExprType.IS_NULL);
         specialOperatorMap.put("IS NOT TRUE", SpecialExprType.IS_NOT_TRUE);
         specialOperatorMap.put("LIKE", SpecialExprType.LIKE);
+        specialOperatorMap.put("LEFT", SpecialExprType.LEFT);
+        specialOperatorMap.put("RIGHT", SpecialExprType.RIGHT);
     }
 
     static {
@@ -152,6 +156,7 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.REPLACE, "replace");
         simpleFunctionNameMap.put(SpecialExprType.SUBSTR, "substr");
         simpleFunctionNameMap.put(SpecialExprType.INSTR, "instr");
+        simpleFunctionNameMap.put(SpecialExprType.PARSE_URL, "parse_url");
         simpleFunctionNameMap.put(SpecialExprType.UNIX_TIMESTAMP, "unix_timestamp");
         simpleFunctionNameMap.put(SpecialExprType.FROM_UNIXTIME, "from_unixtime");
         simpleFunctionNameMap.put(SpecialExprType.IS_FALSE, "is_false");
@@ -163,6 +168,8 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.CURRENT_DATE, "flink_current_date");
         simpleFunctionNameMap.put(SpecialExprType.NULLIF, "nullif");
         simpleFunctionNameMap.put(SpecialExprType.IS_NOT_TRUE, "is_not_true");
+        simpleFunctionNameMap.put(SpecialExprType.LEFT, "left");
+        simpleFunctionNameMap.put(SpecialExprType.RIGHT, "right");
     }
 
     static {
@@ -235,6 +242,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.REPLACE, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.SUBSTR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.INSTR, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.PARSE_URL, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.IS_FALSE, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.IS_NOT_FALSE, RexNodeUtil::handleSimpleFunction);
@@ -245,6 +253,8 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.CURRENT_DATE, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.NULLIF, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.IS_NOT_TRUE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.LEFT, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.RIGHT, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -341,6 +351,7 @@ public class RexNodeUtil {
         REPLACE,
         SUBSTR,
         INSTR,
+        PARSE_URL,
         UNIX_TIMESTAMP,
         FROM_UNIXTIME,
         IS_FALSE,
@@ -352,7 +363,9 @@ public class RexNodeUtil {
         CURRENT_DATE,
         NULLIF,
         IS_NOT_TRUE,
-        LIKE
+        LIKE,
+        LEFT,
+        RIGHT
     }
 
 
@@ -416,6 +429,24 @@ public class RexNodeUtil {
                 && RexTypeToIdMap.get("CHAR").equals(jsonMap.get("dataType"))) {
             jsonMap.put("dataType", RexTypeToIdMap.get("VARCHAR"));
         }
+    }
+
+    // Sarg endpoint (NlsString for VARCHAR/CHAR, TimestampString for TIMESTAMP) -> primitive,
+    // so OmniOperator ParseJSONLiteral reads a plain string/number not a structured object.
+    public static Object extractSargEndpoint(Object endpoint) {
+        if (endpoint == null) {
+            return null;
+        }
+        if (endpoint instanceof NlsString) {
+            return ((NlsString) endpoint).getValue();
+        }
+        if (endpoint instanceof TimestampString) {
+            return ((TimestampString) endpoint).getMillisSinceEpoch();
+        }
+        if (!(endpoint instanceof Number) && !(endpoint instanceof Boolean) && !(endpoint instanceof String)) {
+            LOG.info("extractSargEndpoint unhandled class: {}", endpoint.getClass().getName());
+        }
+        return endpoint;
     }
 
     public static Map<String, Object> buildJsonMap(RexNode rexNode) {
@@ -763,40 +794,82 @@ public class RexNodeUtil {
                 Map<String, Object> literalMap = new LinkedHashMap<>();
                 literalMap.put("exprType", "LITERAL");
                 literalMap.put("isNull", false);
-                if (values.get(i) instanceof NlsString) {
-                    String endpoint = ((NlsString) values.get(i)).getValue();
-                    literalMap.put("value", endpoint);
-                    setDataType(operands.get(0), literalMap, "dataType");
-                } else {
-                    literalMap.put("value", values.get(i));
-                    setDataType(operands.get(0), literalMap, "dataType");
-                }
+                literalMap.put("value", extractSargEndpoint(values.get(i)));
+                setDataType(operands.get(0), literalMap, "dataType");
                 stringList.add(literalMap);
             }
             jsonMap.put("arguments", stringList);
         } else { // a range
-            jsonMap.put("exprType", "BETWEEN");
-            setDataType(rexCall,jsonMap, "returnType");
-            jsonMap.put("value", buildJsonMap(operands.get(0)));
-            // TODO: inclusive, exclusive problem not solved!
+            // Per-range bounds as [hasLower, hasUpper, lower, upper]; Guava Range not importable (Flink relocates) -> type inferred.
+            List<Object[]> rangeInfo = new ArrayList<>();
+            sarg.rangeSet.asRanges().forEach(r -> rangeInfo.add(new Object[] {
+                r.hasLowerBound(), r.hasUpperBound(),
+                r.hasLowerBound() ? r.lowerEndpoint() : null,
+                r.hasUpperBound() ? r.upperEndpoint() : null
+            }));
+            if (rangeInfo.isEmpty()) {
+                // Empty Sarg (e.g. SYMMETRIC with an impossible range) evaluates to FALSE
+                jsonMap.put("exprType", "LITERAL");
+                jsonMap.put("isNull", false);
+                jsonMap.put("value", false);
+                setDataType(rexCall, jsonMap, "dataType");
+            } else {
+                Object[] first = rangeInfo.get(0);
+                // (-inf..+inf): always TRUE, e.g. reversed-bound NOT BETWEEN.
+                boolean alwaysTrue = rangeInfo.size() == 1
+                        && !(Boolean) first[0]
+                        && !(Boolean) first[1];
+                // NOT BETWEEN complement: (-inf..low) U (high..+inf) -> NOT BETWEEN(low, high).
+                boolean isComplement = rangeInfo.size() == 2
+                        && !(Boolean) first[0]
+                        && !(Boolean) rangeInfo.get(1)[1];
+                // Normal BETWEEN: single closed range [low..high].
+                boolean isClosedRange = rangeInfo.size() == 1
+                        && (Boolean) first[0]
+                        && (Boolean) first[1];
+                if (alwaysTrue) {
+                    jsonMap.put("exprType", "LITERAL");
+                    jsonMap.put("isNull", false);
+                    jsonMap.put("value", true);
+                    setDataType(rexCall, jsonMap, "dataType");
+                } else if (!isComplement && !isClosedRange) {
+                    // Half-bounded or non-complement multi-range Sarg is not representable as BETWEEN.
+                    jsonMap.put("exprType", OperatorExprType.INVALID.name());
+                } else {
+                    // TODO: inclusive, exclusive problem not solved!
+                    Object lowerBound = isComplement ? first[3] : first[2];
+                    Object upperBound = isComplement ? rangeInfo.get(1)[2] : first[3];
 
-            // Extract lower and upper bounds
-            Object lowerBound = sarg.rangeSet.asRanges().iterator().next().lowerEndpoint();
-            Object upperBound = sarg.rangeSet.asRanges().iterator().next().upperEndpoint();
+                    Map<String, Object> betweenMap = new LinkedHashMap<>();
+                    betweenMap.put("exprType", "BETWEEN");
+                    setDataType(rexCall, betweenMap, "returnType");
+                    betweenMap.put("value", buildJsonMap(operands.get(0)));
 
-            Map<String, Object> lowMap = new LinkedHashMap<>();
-            lowMap.put("exprType", "LITERAL");
-            lowMap.put("isNull", false);
-            lowMap.put("value", lowerBound);
-            setDataType(operands.get(0), lowMap, "dataType");
-            jsonMap.put("lower_bound", lowMap);
+                    Map<String, Object> lowMap = new LinkedHashMap<>();
+                    lowMap.put("exprType", "LITERAL");
+                    lowMap.put("isNull", false);
+                    lowMap.put("value", extractSargEndpoint(lowerBound));
+                    setDataType(operands.get(0), lowMap, "dataType");
+                    betweenMap.put("lower_bound", lowMap);
 
-            Map<String, Object> upMap = new LinkedHashMap<>();
-            upMap.put("exprType", "LITERAL");
-            upMap.put("isNull", false);
-            upMap.put("value", upperBound);
-            setDataType(operands.get(0), upMap, "dataType");
-            jsonMap.put("upper_bound", upMap);
+                    Map<String, Object> upMap = new LinkedHashMap<>();
+                    upMap.put("exprType", "LITERAL");
+                    upMap.put("isNull", false);
+                    upMap.put("value", extractSargEndpoint(upperBound));
+                    setDataType(operands.get(0), upMap, "dataType");
+                    betweenMap.put("upper_bound", upMap);
+
+                    if (isComplement) {
+                        // NOT BETWEEN: wrap BETWEEN in UNARY NOT
+                        jsonMap.put("exprType", OperatorExprType.UNARY.name());
+                        setDataType(rexCall, jsonMap, "returnType");
+                        jsonMap.put("operator", UnaryExprType.NOT.name());
+                        jsonMap.put("expr", betweenMap);
+                    } else {
+                        jsonMap.putAll(betweenMap);
+                    }
+                }
+            }
         }
         return jsonMap;
     }
@@ -1210,8 +1283,8 @@ public class RexNodeUtil {
 
     /**
      * Shared handler for simple FUNCTION-forwarding expressions (ROUND, GREATEST, LEAST,
-     * CONCAT, CONCAT_WS, REPLACE, SUBSTR, INSTR, UNIX_TIMESTAMP): the function_name comes from
-     * {@link #simpleFunctionNameMap} and every operand is forwarded as an argument.
+     * CONCAT, CONCAT_WS, REPLACE, SUBSTR, INSTR, PARSE_URL, UNIX_TIMESTAMP): the function_name
+     * comes from {@link #simpleFunctionNameMap} and every operand is forwarded as an argument.
      */
     private static Map<String, Object> handleSimpleFunction(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {

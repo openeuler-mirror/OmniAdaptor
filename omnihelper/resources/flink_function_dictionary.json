@@ -59,8 +59,10 @@
       "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
     ]
   },
-  {"func_name": "BETWEEN", "is_support_func": false},
-  {"func_name": "NOT BETWEEN", "is_support_func": false},
+  {"func_name": "IS DISTINCT FROM", "is_support_func": true},
+  {"func_name": "IS NOT DISTINCT FROM", "is_support_func": true},
+  {"func_name": "BETWEEN", "is_support_func": true},
+  {"func_name": "NOT BETWEEN", "is_support_func": true},
   {"func_name": "LIKE", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
@@ -202,10 +204,16 @@
   {"func_name": "INSTR", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
-  {"func_name": "LEFT", "is_support_func": false},
-  {"func_name": "RIGHT", "is_support_func": false},
+  {"func_name": "LEFT", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR", "INT"]
+  },
+  {"func_name": "RIGHT", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR", "INT"]
+  },
   {"func_name": "LOCATE", "is_support_func": false},
-  {"func_name": "PARSE_URL", "is_support_func": false},
+  {"func_name": "PARSE_URL", "is_support_func": true,
+   "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "REGEXP", "is_support_func": false},
   {"func_name": "REVERSE", "is_support_func": false},
   {"func_name": "SPLIT_INDEX", "is_support_func": true,
