@@ -195,10 +195,13 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
         }
         Object typeId = exprMap.get("dataType");
         Object value = exprMap.get("value");
+        // value reaches here via Jackson readValue(..., Map<String,Object>) on the
+        // operatorDescription string: int-range numbers deserialize as Integer, not
+        // Long, so an instanceof Long check would reject valid interval literals.
         if (RexTypeToIdMap.get("INTERVAL_MONTH").equals(typeId)) {
-            return value instanceof Integer;
+            return value instanceof Number;
         }
-        return RexTypeToIdMap.get("INTERVAL_DAY").equals(typeId) && value instanceof Long;
+        return RexTypeToIdMap.get("INTERVAL_DAY").equals(typeId) && value instanceof Number;
     }
 
     private static boolean validateCalcProjectionExpr(Map<String, Object> exprMap, int inputSize) {
@@ -224,10 +227,12 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             return false;
         }
         Map<?, ?> intervalLiteral = (Map<?, ?>) arguments.get(1);
+        // value is an int-range interval-millis literal deserialized from JSON via
+        // Jackson Map<String,Object>, which yields Integer not Long; accept any Number.
         return "LITERAL".equals(intervalLiteral.get("exprType"))
                 && Boolean.FALSE.equals(intervalLiteral.get("isNull"))
                 && RexTypeToIdMap.get("BIGINT").equals(intervalLiteral.get("dataType"))
-                && intervalLiteral.get("value") instanceof Long;
+                && intervalLiteral.get("value") instanceof Number;
     }
 
     /**
