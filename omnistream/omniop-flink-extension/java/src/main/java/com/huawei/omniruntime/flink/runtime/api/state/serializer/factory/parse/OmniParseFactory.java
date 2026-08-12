@@ -5,9 +5,9 @@ import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.Om
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniNativeSerializerJsonInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniSerializerAttributesInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniSerializerJsonInfo;
-import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.type.BinaryTypeInfo;
-import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.type.TimerTypeInfo;
-import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.type.WindowTypeInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type.BinaryTypeInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type.TimerTypeInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type.WindowTypeInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.utils.OmniStateSerializerUtils;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
