@@ -234,6 +234,10 @@ public final class OmniGraphOverride {
             "DECIMAL128",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
 
+    private static boolean isIntervalOutputType(String type) {
+        return type != null && type.matches("^INTERVAL(?: |_).*$");
+    }
+
     /**
      * setStateBackend
      *
@@ -682,7 +686,7 @@ public final class OmniGraphOverride {
                 type = "DECIMAL128";
                 LOG.info("converted to DECIMAL128");
             }
-            isSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);
+            isSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type) || isIntervalOutputType(type);
             if (!isSupportNative) {
                 break;
             }

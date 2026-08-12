@@ -27,6 +27,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecCalc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -39,6 +40,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class RexNodeUtil {
+    private static final int MAX_NATIVE_TIMESTAMP_PRECISION = 3;
+    private static final String DATETIME_PLUS_DAY_TIME = "datetime_plus_day_time";
+    private static final String DATETIME_MINUS_DAY_TIME = "datetime_minus_day_time";
     public static final Map<String, Integer> RexTypeToIdMap = new HashMap<>();
     public static final Map<String, SpecialExprType> specialOperatorMap = new HashMap<>();
     public static final Map<SpecialExprType, String> simpleFunctionNameMap = new HashMap<>();
@@ -343,8 +347,10 @@ public class RexNodeUtil {
             jsonMap.put(keyStr, RexTypeToIdMap.get("DATE"));
         } else if (SqlTypeName.DATETIME_TYPES.contains(rexNode.getType().getSqlTypeName())) {
             jsonMap.put(keyStr, 2);
-        } else if (SqlTypeName.INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName())) {
-            jsonMap.put(keyStr, 1);
+        } else if (SqlTypeName.YEAR_INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName())) {
+            jsonMap.put(keyStr, RexTypeToIdMap.get("INTERVAL_MONTH"));
+        } else if (SqlTypeName.DAY_INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName())) {
+            jsonMap.put(keyStr, RexTypeToIdMap.get("INTERVAL_DAY"));
         } else {
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
         }
@@ -364,6 +370,165 @@ public class RexNodeUtil {
         }
     }
 
+    private static boolean isTimestampType(RexNode rexNode) {
+        SqlTypeName typeName = rexNode.getType().getSqlTypeName();
+        return typeName == SqlTypeName.TIMESTAMP
+                || typeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
+    }
+
+    private static boolean hasSupportedTimestampPrecision(RexNode rexNode) {
+        int precision = rexNode.getType().getPrecision();
+        return precision >= 0 && precision <= MAX_NATIVE_TIMESTAMP_PRECISION;
+    }
+
+    private static boolean isDayTimeIntervalType(RexNode rexNode) {
+        return SqlTypeName.DAY_INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName());
+    }
+
+    private static boolean isIntervalType(RexNode rexNode) {
+        return SqlTypeName.INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName());
+    }
+
+    private static RexLiteral getPureIntervalLiteral(RexNode rexNode) {
+        if (rexNode instanceof RexLiteral && isIntervalType(rexNode)) {
+            return (RexLiteral) rexNode;
+        }
+        if (!(rexNode instanceof RexCall)) {
+            return null;
+        }
+        RexCall call = (RexCall) rexNode;
+        if (call.getOperands().size() != 1
+                || (call.getKind() != SqlKind.MINUS_PREFIX && call.getKind() != SqlKind.PLUS_PREFIX)) {
+            return null;
+        }
+        RexNode operand = call.getOperands().get(0);
+        return operand instanceof RexLiteral && isIntervalType(operand) ? (RexLiteral) operand : null;
+    }
+
+    private static Map<String, Object> tryBuildIntervalLiteralProjection(RexNode rexNode) {
+        RexLiteral literal = getPureIntervalLiteral(rexNode);
+        if (literal == null) {
+            return null;
+        }
+        if (literal.isNull()) {
+            LOG.info("NULL INTERVAL literals are outside the native literal projection scope: {}", rexNode);
+            return invalidExpression();
+        }
+        Object value = literal.getValue2();
+        if (!(value instanceof BigDecimal)) {
+            LOG.info("Expected a normalized BigDecimal for INTERVAL literal {}, but got {}", rexNode,
+                    value == null ? "null" : value.getClass().getName());
+            return invalidExpression();
+        }
+
+        BigDecimal normalizedValue = (BigDecimal) value;
+        if (rexNode instanceof RexCall && rexNode.getKind() == SqlKind.MINUS_PREFIX) {
+            normalizedValue = normalizedValue.negate();
+        }
+
+        Map<String, Object> literalMap = new LinkedHashMap<>();
+        literalMap.put("exprType", OperatorExprType.LITERAL.name());
+        setDataType(literal, literalMap, "dataType");
+        literalMap.put("isNull", false);
+        try {
+            if (SqlTypeName.YEAR_INTERVAL_TYPES.contains(literal.getType().getSqlTypeName())) {
+                literalMap.put("value", normalizedValue.intValueExact());
+            } else {
+                literalMap.put("value", normalizedValue.longValueExact());
+            }
+            return literalMap;
+        } catch (ArithmeticException e) {
+            LOG.info("INTERVAL literal is outside the exact native range: {}", rexNode, e);
+            return invalidExpression();
+        }
+    }
+
+    private static Long getDayTimeIntervalLiteralMillis(RexNode rexNode) {
+        RexNode literalNode = rexNode;
+        boolean negate = false;
+        if (rexNode instanceof RexCall) {
+            RexCall call = (RexCall) rexNode;
+            if (call.getOperands().size() != 1
+                    || (call.getKind() != SqlKind.MINUS_PREFIX && call.getKind() != SqlKind.PLUS_PREFIX)) {
+                return null;
+            }
+            literalNode = call.getOperands().get(0);
+            negate = call.getKind() == SqlKind.MINUS_PREFIX;
+        }
+        if (!(literalNode instanceof RexLiteral) || !isDayTimeIntervalType(literalNode)) {
+            return null;
+        }
+        Object value = ((RexLiteral) literalNode).getValue2();
+        if (!(value instanceof BigDecimal)) {
+            return null;
+        }
+        try {
+            BigDecimal normalizedValue = negate ? ((BigDecimal) value).negate() : (BigDecimal) value;
+            return normalizedValue.longValueExact();
+        } catch (ArithmeticException e) {
+            LOG.info("DAY-TIME interval literal is outside the native millisecond range: {}", rexNode, e);
+            return null;
+        }
+    }
+
+    private static Map<String, Object> invalidExpression() {
+        Map<String, Object> invalidMap = new LinkedHashMap<>();
+        invalidMap.put("exprType", OperatorExprType.INVALID.name());
+        return invalidMap;
+    }
+
+    private static Map<String, Object> buildLongLiteral(long value) {
+        Map<String, Object> literalMap = new LinkedHashMap<>();
+        literalMap.put("exprType", OperatorExprType.LITERAL.name());
+        literalMap.put("dataType", RexTypeToIdMap.get("BIGINT"));
+        literalMap.put("isNull", false);
+        literalMap.put("value", value);
+        return literalMap;
+    }
+
+    private static Map<String, Object> tryBuildTimestampDayTimeArithmetic(RexCall rexCall) {
+        if ((rexCall.getKind() != SqlKind.PLUS && rexCall.getKind() != SqlKind.MINUS)
+                || rexCall.getOperands().size() != 2
+                || !isTimestampType(rexCall)
+                || !hasSupportedTimestampPrecision(rexCall)) {
+            return null;
+        }
+
+        RexNode left = rexCall.getOperands().get(0);
+        RexNode right = rexCall.getOperands().get(1);
+        RexNode timestamp;
+        Long intervalMillis;
+        String functionName;
+        if (rexCall.getKind() == SqlKind.PLUS && isTimestampType(left)) {
+            timestamp = left;
+            intervalMillis = getDayTimeIntervalLiteralMillis(right);
+            functionName = DATETIME_PLUS_DAY_TIME;
+        } else if (rexCall.getKind() == SqlKind.PLUS && isTimestampType(right)) {
+            timestamp = right;
+            intervalMillis = getDayTimeIntervalLiteralMillis(left);
+            functionName = DATETIME_PLUS_DAY_TIME;
+        } else if (rexCall.getKind() == SqlKind.MINUS && isTimestampType(left)) {
+            timestamp = left;
+            intervalMillis = getDayTimeIntervalLiteralMillis(right);
+            functionName = DATETIME_MINUS_DAY_TIME;
+        } else {
+            return null;
+        }
+
+        if (intervalMillis == null || !hasSupportedTimestampPrecision(timestamp)) {
+            return null;
+        }
+        Map<String, Object> jsonMap = new LinkedHashMap<>();
+        jsonMap.put("exprType", "FUNCTION");
+        jsonMap.put("returnType", RexTypeToIdMap.get("BIGINT"));
+        jsonMap.put("function_name", functionName);
+        List<Map<String, Object>> arguments = new ArrayList<>();
+        arguments.add(buildJsonMap(timestamp));
+        arguments.add(buildLongLiteral(intervalMillis));
+        jsonMap.put("arguments", arguments);
+        return jsonMap;
+    }
+
     public static Map<String, Object> buildJsonMap(RexNode rexNode) {
         Map<String, Object> jsonMap = new LinkedHashMap<>();
         if (rexNode instanceof RexCall) {
@@ -377,7 +542,19 @@ public class RexNodeUtil {
             SpecialExprType udfType = resolveOperatorType(udfOperatorMap, operatorName);
             SpecialExprType specialType = udfType != null ? udfType : resolveOperatorType(specialOperatorMap, operatorName);
             LOG.info("Current rexNode is {}", rexCall.toString());
-            if (rexCall.operands.size() == 2 && binaryType != null) {
+            Map<String, Object> timestampIntervalExpr = tryBuildTimestampDayTimeArithmetic(rexCall);
+            if (timestampIntervalExpr != null) {
+                return timestampIntervalExpr;
+            }
+            Map<String, Object> intervalLiteralExpr = tryBuildIntervalLiteralProjection(rexCall);
+            if (intervalLiteralExpr != null) {
+                return intervalLiteralExpr;
+            } else if (isIntervalType(rexCall)) {
+                LOG.info(
+                        "Composite or dynamic INTERVAL expression is outside the native literal scope: {}",
+                        rexCall);
+                return invalidExpression();
+            } else if (rexCall.operands.size() == 2 && binaryType != null) {
                 jsonMap.put("exprType",  OperatorExprType.BINARY.name());
                 setDataType(rexCall,jsonMap, "returnType");
                 jsonMap.put("operator", binaryType.name());
@@ -413,6 +590,9 @@ public class RexNodeUtil {
             }
         } else if (rexNode instanceof RexLiteral) {
             RexLiteral rexLiteral = (RexLiteral) rexNode;
+            if (SqlTypeName.INTERVAL_TYPES.contains(rexLiteral.getType().getSqlTypeName())) {
+                return tryBuildIntervalLiteralProjection(rexLiteral);
+            }
             jsonMap.put("exprType",  OperatorExprType.LITERAL.name());
             setDataType(rexLiteral, jsonMap, "dataType");
             jsonMap.put("isNull", rexLiteral.isNull());
@@ -425,6 +605,9 @@ public class RexNodeUtil {
 
         } else if (rexNode instanceof RexInputRef){
             RexInputRef inputRef = (RexInputRef) rexNode;
+            if (SqlTypeName.INTERVAL_TYPES.contains(inputRef.getType().getSqlTypeName())) {
+                return invalidExpression();
+            }
             if (inputRef instanceof RexPatternFieldRef || inputRef instanceof RexTableInputRef){
                 // we may parse RexTableInputRef later.
                 LOG.info("RexPatternFieldRef/RexTableInputRef is not supported.");
@@ -440,6 +623,9 @@ public class RexNodeUtil {
             }
         } else if (rexNode instanceof RexFieldAccess){
             RexFieldAccess fieldAccess = (RexFieldAccess) rexNode;
+            if (SqlTypeName.INTERVAL_TYPES.contains(fieldAccess.getType().getSqlTypeName())) {
+                return invalidExpression();
+            }
             // Create a field access based on accessIndexMap
             jsonMap.put("exprType",  OperatorExprType.FIELD_REFERENCE.name());
             setDataType(fieldAccess, jsonMap, "dataType");
