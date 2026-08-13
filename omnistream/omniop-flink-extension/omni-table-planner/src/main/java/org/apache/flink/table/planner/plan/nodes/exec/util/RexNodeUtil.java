@@ -109,6 +109,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("JSON_QUERY", SpecialExprType.JSON_QUERY);
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
         specialOperatorMap.put("CURRENT_TIMESTAMP", SpecialExprType.CURRENT_TIMESTAMP);
+        specialOperatorMap.put("CURRENT_WATERMARK", SpecialExprType.CURRENT_WATERMARK);
         specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
         specialOperatorMap.put("ROUND", SpecialExprType.ROUND);
         specialOperatorMap.put("GREATEST", SpecialExprType.GREATEST);
@@ -192,6 +193,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.AND, RexNodeUtil::handleAnd);
         specialHandlerMap.put(SpecialExprType.OR, RexNodeUtil::handleOr);
         specialHandlerMap.put(SpecialExprType.CURRENT_TIMESTAMP, RexNodeUtil::handleCurrentTimestamp);
+        specialHandlerMap.put(SpecialExprType.CURRENT_WATERMARK, RexNodeUtil::handleCurrentWatermark);
         specialHandlerMap.put(SpecialExprType.DATE_ADD, RexNodeUtil::handleDateAdd);
         specialHandlerMap.put(SpecialExprType.FROM_UNIXTIME, RexNodeUtil::handleFromUnixtime);
         // Simple FUNCTION-forwarding expressions share one handler (function_name via simpleFunctionNameMap).
@@ -287,6 +289,7 @@ public class RexNodeUtil {
         JSON_QUERY,
         JSON_SPLIT,
         CURRENT_TIMESTAMP,
+        CURRENT_WATERMARK,
         DATE_ADD,
         ROUND,
         GREATEST,
@@ -964,6 +967,23 @@ public class RexNodeUtil {
         }
         jsonMap.put("arguments", currentTimestampArgs);
         LOG.info("The CURRENT_TIMESTAMP expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleCurrentWatermark(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (operands.size() != 1) {
+            LOG.warn("CURRENT_WATERMARK expects exactly one rowtime operand, but got {}", operands.size());
+            jsonMap.put("exprType", OperatorExprType.INVALID.name());
+            return jsonMap;
+        }
+
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "current_watermark");
+        // Flink validates the rowtime operand and derives the logical return type. At runtime,
+        // CURRENT_WATERMARK reads operator context and therefore has no data arguments.
+        jsonMap.put("arguments", new ArrayList<>());
         return jsonMap;
     }
 
