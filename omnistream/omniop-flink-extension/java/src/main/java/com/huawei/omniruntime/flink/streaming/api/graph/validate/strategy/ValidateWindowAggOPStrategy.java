@@ -103,7 +103,7 @@ public class ValidateWindowAggOPStrategy extends AbstractValidateOperatorStrateg
                     continue;
                 }
                 int argIndex = argIndexes.get(0);
-                String argType = inputTypeList.get(argIndex);
+                String argType = stripNotNull(inputTypeList.get(argIndex));
                 List<String> supportDataTypes = SUPPORT_AGG_FUNCTION_DATATYPE.get(functionName);
                 if (!supportDataTypes.contains(argType)) {
                     return false;

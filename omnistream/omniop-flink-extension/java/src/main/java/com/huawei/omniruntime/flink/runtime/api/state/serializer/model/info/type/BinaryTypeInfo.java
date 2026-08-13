@@ -10,7 +10,6 @@ import org.apache.flink.util.Preconditions;
 import java.util.List;
 
 public class BinaryTypeInfo<T> extends TypeInformation<T> {
-
     private T t;
     private TypeSerializer<T> typeSerializer;
 

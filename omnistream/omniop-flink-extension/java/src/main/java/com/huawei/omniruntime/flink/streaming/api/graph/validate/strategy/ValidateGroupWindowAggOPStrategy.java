@@ -103,7 +103,7 @@ public class ValidateGroupWindowAggOPStrategy extends AbstractValidateOperatorSt
                 return false;
             }
             int argIndex = argIndexes.get(0);
-            String argType = inputTypeList.get(argIndex);
+            String argType = stripNotNull(inputTypeList.get(argIndex));
             List<String> supportDataTypes = SUPPORT_AGG_FUNCTION_DATATYPE.get(functionName);
             if (!supportDataTypes.contains(argType)) {
                 LOG.info("The aggregate data type {} is not supported in aggregate function {}.", argType, functionName);

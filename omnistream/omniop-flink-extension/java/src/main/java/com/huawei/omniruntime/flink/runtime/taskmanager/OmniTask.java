@@ -626,6 +626,9 @@ public class OmniTask extends Task {
             // call native restore and invoke before java
             notifyChannelToOmni(inputGates);
             long status = doRunRestoreNativeTask(nativeTaskRef, nativeStreamTask);
+            if (status != 0) {
+                throw new Exception("Failed to doRunRestoreNativeTask, please check the native log.");
+            }
             // create RemoteDataFetcher for remote input channelsE
             originalTaskDataFetcher = createAndStartRemoteDataFetcher(inputGates);
             if (!transitionState(ExecutionState.INITIALIZING, ExecutionState.RUNNING)) {
@@ -634,6 +637,9 @@ public class OmniTask extends Task {
             taskManagerActions.updateTaskExecutionState(new TaskExecutionState(executionId, ExecutionState.RUNNING));
             registerEventDispatcher((StreamTask<?, ?>) invokable);
             status = doRunInvokeNativeTask(nativeTaskRef, nativeStreamTask);
+            if (status != 0) {
+                throw new Exception("Failed to doRunInvokeNativeTask, please check the native log.");
+            }
         } else {
             restoreAndInvoke(invokable);
             // mailbox loop ended

@@ -1,9 +1,9 @@
 package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info;
 
-import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonParser;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.SC;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerType;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonInclude;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -26,7 +26,8 @@ public class OmniNativeSerializerJsonInfo implements Serializable {
     private OmniNativeSerializerJsonInfo namespaceSerializer;
     private List<String> fieldNames;
     private List<OmniNativeSerializerJsonInfo> fieldSerializers;
-    private JsonParser logicalType;
+    private JsonNode logicalType;
+    private OmniSerializerAttributesInfo serializerAttributes;
 
     public int getType() {
         return type;
@@ -100,12 +101,20 @@ public class OmniNativeSerializerJsonInfo implements Serializable {
         this.fieldSerializers = fieldSerializers;
     }
 
-    public JsonParser getLogicalType() {
+    public JsonNode getLogicalType() {
         return logicalType;
     }
 
-    public void setLogicalType(JsonParser logicalType) {
+    public void setLogicalType(JsonNode logicalType) {
         this.logicalType = logicalType;
+    }
+
+    public OmniSerializerAttributesInfo getSerializerAttributes() {
+        return serializerAttributes;
+    }
+
+    public void setSerializerAttributes(OmniSerializerAttributesInfo serializerAttributes) {
+        this.serializerAttributes = serializerAttributes;
     }
 
     @Override
@@ -131,6 +140,7 @@ public class OmniNativeSerializerJsonInfo implements Serializable {
                 + "fieldNames = [" + String.join(SC.BLANK + SC.COMMA, fieldNameInfoList) + "], "
                 + "fieldSerializers = [" + String.join(SC.BLANK + SC.COMMA, fieldSerializerInfoList) + "]"
                 + "logicalType = " + (null == this.logicalType ? null : this.logicalType.toString()) + ", "
+                + "serializerAttributes = " + (null == this.serializerAttributes ? null : this.serializerAttributes.toString()) + ", "
                 + "}";
     }
 }
