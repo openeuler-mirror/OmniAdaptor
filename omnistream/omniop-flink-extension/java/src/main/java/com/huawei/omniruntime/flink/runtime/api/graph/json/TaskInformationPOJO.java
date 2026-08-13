@@ -17,12 +17,15 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.configuration.StreamC
 
 import org.apache.flink.contrib.streaming.state.EmbeddedRocksDBStateBackend;
 import org.apache.flink.contrib.streaming.state.RocksDBMemoryConfiguration;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
 import org.apache.flink.runtime.executiongraph.TaskInformation;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.StateBackendLoader;
 import org.apache.flink.runtime.taskexecutor.TaskManagerConfiguration;
 import org.apache.flink.streaming.api.graph.StreamConfig;
+import org.apache.flink.util.TernaryBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,10 +69,15 @@ public class TaskInformationPOJO {
     private int numberOfTransferThreads = 4;
     private double stateBackendManagedMemoryFraction;
     private long stateBackendManagedMemorySize;
+    private int stateBackendConfigVersion = 1;
+    private long stateBackendResourceId;
     private long cacheAddr;
     private long writeBufferManagerAddr;
     private boolean splitWatermark = false;
     private String priorityQueueStateType = "";
+
+    // ockdb related config，仅当stateBackend为EmbeddedOckStateBackend时填充，下传C++侧
+    private OckDBConfigPOJO ockDBConfig;
 
     private int taskType;
 
@@ -114,11 +122,28 @@ public class TaskInformationPOJO {
     }
 
     private void getStateBackendConfig(StreamConfig tempStreamConfig, TaskManagerConfiguration taskManagerConfiguration,
-                                       ClassLoader cl, MemoryManager memoryManager) throws Exception {
-        StateBackend backend = tempStreamConfig.getStateBackend(Thread.currentThread().getContextClassLoader());
-        stateBackend = backend == null ? "HashMapStateBackend" : backend.getName();
-        if (!stateBackend.equals("EmbeddedRocksDBStateBackend")) {
+                                        ClassLoader cl, MemoryManager memoryManager) throws Exception {
+        StateBackend applicationBackend = tempStreamConfig.getStateBackend(cl);
+        StateBackend backend = StateBackendLoader.fromApplicationOrConfigOrDefault(
+                applicationBackend,
+                TernaryBoolean.UNDEFINED,
+                taskManagerConfiguration.getConfiguration(),
+                cl,
+                LOG);
+        stateBackend = backend.getClass().getSimpleName();
+        if (stateBackend.equals("EmbeddedOckStateBackend")) {
+            getOckDBStateBackendConfig(backend, tempStreamConfig, taskManagerConfiguration, cl, memoryManager);
+            stateBackendResourceId = Integer.toUnsignedLong(System.identityHashCode(memoryManager));
+            if (stateBackendResourceId == 0L) {
+                stateBackendResourceId = 1L;
+            }
             return;
+        }
+        if (stateBackend.equals("HashMapStateBackend")) {
+            return;
+        }
+        if (!stateBackend.equals("EmbeddedRocksDBStateBackend")) {
+            throw new UnsupportedOperationException("Unsupported native state backend: " + stateBackend);
         }
         Class<?> backendClass = backend.getClass();
         Field[] fields = backendClass.getDeclaredFields();
@@ -139,6 +164,15 @@ public class TaskInformationPOJO {
             }
         }
 
+        populateManagedMemory(tempStreamConfig, taskManagerConfiguration, cl, memoryManager);
+
+        priorityQueueStateType = ((EmbeddedRocksDBStateBackend) backend).getPriorityQueueStateType().toString();
+    }
+
+    private void populateManagedMemory(StreamConfig tempStreamConfig,
+                                       TaskManagerConfiguration taskManagerConfiguration,
+                                       ClassLoader cl,
+                                       MemoryManager memoryManager) {
         stateBackendManagedMemoryFraction = tempStreamConfig.getManagedMemoryFractionOperatorUseCaseOfSlot(
                 ManagedMemoryUseCase.STATE_BACKEND,
                 taskManagerConfiguration.getConfiguration(),
@@ -151,8 +185,93 @@ public class TaskInformationPOJO {
         } else {
             stateBackendManagedMemorySize = memoryManager.computeMemorySize(stateBackendManagedMemoryFraction);
         }
+    }
 
-        priorityQueueStateType = ((EmbeddedRocksDBStateBackend) backend).getPriorityQueueStateType().toString();
+    /**
+     * 解析EmbeddedOckStateBackend的配置，参考OmniStateStore EmbeddedOckStateBackend的configure方法：
+     * 优先使用backend实例已解析的字段（UNDEFINED视为未解析），未解析项从Flink ReadableConfig读取。
+     * OckDB配置项整体通过OckDBConfigPOJO下传C++侧。
+     */
+    private void getOckDBStateBackendConfig(StateBackend backend, StreamConfig tempStreamConfig,
+                                            TaskManagerConfiguration taskManagerConfiguration, ClassLoader cl,
+                                            MemoryManager memoryManager) throws Exception {
+        // 从Flink配置解析全部OckDB选项，配置key与OmniStateStore OckDBOptions一致
+        Configuration backendConfiguration = getFieldValue(backend, "config", Configuration.class);
+        ockDBConfig = new OckDBConfigPOJO(
+                backendConfiguration == null ? taskManagerConfiguration.getConfiguration() : backendConfiguration);
+
+        Class<?> backendClass = backend.getClass();
+        Field[] fields = backendClass.getDeclaredFields();
+        String[] resolvedLocalDirs = null;
+        int resolvedTransferThreads = -1;
+        String resolvedPqType = null;
+        for (Field field : fields) {
+            String name = field.getName();
+            if (!field.isAccessible()) {
+                field.setAccessible(true);
+            }
+            try {
+                if (name.equals("localOckDbDirectories")) {
+                    Object value = field.get(backend);
+                    if (value instanceof File[]) {
+                        resolvedLocalDirs = getDbStoragePaths((File[]) value);
+                    }
+                } else if (name.equals("numberOfTransferThreads")) {
+                    resolvedTransferThreads = (int) field.get(backend);
+                } else if (name.equals("priorityQueueStateType")) {
+                    Object value = field.get(backend);
+                    if (value != null) {
+                        resolvedPqType = value.toString();
+                    }
+                }
+            } catch (Exception e) {
+                LOG.warn("reflect OckDB field {} failed: {}", name, e.getMessage());
+            }
+        }
+
+        // UNDEFINED_NUMBER_OF_TRANSFER_THREADS = -1，未解析时用config默认值
+        if (resolvedTransferThreads > 0) {
+            numberOfTransferThreads = resolvedTransferThreads;
+            ockDBConfig.setCheckpointTransferThreadNum(resolvedTransferThreads);
+        } else {
+            numberOfTransferThreads = ockDBConfig.getCheckpointTransferThreadNum();
+        }
+
+        // localDirectories优先用backend实例解析值，其次用config值
+        if (resolvedLocalDirs != null && resolvedLocalDirs.length > 0) {
+            rocksdbStorePaths = resolvedLocalDirs;
+            ockDBConfig.setLocalDirectories(String.join(",", resolvedLocalDirs));
+        } else if (ockDBConfig.getLocalDirectories() != null && !ockDBConfig.getLocalDirectories().isEmpty()) {
+            rocksdbStorePaths = ockDBConfig.getLocalDirectories().split(",|" + File.pathSeparator);
+        }
+
+        // priorityQueueType优先用backend实例解析值，其次用config值
+        if (resolvedPqType != null) {
+            priorityQueueStateType = resolvedPqType;
+            ockDBConfig.setPriorityQueueType(resolvedPqType);
+        } else {
+            priorityQueueStateType = ockDBConfig.getPriorityQueueType();
+        }
+
+        // 托管内存比例计算与RocksDB一致
+        populateManagedMemory(tempStreamConfig, taskManagerConfiguration, cl, memoryManager);
+    }
+
+    private <T> T getFieldValue(Object target, String fieldName, Class<T> fieldType) throws IllegalAccessException {
+        Class<?> currentClass = target.getClass();
+        while (currentClass != null) {
+            try {
+                Field field = currentClass.getDeclaredField(fieldName);
+                if (!field.isAccessible()) {
+                    field.setAccessible(true);
+                }
+                Object value = field.get(target);
+                return value == null ? null : fieldType.cast(value);
+            } catch (NoSuchFieldException ignored) {
+                currentClass = currentClass.getSuperclass();
+            }
+        }
+        return null;
     }
 
     private String[] getDbStoragePaths(File[] localRocksDbDirectories) {
@@ -278,12 +397,28 @@ public class TaskInformationPOJO {
         this.stateBackendManagedMemoryFraction = stateBackendManagedMemoryFraction;
     }
 
-    public double getStateBackendManagedMemorySize() {
+    public long getStateBackendManagedMemorySize() {
         return stateBackendManagedMemorySize;
     }
 
     public void setStateBackendManagedMemorySize(long stateBackendManagedMemorySize) {
         this.stateBackendManagedMemorySize = stateBackendManagedMemorySize;
+    }
+
+    public int getStateBackendConfigVersion() {
+        return stateBackendConfigVersion;
+    }
+
+    public void setStateBackendConfigVersion(int stateBackendConfigVersion) {
+        this.stateBackendConfigVersion = stateBackendConfigVersion;
+    }
+
+    public long getStateBackendResourceId() {
+        return stateBackendResourceId;
+    }
+
+    public void setStateBackendResourceId(long stateBackendResourceId) {
+        this.stateBackendResourceId = stateBackendResourceId;
     }
 
     public long getWriteBufferManagerAddr() {
@@ -349,6 +484,14 @@ public class TaskInformationPOJO {
         this.localRecoveryConfig = localRecoveryConfig;
     }
 
+    public OckDBConfigPOJO getOckDBConfig() {
+        return ockDBConfig;
+    }
+
+    public void setOckDBConfig(OckDBConfigPOJO ockDBConfig) {
+        this.ockDBConfig = ockDBConfig;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -361,11 +504,14 @@ public class TaskInformationPOJO {
         TaskInformationPOJO that = (TaskInformationPOJO) o;
         return numberOfSubtasks == that.numberOfSubtasks
                 && maxNumberOfSubtasks == that.maxNumberOfSubtasks
+                && stateBackendConfigVersion == that.stateBackendConfigVersion
+                && stateBackendResourceId == that.stateBackendResourceId
                 && Objects.equals(taskName, that.taskName)
                 && Objects.equals(streamConfig, that.streamConfig)
                 && Objects.equals(chainedConfig, that.chainedConfig)
                 && Objects.equals(indexOfSubtask, that.indexOfSubtask)
-                && Objects.equals(localRecoveryConfig, that.localRecoveryConfig);
+                && Objects.equals(localRecoveryConfig, that.localRecoveryConfig)
+                && Objects.equals(ockDBConfig, that.ockDBConfig);
     }
 
     @Override
@@ -377,7 +523,10 @@ public class TaskInformationPOJO {
                 indexOfSubtask,
                 streamConfig,
                 chainedConfig,
-                localRecoveryConfig);
+                localRecoveryConfig,
+                stateBackendConfigVersion,
+                stateBackendResourceId,
+                ockDBConfig);
     }
 
     @Override

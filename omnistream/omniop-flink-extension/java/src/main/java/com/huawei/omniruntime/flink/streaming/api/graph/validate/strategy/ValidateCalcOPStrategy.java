@@ -59,6 +59,8 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
         return dataTypesList.stream()
                 .flatMap(List::stream)
                 .allMatch(type -> {
+                    type = stripNotNull(type);
+
                     if (type.matches("^VARCHAR\\([^)]*\\)$")) {
                         type = "VARCHAR";
                         LOG.info("converted to VARCHAR");

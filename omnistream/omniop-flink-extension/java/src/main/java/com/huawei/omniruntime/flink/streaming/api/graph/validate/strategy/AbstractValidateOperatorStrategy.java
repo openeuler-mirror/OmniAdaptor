@@ -81,22 +81,26 @@ public abstract class AbstractValidateOperatorStrategy {
                 // match DECIMAL64 and DECIMAL128
                 .flatMap(List::stream)
                 .allMatch(type -> {
+                    String originalType = type;
+                    type = stripNotNull(type);
+
                     if (type.matches("^VARCHAR\\([^)]*\\)$")) {
+                        LOG.info("Normalized VARCHAR: '{}' -> 'VARCHAR'", type);
                         type = "VARCHAR";
-                        LOG.info("converted to VARCHAR");
                     }
 
                     if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                        LOG.info("Normalized DECIMAL64: '{}' -> 'DECIMAL64'", type);
                         type = "DECIMAL64";
-                        LOG.info("converted to DECIMAL64");
                     }
 
                     if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                        LOG.info("Normalized DECIMAL128: '{}' -> 'DECIMAL128'", type);
                         type = "DECIMAL128";
-                        LOG.info("converted to DECIMAL128");
                     }
+
                     if (!SUPPORT_DATA_TYPE.contains(type)) {
-                        LOG.info("The data type {} is not supported.", type);
+                        LOG.info("Unsupported data type: '{}' (original: '{}')", type, originalType);
                         return false;
                     }
                     return true;
@@ -119,5 +123,17 @@ public abstract class AbstractValidateOperatorStrategy {
         } else {
             return null;
         }
+    }
+
+    /**
+     * 剥离类型字符串末尾的 NOT NULL 后缀，兼容 DescriptionUtil.getFieldType() 追加的 nullable 信息。
+     */
+    public static String stripNotNull(String type) {
+        if (type != null && type.endsWith(" NOT NULL")) {
+            String stripped = type.substring(0, type.length() - " NOT NULL".length());
+            LOG.info("stripNotNull: '{}' -> '{}'", type, stripped);
+            return stripped;
+        }
+        return type;
     }
 }
