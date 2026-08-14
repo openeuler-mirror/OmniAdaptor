@@ -1,4 +1,4 @@
-package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.type;
+package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type;
 
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
