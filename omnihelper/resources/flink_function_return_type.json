@@ -18,6 +18,7 @@
   {"func_name": "in", "need_param_type": false, "return_type": "BOOLEAN"},
   {"func_name": "not in", "need_param_type": false, "return_type": "BOOLEAN"},
   {"func_name": "exists", "need_param_type": false, "return_type": "BOOLEAN"},
+  {"func_name": "overlaps", "need_param_type": false, "return_type": "BOOLEAN"},
 
   {"func_name": "and", "need_param_type": false, "return_type": "BOOLEAN"},
   {"func_name": "or", "need_param_type": false, "return_type": "BOOLEAN"},

@@ -1,7 +1,8 @@
 [
   {"func_name": "=", "func_type": "binary", "is_support_func": true,
    "is_supported_type": [
-      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
+      "BIGINT", "INT", "DATE", "TIME(0)", "TIME(1)", "TIME(2)", "TIME(3)",
+      "TIMESTAMP(0)", "TIMESTAMP(1)",
       "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
       "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
       "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
@@ -9,7 +10,8 @@
   },
   {"func_name": "<>", "func_type": "binary", "is_support_func": true,
    "is_supported_type": [
-      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
+      "BIGINT", "INT", "DATE", "TIME(0)", "TIME(1)", "TIME(2)", "TIME(3)",
+      "TIMESTAMP(0)", "TIMESTAMP(1)",
       "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
       "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
       "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
@@ -17,28 +19,32 @@
   },
   {"func_name": ">", "func_type": "binary", "is_support_func": true,
    "is_supported_type": [
-      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
+      "BIGINT", "INT", "DATE", "TIME(0)", "TIME(1)", "TIME(2)", "TIME(3)",
+      "TIMESTAMP(0)", "TIMESTAMP(1)",
       "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
       "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "DECIMAL64", "DECIMAL128"
     ]
   },
   {"func_name": ">=", "func_type": "binary", "is_support_func": true,
    "is_supported_type": [
-      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
+      "BIGINT", "INT", "DATE", "TIME(0)", "TIME(1)", "TIME(2)", "TIME(3)",
+      "TIMESTAMP(0)", "TIMESTAMP(1)",
       "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
       "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "DECIMAL64", "DECIMAL128"
     ]
   },
   {"func_name": "<", "func_type": "binary", "is_support_func": true,
    "is_supported_type": [
-      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
+      "BIGINT", "INT", "DATE", "TIME(0)", "TIME(1)", "TIME(2)", "TIME(3)",
+      "TIMESTAMP(0)", "TIMESTAMP(1)",
       "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
       "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "DECIMAL64", "DECIMAL128"
     ]
   },
   {"func_name": "<=", "func_type": "binary", "is_support_func": true,
    "is_supported_type": [
-      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
+      "BIGINT", "INT", "DATE", "TIME(0)", "TIME(1)", "TIME(2)", "TIME(3)",
+      "TIMESTAMP(0)", "TIMESTAMP(1)",
       "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
       "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "DECIMAL64", "DECIMAL128"
     ]
@@ -85,7 +91,11 @@
   {"func_name": "IS NOT UNKNOWN", "is_support_func": false},
 
   {"func_name": "+", "func_type": "binary", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "INT", "DECIMAL64", "DECIMAL128"]
+   "is_supported_type": [
+      "BIGINT", "INT", "DECIMAL64", "DECIMAL128", "DATE",
+      "TIME(0)", "TIME(1)", "TIME(2)", "TIME(3)",
+      "TIMESTAMP(0)", "TIMESTAMP(1)", "TIMESTAMP(2)", "TIMESTAMP(3)", "INTERVAL"
+   ]
   },
   {"func_name": "-", "func_type": "unary", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DECIMAL64", "DECIMAL128"]
@@ -203,9 +213,9 @@
   },
 
   {"func_name": "DATE", "is_support_func": true, "is_supported_type": ["VARCHAR", "CHAR"]},
-  {"func_name": "TIME", "is_support_func": false},
-  {"func_name": "TIMESTAMP", "is_support_func": false},
-  {"func_name": "INTERVAL", "is_support_func": false},
+  {"func_name": "TIME", "is_support_func": true},
+  {"func_name": "TIMESTAMP", "is_support_func": true},
+  {"func_name": "INTERVAL", "is_support_func": true},
   {"func_name": "LOCALTIME", "is_support_func": false},
   {"func_name": "LOCALTIMESTAMP", "is_support_func": false},
   {"func_name": "CURRENT_TIME", "is_support_func": false},
@@ -228,7 +238,12 @@
   {"func_name": "SECOND", "is_support_func": false},
   {"func_name": "FLOOR", "is_support_func": false},
   {"func_name": "CEIL", "is_support_func": false},
-  {"func_name": "OVERLAPS", "is_support_func": false},
+  {"func_name": "OVERLAPS", "is_support_func": true,
+   "is_supported_type": [
+      "DATE", "TIME(0)", "TIME(1)", "TIME(2)", "TIME(3)",
+      "TIMESTAMP(0)", "TIMESTAMP(1)", "TIMESTAMP(2)", "TIMESTAMP(3)", "INTERVAL"
+   ]
+  },
   {"func_name": "DATE_FORMAT", "is_support_func": true,
   "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
   },
@@ -248,7 +263,8 @@
 
   {"func_name": "CASE", "is_support_func": true,
   "is_supported_type": [
-      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
+      "BIGINT", "INT", "DATE", "TIME(0)", "TIME(1)", "TIME(2)", "TIME(3)",
+      "TIMESTAMP(0)", "TIMESTAMP(1)",
       "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
       "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
       "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
@@ -328,7 +344,12 @@
             ],
             "DATE32": [
                "DATE32",
-              "VARCHAR"
+               "VARCHAR",
+               "TIMESTAMP"
+            ],
+            "DATE": [
+               "DATE",
+               "TIMESTAMP"
             ],
             "DECIMAL64": [
                 "VARCHAR",
