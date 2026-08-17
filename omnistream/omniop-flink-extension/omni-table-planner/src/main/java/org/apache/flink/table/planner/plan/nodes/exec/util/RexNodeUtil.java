@@ -1344,7 +1344,9 @@ public class RexNodeUtil {
                 break;  
             case "TRAILING":
                 jsonMap.put("function_name", "RTrim");
-                break;  
+                break;
+            default:
+                break;
         }
         for (int i = 1; i < operands.size(); i++) {
             Map<String, Object> argMap = buildJsonMap(operands.get(i));
