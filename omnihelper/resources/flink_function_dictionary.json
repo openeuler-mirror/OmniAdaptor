@@ -120,18 +120,22 @@
    "is_supported_type": ["BIGINT", "INT", "DECIMAL64", "DECIMAL128"]
   },
   {"func_name": "%", "is_support_func": false},
-  {"func_name": "POWER", "is_support_func": false},
-  {"func_name": "ABS", "is_support_func": false},
+  {"func_name": "POWER", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
+  },
+  {"func_name": "ABS", "is_support_func":  true,
+   "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
+  },
   {"func_name": "SQRT", "is_support_func": false},
   {"func_name": "LN", "is_support_func": true,
-   "is_supported_type": ["DOUBLE"]
+   "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
   {"func_name": "LOG10", "is_support_func": false},
   {"func_name": "LOG2", "is_support_func": false},
   {"func_name": "LOG", "is_support_func": false},
   {"func_name": "EXP", "is_support_func": false},
   {"func_name": "CEILING", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "DOUBLE"]
+   "is_supported_type": ["INT", "BIGINT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
   {"func_name": "SIN", "is_support_func": false},
   {"func_name": "SINH", "is_support_func": false},
@@ -159,21 +163,33 @@
   {"func_name": "HEX", "is_support_func": false},
   {"func_name": "TRUNCATE", "is_support_func": false},
 
-  {"func_name": "||", "is_support_func": false},
+  {"func_name": "||", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "CHAR_LENGTH", "is_support_func": true,
     "is_supported_type": ["STRING", "VARCHAR"]
   },
   {"func_name": "CHARACTER_LENGTH", "is_support_func": true,
     "is_supported_type": ["STRING"]
   },
-  {"func_name": "UPPER", "is_support_func": false},
+  {"func_name": "UPPER", "is_support_func": true,
+    "is_supported_type": ["STRING"]
+  },
   {"func_name": "LOWER", "is_support_func": true,
    "is_supported_type": ["STRING"]
   },
-  {"func_name": "POSITION", "is_support_func": false},
-  {"func_name": "TRIM", "is_support_func": false},
-  {"func_name": "LTRIM", "is_support_func": false},
-  {"func_name": "RTRIM", "is_support_func": false},
+  {"func_name": "POSITION", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "TRIM", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "LTRIM", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "RTRIM", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "REPEAT", "is_support_func": false},
   {"func_name": "REGEXP_REPLACE", "is_support_func": false},
   {"func_name": "OVERLAY", "is_support_func": false},
@@ -186,7 +202,9 @@
   {"func_name": "REGEXP_EXTRACT", "is_support_func": true,
    "is_supported_type": [ "STRING", "INT"]
   },
-  {"func_name": "INITCAP", "is_support_func": false},
+  {"func_name": "INITCAP", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "CONCAT", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
@@ -196,9 +214,15 @@
   {"func_name": "LPAD", "is_support_func": false},
   {"func_name": "RPAD", "is_support_func": false},
   {"func_name": "FROM_BASE64", "is_support_func": false},
-  {"func_name": "TO_BASE64", "is_support_func": false},
-  {"func_name": "ASCII", "is_support_func": false},
-  {"func_name": "CHR", "is_support_func": false},
+  {"func_name": "TO_BASE64", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "ASCII", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
+  {"func_name": "CHR", "is_support_func": true,
+   "is_supported_type": ["BIGINT"]
+  },
   {"func_name": "DECODE", "is_support_func": false},
   {"func_name": "ENCODE", "is_support_func": false},
   {"func_name": "INSTR", "is_support_func": true,
@@ -210,12 +234,16 @@
   {"func_name": "RIGHT", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR", "INT"]
   },
-  {"func_name": "LOCATE", "is_support_func": false},
+  {"func_name": "LOCATE", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR", "INT"]
+  },
   {"func_name": "PARSE_URL", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
   {"func_name": "REGEXP", "is_support_func": false},
-  {"func_name": "REVERSE", "is_support_func": false},
+  {"func_name": "REVERSE", "is_support_func": true,
+    "is_supported_type": ["STRING", "VARCHAR"]
+  },
   {"func_name": "SPLIT_INDEX", "is_support_func": true,
    "is_supported_type": ["STRING", "INT"]
   },
@@ -249,10 +277,16 @@
   {"func_name": "MINUTE", "is_support_func": false},
   {"func_name": "SECOND", "is_support_func": false},
   {"func_name": "FLOOR", "is_support_func": true,
-  "is_supported_type": ["BIGINT", "DOUBLE", "TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
+  "is_supported_type": [
+      "INT", "BIGINT", "DOUBLE", "DECIMAL64", "DECIMAL128",
+      "TIMESTAMP", "TIMESTAMP_LTZ", "STRING"
+    ]
   },
   {"func_name": "CEIL", "is_support_func": true,
-  "is_supported_type": ["BIGINT", "DOUBLE", "TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
+  "is_supported_type": [
+      "INT", "BIGINT", "DOUBLE", "DECIMAL64", "DECIMAL128",
+      "TIMESTAMP", "TIMESTAMP_LTZ", "STRING"
+    ]
   },
   {"func_name": "OVERLAPS", "is_support_func": false},
   {"func_name": "DATE_FORMAT", "is_support_func": true,

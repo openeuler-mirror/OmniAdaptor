@@ -53,7 +53,7 @@ public class DescriptionUtil {
                 DecimalType decimalType = (DecimalType) fieldType;
                 Integer precision = decimalType.getPrecision();
                 Integer scale = decimalType.getScale();
-                if (precision > 19) {
+                if (precision >= 19) {
                     typeName += "128";
                 } else {
                     typeName += "64";
