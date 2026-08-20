@@ -81,6 +81,8 @@ public abstract class AbstractValidateOperatorStrategy {
                 // match DECIMAL64 and DECIMAL128
                 .flatMap(List::stream)
                 .allMatch(type -> {
+                    String originalType = type;
+                    type = stripNotNull(type);
                     if (type.matches("^VARCHAR\\([^)]*\\)$")) {
                         type = "VARCHAR";
                         LOG.info("converted to VARCHAR");
@@ -96,7 +98,7 @@ public abstract class AbstractValidateOperatorStrategy {
                         LOG.info("converted to DECIMAL128");
                     }
                     if (!SUPPORT_DATA_TYPE.contains(type)) {
-                        LOG.info("The data type {} is not supported.", type);
+                        LOG.info("Unsupported data type: '{}' (original: '{}')", type, originalType);
                         return false;
                     }
                     return true;
@@ -119,5 +121,13 @@ public abstract class AbstractValidateOperatorStrategy {
         } else {
             return null;
         }
+    }
+
+    /** Removes the nullability suffix added to operator descriptions before type matching. */
+    public static String stripNotNull(String type) {
+        if (type != null && type.endsWith(" NOT NULL")) {
+            return type.substring(0, type.length() - " NOT NULL".length());
+        }
+        return type;
     }
 }

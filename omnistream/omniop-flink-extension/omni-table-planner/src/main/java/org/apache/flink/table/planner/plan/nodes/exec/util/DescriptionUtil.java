@@ -84,6 +84,10 @@ public class DescriptionUtil {
                 typeName += "(" + precision.toString() + "," + scale.toString() + ")";
             }
         }
+        // Preserve nullability in operator descriptions consumed by SavepointAdaptor.
+        if (!fieldType.isNullable()) {
+            typeName += " NOT NULL";
+        }
         return typeName;
     }
 
