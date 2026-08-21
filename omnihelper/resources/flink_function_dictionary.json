@@ -244,7 +244,9 @@
   {"func_name": "TO_DATE", "is_support_func": false},
   {"func_name": "TO_TIMESTAMP_LTZ", "is_support_func": false},
   {"func_name": "TO_TIMESTAMP", "is_support_func": false},
-  {"func_name": "CURRENT_WATERMARK", "is_support_func": false},
+  {"func_name": "CURRENT_WATERMARK", "is_support_func": true,
+   "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ"]
+  },
 
   {"func_name": "CASE", "is_support_func": true,
   "is_supported_type": [
