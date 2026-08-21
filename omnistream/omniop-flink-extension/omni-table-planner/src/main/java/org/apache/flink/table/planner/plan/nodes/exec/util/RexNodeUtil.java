@@ -753,6 +753,27 @@ public class RexNodeUtil {
                 stringList.add(literalMap);
             }
             jsonMap.put("arguments", stringList);
+        } else if (sarg.isComplementedPoints()) {
+            // NOT IN: complement point-set Sarg -> recover points -> UNARY(NOT, IN(points)).
+            // Guava Range shaded (Flink relocates) -> lambda param type inferred.
+            jsonMap.put("exprType", "UNARY");
+            setDataType(rexCall, jsonMap, "returnType");
+            jsonMap.put("operator", "NOT");
+            Map<String, Object> inMap = new LinkedHashMap<>();
+            inMap.put("exprType", "IN");
+            setDataType(rexCall, inMap, "returnType");
+            List<Map<String, Object>> inArgs = new ArrayList<>();
+            inArgs.add(buildJsonMap(operands.get(0))); // value to test
+            sarg.rangeSet.complement().asRanges().forEach(r -> {
+                Map<String, Object> literalMap = new LinkedHashMap<>();
+                literalMap.put("exprType", "LITERAL");
+                literalMap.put("isNull", false);
+                literalMap.put("value", extractSargEndpoint(r.lowerEndpoint()));
+                setDataType(operands.get(0), literalMap, "dataType");
+                inArgs.add(literalMap);
+            });
+            inMap.put("arguments", inArgs);
+            jsonMap.put("expr", inMap);
         } else { // a range
             // Per-range bounds as [hasLower, hasUpper, lower, upper]; Guava Range not importable (Flink relocates) -> type inferred.
             List<Object[]> rangeInfo = new ArrayList<>();
