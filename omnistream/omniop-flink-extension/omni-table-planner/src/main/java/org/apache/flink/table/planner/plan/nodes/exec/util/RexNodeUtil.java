@@ -24,7 +24,9 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.TimestampString;
 import org.apache.calcite.util.Sarg;
+import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecCalc;
+import org.apache.flink.table.types.logical.LogicalType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -124,6 +126,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
         specialOperatorMap.put("LIKE", SpecialExprType.LIKE);
+        specialOperatorMap.put("TYPEOF", SpecialExprType.TYPEOF);
         specialOperatorMap.put("LEFT", SpecialExprType.LEFT);
         specialOperatorMap.put("RIGHT", SpecialExprType.RIGHT);
     }
@@ -213,6 +216,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.PARSE_URL, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.LIKE, RexNodeUtil::handleLike);
+        specialHandlerMap.put(SpecialExprType.TYPEOF, RexNodeUtil::handleTypeOf);
         specialHandlerMap.put(SpecialExprType.LEFT, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.RIGHT, RexNodeUtil::handleSimpleFunction);
     }
@@ -310,6 +314,7 @@ public class RexNodeUtil {
         UNIX_TIMESTAMP,
         FROM_UNIXTIME,
         LIKE,
+        TYPEOF,
         LEFT,
         RIGHT
     }
@@ -1117,6 +1122,48 @@ public class RexNodeUtil {
             likeArgList.add(argMap);
         }
         jsonMap.put("arguments", likeArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleTypeOf(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (operands.size() < 1 || operands.size() > 2) {
+            LOG.warn("TYPEOF expects one input and an optional BOOLEAN literal");
+            jsonMap.put("exprType", OperatorExprType.INVALID.name());
+            return jsonMap;
+        }
+
+        boolean forceSerializable = false;
+        if (operands.size() == 2) {
+            RexNode forceOperand = operands.get(1);
+            if (!(forceOperand instanceof RexLiteral)
+                    || forceOperand.getType().getSqlTypeName() != SqlTypeName.BOOLEAN) {
+                LOG.warn("TYPEOF force_serializable must be a BOOLEAN literal");
+                jsonMap.put("exprType", OperatorExprType.INVALID.name());
+                return jsonMap;
+            }
+            Boolean forceValue = ((RexLiteral) forceOperand).getValueAs(Boolean.class);
+            forceSerializable = Boolean.TRUE.equals(forceValue);
+        }
+
+        LogicalType inputType = FlinkTypeFactory.toLogicalType(operands.get(0).getType());
+        String typeString;
+        if (forceSerializable) {
+            try {
+                typeString = inputType.asSerializableString();
+            } catch (Exception exception) {
+                typeString = null;
+            }
+        } else {
+            typeString = inputType.asSummaryString();
+        }
+
+        jsonMap.put("exprType", OperatorExprType.LITERAL.name());
+        setDataType(rexCall, jsonMap, "dataType");
+        jsonMap.put("isNull", typeString == null);
+        if (typeString != null) {
+            jsonMap.put("value", typeString);
+        }
         return jsonMap;
     }
 

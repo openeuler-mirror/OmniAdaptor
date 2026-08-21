@@ -374,7 +374,7 @@
     }
   },
   {"func_name": "TRY_CAST", "is_support_func": false},
-  {"func_name": "TYPEOF", "is_support_func": false},
+  {"func_name": "TYPEOF", "is_support_func": true},
 
 
   {"func_name": "CARDINALITY", "is_support_func": false},
