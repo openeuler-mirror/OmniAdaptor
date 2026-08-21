@@ -24,7 +24,9 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.TimestampString;
 import org.apache.calcite.util.Sarg;
+import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecCalc;
+import org.apache.flink.table.types.logical.LogicalType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,6 +113,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
         specialOperatorMap.put("CURRENT_TIMESTAMP", SpecialExprType.CURRENT_TIMESTAMP);
         specialOperatorMap.put("NOW", SpecialExprType.CURRENT_TIMESTAMP);
+        specialOperatorMap.put("CURRENT_WATERMARK", SpecialExprType.CURRENT_WATERMARK);
         specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
         specialOperatorMap.put("FLOOR", SpecialExprType.FLOOR);
         specialOperatorMap.put("CEIL", SpecialExprType.CEIL);
@@ -141,6 +144,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("IS NULL", SpecialExprType.IS_NULL);
         specialOperatorMap.put("IS NOT TRUE", SpecialExprType.IS_NOT_TRUE);
         specialOperatorMap.put("LIKE", SpecialExprType.LIKE);
+        specialOperatorMap.put("TYPEOF", SpecialExprType.TYPEOF);
         specialOperatorMap.put("LEFT", SpecialExprType.LEFT);
         specialOperatorMap.put("RIGHT", SpecialExprType.RIGHT);
         specialOperatorMap.put("ABS", SpecialExprType.ABS);
@@ -248,6 +252,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.AND, RexNodeUtil::handleAnd);
         specialHandlerMap.put(SpecialExprType.OR, RexNodeUtil::handleOr);
         specialHandlerMap.put(SpecialExprType.CURRENT_TIMESTAMP, RexNodeUtil::handleCurrentTimestamp);
+        specialHandlerMap.put(SpecialExprType.CURRENT_WATERMARK, RexNodeUtil::handleCurrentWatermark);
         specialHandlerMap.put(SpecialExprType.DATE_ADD, RexNodeUtil::handleDateAdd);
         specialHandlerMap.put(SpecialExprType.FROM_UNIXTIME, RexNodeUtil::handleFromUnixtime);
         specialHandlerMap.put(SpecialExprType.FLOOR, RexNodeUtil::handleFloor);
@@ -260,6 +265,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.RTRIM, RexNodeUtil::handleRtrim);
         specialHandlerMap.put(SpecialExprType.LOCATE, RexNodeUtil::handleLocate);
         specialHandlerMap.put(SpecialExprType.POWER, RexNodeUtil::handlePower);
+        specialHandlerMap.put(SpecialExprType.TYPEOF, RexNodeUtil::handleTypeOf);
         // Simple FUNCTION-forwarding expressions share one handler (function_name via simpleFunctionNameMap).
         specialHandlerMap.put(SpecialExprType.ROUND, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.GREATEST, RexNodeUtil::handleSimpleFunction);
@@ -373,6 +379,7 @@ public class RexNodeUtil {
         JSON_QUERY,
         JSON_SPLIT,
         CURRENT_TIMESTAMP,
+        CURRENT_WATERMARK,
         DATE_ADD,
         FLOOR,
         LN,
@@ -399,6 +406,7 @@ public class RexNodeUtil {
         NULLIF,
         IS_NOT_TRUE,
         LIKE,
+        TYPEOF,
         LEFT,
         RIGHT,
         ABS,
@@ -847,6 +855,27 @@ public class RexNodeUtil {
                 stringList.add(literalMap);
             }
             jsonMap.put("arguments", stringList);
+        } else if (sarg.isComplementedPoints()) {
+            // NOT IN: complement point-set Sarg -> recover points -> UNARY(NOT, IN(points)).
+            // Guava Range shaded (Flink relocates) -> lambda param type inferred.
+            jsonMap.put("exprType", "UNARY");
+            setDataType(rexCall, jsonMap, "returnType");
+            jsonMap.put("operator", "NOT");
+            Map<String, Object> inMap = new LinkedHashMap<>();
+            inMap.put("exprType", "IN");
+            setDataType(rexCall, inMap, "returnType");
+            List<Map<String, Object>> inArgs = new ArrayList<>();
+            inArgs.add(buildJsonMap(operands.get(0))); // value to test
+            sarg.rangeSet.complement().asRanges().forEach(r -> {
+                Map<String, Object> literalMap = new LinkedHashMap<>();
+                literalMap.put("exprType", "LITERAL");
+                literalMap.put("isNull", false);
+                literalMap.put("value", extractSargEndpoint(r.lowerEndpoint()));
+                setDataType(operands.get(0), literalMap, "dataType");
+                inArgs.add(literalMap);
+            });
+            inMap.put("arguments", inArgs);
+            jsonMap.put("expr", inMap);
         } else { // a range
             // Per-range bounds as [hasLower, hasUpper, lower, upper]; Guava Range not importable (Flink relocates) -> type inferred.
             List<Object[]> rangeInfo = new ArrayList<>();
@@ -1139,6 +1168,23 @@ public class RexNodeUtil {
         }
         jsonMap.put("arguments", currentTimestampArgs);
         LOG.info("The CURRENT_TIMESTAMP expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleCurrentWatermark(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (operands.size() != 1) {
+            LOG.warn("CURRENT_WATERMARK expects exactly one rowtime operand, but got {}", operands.size());
+            jsonMap.put("exprType", OperatorExprType.INVALID.name());
+            return jsonMap;
+        }
+
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "current_watermark");
+        // Flink validates the rowtime operand and derives the logical return type. At runtime,
+        // CURRENT_WATERMARK reads operator context and therefore has no data arguments.
+        jsonMap.put("arguments", new ArrayList<>());
         return jsonMap;
     }
 
@@ -1448,6 +1494,49 @@ public class RexNodeUtil {
             }
         }
         jsonMap.put("arguments", powerArgList);
+        return jsonMap;
+    }
+
+
+    private static Map<String, Object> handleTypeOf(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (operands.size() < 1 || operands.size() > 2) {
+            LOG.warn("TYPEOF expects one input and an optional BOOLEAN literal");
+            jsonMap.put("exprType", OperatorExprType.INVALID.name());
+            return jsonMap;
+        }
+
+        boolean forceSerializable = false;
+        if (operands.size() == 2) {
+            RexNode forceOperand = operands.get(1);
+            if (!(forceOperand instanceof RexLiteral)
+                    || forceOperand.getType().getSqlTypeName() != SqlTypeName.BOOLEAN) {
+                LOG.warn("TYPEOF force_serializable must be a BOOLEAN literal");
+                jsonMap.put("exprType", OperatorExprType.INVALID.name());
+                return jsonMap;
+            }
+            Boolean forceValue = ((RexLiteral) forceOperand).getValueAs(Boolean.class);
+            forceSerializable = Boolean.TRUE.equals(forceValue);
+        }
+
+        LogicalType inputType = FlinkTypeFactory.toLogicalType(operands.get(0).getType());
+        String typeString;
+        if (forceSerializable) {
+            try {
+                typeString = inputType.asSerializableString();
+            } catch (Exception exception) {
+                typeString = null;
+            }
+        } else {
+            typeString = inputType.asSummaryString();
+        }
+
+        jsonMap.put("exprType", OperatorExprType.LITERAL.name());
+        setDataType(rexCall, jsonMap, "dataType");
+        jsonMap.put("isNull", typeString == null);
+        if (typeString != null) {
+            jsonMap.put("value", typeString);
+        }
         return jsonMap;
     }
 

@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.type;
+package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type;
 
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import org.apache.flink.api.common.ExecutionConfig;

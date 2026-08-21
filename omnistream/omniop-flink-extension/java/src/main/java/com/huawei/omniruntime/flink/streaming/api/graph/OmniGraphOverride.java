@@ -305,11 +305,48 @@ public final class OmniGraphOverride {
             StreamingJobGraphGenerator.OperatorChainInfo chainInfo = chainInfos.get(key);
             List<StreamNode> streamNodes = chainInfo.getAllChainedNodes();
             for (StreamNode node : streamNodes) {
-                nowChainDoSplit = nowChainDoSplit || node.getOperatorName().contains("Window");
+                String operatorName = node.getOperatorName();
+                boolean isWindow = operatorName != null && operatorName.contains("Window");
+                nowChainDoSplit = nowChainDoSplit || isWindow || containsCurrentWatermark(node);
             }
             vertexConfig.setSplitWatermark(otherChainDoSplit || nowChainDoSplit);
         }
         return vertexConfig.isSplitWatermark();
+    }
+
+    private static boolean containsCurrentWatermark(StreamNode node) {
+        String operatorDescription = node.getOperatorDescription();
+        if (operatorDescription == null || !operatorDescription.trim().startsWith("{")) {
+            return false;
+        }
+        Map<String, Object> descriptionMap = toJsonMap(operatorDescription);
+        return descriptionMap != null && containsCurrentWatermark(descriptionMap);
+    }
+
+    private static boolean containsCurrentWatermark(Object value) {
+        if (value instanceof Map) {
+            Map<?, ?> map = (Map<?, ?>) value;
+            Object functionName = map.get("function_name");
+            if (functionName instanceof String
+                    && "current_watermark".equalsIgnoreCase((String) functionName)) {
+                return true;
+            }
+            for (Object child : map.values()) {
+                if (containsCurrentWatermark(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (value instanceof Iterable) {
+            for (Object child : (Iterable<?>) value) {
+                if (containsCurrentWatermark(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
     }
 
     private static boolean checkDataStreamSupportTransferSerializer(TypeSerializer<?> typeSerializer) {

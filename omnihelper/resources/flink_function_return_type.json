@@ -139,7 +139,7 @@
   {"func_name": "to_date", "need_param_type": false, "return_type": "DATE"},
   {"func_name": "to_timestamp_ltz", "need_param_type": false, "return_type": "TIMESTAMP_LTZ"},
   {"func_name": "to_timestamp", "need_param_type": false, "return_type": "TIMESTAMP"},
-  {"func_name": "current_watermark", "need_param_type": false, "return_type": "TIMESTAMP"},
+  {"func_name": "current_watermark", "need_param_type": true, "return_type": "ARGUMENT_TYPE"},
 
   {"func_name": "case", "need_param_type": true, "return_type": "RESULT_TYPE"},
   {"func_name": "nullif", "need_param_type": true, "return_type": "ARGUMENT_TYPE"},

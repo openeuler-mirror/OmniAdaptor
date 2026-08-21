@@ -321,7 +321,12 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
 
                 // Validate json_split function signature: 1 STRING argument, STRING return type
-                String functionName = (String) exprMap.get("function_name");
+                Object functionNameObj = exprMap.get("function_name");
+                if (!(functionNameObj instanceof String)) {
+                    LOG.info("ERROR: function_name is not a string");
+                    return false;
+                }
+                String functionName = (String) functionNameObj;
                 if ("json_split".equals(functionName)) {
                     Object argumentsObj = exprMap.get("arguments");
                     if (!(argumentsObj instanceof List)) {
@@ -384,6 +389,23 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                             LOG.info("ERROR: current_timestamp expects LONG return type, but got typeId {}", retType);
                             return false;
                         }
+                    }
+                }
+
+                if ("current_watermark".equalsIgnoreCase(functionName)) {
+                    if (!"current_watermark".equals(functionName)) {
+                        LOG.info("ERROR: current_watermark function name must use the native lowercase spelling");
+                        return false;
+                    }
+                    Object argumentsObj = exprMap.get("arguments");
+                    if (!(argumentsObj instanceof List) || !((List<?>) argumentsObj).isEmpty()) {
+                        LOG.info("ERROR: current_watermark expects an empty arguments list");
+                        return false;
+                    }
+                    if (!Integer.valueOf(2).equals(exprMap.get("returnType"))) {
+                        LOG.info("ERROR: current_watermark expects LONG return type, but got {}",
+                                exprMap.get("returnType"));
+                        return false;
                     }
                 }
 
