@@ -609,6 +609,8 @@ public class OmniTask extends Task {
             // restore original task first
             nativeTaskMetricGroupRef = createNativeTaskMetricGroup(nativeTaskRef);
             registerNativeTaskMetrics();
+            //register omniTask metrics
+            omniTaskMetricGroup = registerOmniTaskMetrics();
             // After nativeTask is deleted, the Java side may still call the native interface to obtain
             // old metric data (which has been deleted and becomes a dangling pointer), causing
             // TaskManager to coredump. Therefore, omni metric data is temporarily not registered.
@@ -1201,7 +1203,46 @@ public class OmniTask extends Task {
         }
     }
     private OmniTaskMetricGroup registerOmniTaskMetrics() {
-        return OmniMetricHelper.registerOmniMetrics(this.metrics, nativeTaskMetricGroupRef);
+        // Operator names come from the task configuration (head + chained operators). In
+        // OmniStream no Java operators are created, so the Flink TaskMetricGroup.operators
+        // map is empty; getOperatorName() here matches the native OperatorPOD::getName().
+        StreamConfig headConfig = new StreamConfig(taskConfiguration);
+        Map<Integer, StreamConfig> chainedConfigs =
+                headConfig.getTransitiveChainedTaskConfigsWithSelf(userCodeClassLoader.asClassLoader());
+        // Operator name -> OperatorID, mirroring Flink TaskMetricGroup.getOrAddOperator which
+        // scopes each operator by its OperatorID and name. LinkedHashMap keeps chain order and
+        // dedups by operator name.
+        ClassLoader cl = userCodeClassLoader.asClassLoader();
+        Map<String, OperatorID> operatorNameToId = new HashMap<>();
+        for (StreamConfig streamConfig : chainedConfigs.values()) {
+            if (streamConfig == null || streamConfig.getOperatorName() == null) {
+                continue;
+            }
+            // Only operators with a keyed state backend produce per-operator keyed-state
+            // metrics. Flink creates a keyed backend iff the operator has a state key
+            // serializer (set from StreamNode.getStateKeySerializer() during job graph
+            // generation). The native side mirrors this via the "stateKeyTypes" field, which
+            // is derived from the same serializer. Operators without one (e.g. Calc, Map,
+            // sinks) have no keyed backend, so skip them.
+            boolean hasKeyedBackend;
+            try {
+                hasKeyedBackend = streamConfig.getStateKeySerializer(cl) != null;
+            } catch (Exception e) {
+                hasKeyedBackend = false;
+            }
+            if (!hasKeyedBackend) {
+                continue;
+            }
+            OperatorID operatorId;
+            try {
+                operatorId = streamConfig.getOperatorID();
+            } catch (Exception e) {
+                operatorId = null;
+            }
+            operatorNameToId.putIfAbsent(streamConfig.getOperatorName(), operatorId);
+        }
+        return OmniMetricHelper.registerOmniMetrics(this.metrics, nativeTaskMetricGroupRef, nativeTaskRef,
+                operatorNameToId);
     }
     private boolean isTaskNative(){
         return nativeTaskRef!=0;

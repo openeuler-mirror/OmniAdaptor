@@ -30,6 +30,8 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.StreamConfigPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskInformationPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.descriptor.TaskDeploymentDescriptorPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain.OperatorPOJO;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskExecutorGlobalNettyMetricGroup;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskExecutorGlobalVectorBatchMetricGroup;
 import com.huawei.omniruntime.flink.runtime.shuffle.OmniShuffleEnvironment;
 import com.huawei.omniruntime.flink.runtime.state.TaskStateManagerWrapper;
 import com.huawei.omniruntime.flink.runtime.taskmanager.OmniTask;
@@ -171,6 +173,7 @@ public class OmniTaskExecutor extends TaskExecutor {
     private OmniShuffleEnvironment omniShuffleEnvironment;
     private OmniTaskManagerServices omniTaskManagerServices;
     private Map<ExecutionAttemptID, OmniTaskReferenceCounter> taskMap = new ConcurrentHashMap<>();
+    private long nativeTaskExecutorMetricReference;
 
     public OmniTaskExecutor(RpcService rpcService,
                             TaskManagerConfiguration taskManagerConfiguration,
@@ -193,11 +196,22 @@ public class OmniTaskExecutor extends TaskExecutor {
         try {
             nativeTaskExecutorReference = createNativeTaskExecutor(taskExecutorConfig,
                     omniTaskManagerServices.getNativeOmniTaskManagerServicesAddress());
+            nativeTaskExecutorMetricReference = getNativeTaskManagerMetricGroupRef(nativeTaskExecutorReference);
         } catch (Throwable t) {
             LOG.error("Failed to create NativeTaskExecutor.", t);
         }
 
         log.info("nativeTaskExecutorReference: " + nativeTaskExecutorReference);
+        OmniTaskExecutorGlobalNettyMetricGroup omniTaskExecutorGlobalNettyMetricGroup =
+                new OmniTaskExecutorGlobalNettyMetricGroup(
+                        taskManagerMetricGroup,
+                        nativeTaskExecutorMetricReference,
+                        nativeTaskExecutorReference);
+        OmniTaskExecutorGlobalVectorBatchMetricGroup omniTaskExecutorGlobalVectorBatchMetricGroup =
+                new OmniTaskExecutorGlobalVectorBatchMetricGroup(
+                        taskManagerMetricGroup,
+                        nativeTaskExecutorMetricReference,
+                        nativeTaskExecutorReference);
     }
 
     private static UserCodeClassLoader createUserCodeClassloader(
@@ -828,5 +842,6 @@ public class OmniTaskExecutor extends TaskExecutor {
     }
 
 
+    public native static long getNativeTaskManagerMetricGroupRef(long nativeTaskExecutorAddress);
 
 }

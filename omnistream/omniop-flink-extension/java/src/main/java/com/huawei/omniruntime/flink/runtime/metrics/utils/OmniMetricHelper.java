@@ -5,14 +5,18 @@
 package com.huawei.omniruntime.flink.runtime.metrics.utils;
 
 import com.huawei.omniruntime.flink.runtime.metrics.OmniDescriptiveStatisticsHistogram;
+import com.huawei.omniruntime.flink.runtime.metrics.OmniLongSizeGauge;
 import com.huawei.omniruntime.flink.runtime.metrics.OmniSizeGauge;
 import com.huawei.omniruntime.flink.runtime.metrics.OmniSimpleCounter;
 import com.huawei.omniruntime.flink.runtime.metrics.OmniSumCounter;
 import com.huawei.omniruntime.flink.runtime.metrics.OmniTimeGauge;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniInternalOperatorIOMetricGroup;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniOperatorStateMetricGroup;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskLocalNettyBufferMetricGroup;
 import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskIOMetricGroup;
 import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskMetricGroup;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.VectorBatchBufferPoolMetricGroup;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.metrics.SimpleCounter;
@@ -105,6 +109,36 @@ public class OmniMetricHelper {
     }
 
     /**
+     * Creates an OmniLongSizeGauge instance (64-bit) for byte-valued metrics that can exceed
+     * Integer.MAX_VALUE.
+     *
+     * @param omniTaskMetricRef The reference to the OmniTaskMetric.
+     * @param scope The scope of the metric.
+     * @param identifier The identifier of the metric.
+     * @return An instance of OmniLongSizeGauge.
+     */
+    public static OmniLongSizeGauge createLongSizeGauge(long omniTaskMetricRef, String scope, String identifier) {
+        long nativeRef = createNativeLongSizeGauge(omniTaskMetricRef, scope, identifier);
+        return new OmniLongSizeGauge(nativeRef);
+    }
+
+    /**
+     * Creates an OmniSizeGauge backed by a native LocalNettyBufferPool metric.
+     *
+     * @param nativeTaskMetricGroupRef The reference to the native task metric group.
+     * @param nativeLocalNettyBufferPoolRef The reference to the native LocalNettyBufferPool.
+     * @param scope The scope of the metric.
+     * @param identifier The identifier of the metric.
+     * @return An instance of OmniSizeGauge.
+     */
+    public static OmniSizeGauge createNettyBufferSizeGauge(long nativeTaskMetricGroupRef,
+            long nativeLocalNettyBufferPoolRef, String scope, String identifier) {
+        long nativeRef = createNativeNettyBufferSizeGauge(nativeTaskMetricGroupRef, nativeLocalNettyBufferPoolRef,
+                scope, identifier);
+        return new OmniSizeGauge(nativeRef);
+    }
+
+    /**
      * Creates an OmniDescriptiveStatisticsHistogram instance with the specified parameters.
      *
      * @param omniTaskMetricRef The reference to the OmniTaskMetric.
@@ -151,6 +185,28 @@ public class OmniMetricHelper {
     public static native long createNativeSizeGauge(long omniTaskMetricRef, String scope, String identifier);
 
     /**
+     * Creates a native long (64-bit) size gauge.
+     *
+     * @param omniTaskMetricRef The reference to the OmniTaskMetric.
+     * @param scope The scope of the metric.
+     * @param identifier The identifier of the metric.
+     * @return A long representing the native reference to the long size gauge.
+     */
+    public static native long createNativeLongSizeGauge(long omniTaskMetricRef, String scope, String identifier);
+
+    /**
+     * Creates a native size gauge for a LocalNettyBufferPool metric.
+     *
+     * @param nativeTaskMetricGroupRef The reference to the native task metric group.
+     * @param nativeLocalNettyBufferPoolRef The reference to the native LocalNettyBufferPool.
+     * @param scope The scope of the metric.
+     * @param identifier The identifier of the metric.
+     * @return A long representing the native reference to the size gauge.
+     */
+    public static native long createNativeNettyBufferSizeGauge(long nativeTaskMetricGroupRef,
+            long nativeLocalNettyBufferPoolRef, String scope, String identifier);
+
+    /**
      * Creates a native descriptive statistics histogram.
      *
      * @param omniTaskMetricRef The reference to the OmniTaskMetric.
@@ -169,7 +225,8 @@ public class OmniMetricHelper {
      * @param nativeRefTaskMetricGroupRef The reference to the native task metric group.
      * @return An instance of OmniTaskMetricGroup.
      */
-    public static OmniTaskMetricGroup registerOmniMetrics(TaskMetricGroup metrics, long nativeRefTaskMetricGroupRef) {
+    public static OmniTaskMetricGroup registerOmniMetrics(TaskMetricGroup metrics, long nativeRefTaskMetricGroupRef,
+            long nativeTaskRef, Map<String, OperatorID> operatorNameToId) {
         OmniTaskMetricGroup omniTaskMetricGroup = new OmniTaskMetricGroup();
         OmniTaskIOMetricGroup omniTaskIOMetricGroup = registerTaskIOMetrics(metrics, nativeRefTaskMetricGroupRef);
         List<OmniInternalOperatorIOMetricGroup> omniInternalOperatorIOMetricGroups =
@@ -183,6 +240,17 @@ public class OmniMetricHelper {
         for (OmniInternalOperatorIOMetricGroup omniInternalOperatorIOMetricGroup : omniInternalOperatorIOMetricGroups) {
             omniTaskMetricGroup.addOperator(omniInternalOperatorIOMetricGroup.getMetricGroupName(),
                     omniInternalOperatorIOMetricGroup);
+        }
+        //create OmniNettyBufferMetricGroup
+        OmniTaskLocalNettyBufferMetricGroup omniTaskLocalNettyBufferMetricGroup = new OmniTaskLocalNettyBufferMetricGroup(metrics,nativeRefTaskMetricGroupRef,nativeTaskRef);
+        VectorBatchBufferPoolMetricGroup vectorBatchBufferPoolMetricGroup = new VectorBatchBufferPoolMetricGroup(metrics, nativeRefTaskMetricGroupRef, nativeTaskRef);
+        //create per-operator OmniOperatorStateMetricGroup for keyed-state metrics. Operator names
+        //and ids come from the task configuration (in OmniStream no Java operators are created, so
+        //the Flink TaskMetricGroup.operators map is empty and cannot be used here). The OperatorID
+        //is passed through so the scope mirrors Flink TaskMetricGroup.getOrAddOperator.
+        for (Map.Entry<String, OperatorID> entry : operatorNameToId.entrySet()) {
+            new OmniOperatorStateMetricGroup(metrics, nativeRefTaskMetricGroupRef, entry.getKey(),
+                    entry.getValue());
         }
         return omniTaskMetricGroup;
     }
@@ -267,11 +335,15 @@ public class OmniMetricHelper {
      * @return The MetricRegistryImpl instance.
      */
     public static MetricRegistryImpl getMetricRegistry(TaskMetricGroup taskMetricGroup) {
+        return getMetricRegistry((AbstractMetricGroup<?>) taskMetricGroup);
+    }
+
+    public static MetricRegistryImpl getMetricRegistry(AbstractMetricGroup<?> metricGroup) {
         MetricRegistryImpl metricRegistry = null;
         try {
             Field field = AbstractMetricGroup.class.getDeclaredField("registry");
             field.setAccessible(true);
-            Object obj = field.get(taskMetricGroup);
+            Object obj = field.get(metricGroup);
             if (obj instanceof MetricRegistryImpl) {
                 metricRegistry = (MetricRegistryImpl) obj;
             }
@@ -637,4 +709,6 @@ public class OmniMetricHelper {
             }
         }
     }
+
+    public static native  long addGroup(long parentGroupRef,String groupName,String[] scope);
 }
