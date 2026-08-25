@@ -64,8 +64,8 @@
   },
   {"func_name": "SIMILAR TO", "is_support_func": false},
   {"func_name": "NOT SIMILAR TO", "is_support_func": false},
-  {"func_name": "IN", "is_support_func": false},
-  {"func_name": "NOT IN", "is_support_func": false},
+  {"func_name": "IN", "is_support_func": true},
+  {"func_name": "NOT IN", "is_support_func": true},
   {"func_name": "EXISTS", "is_support_func": false},
 
   {"func_name": "AND", "func_type": "binary", "is_support_func": true,
@@ -304,7 +304,9 @@
   },
   {"func_name": "TO_TIMESTAMP_LTZ", "is_support_func": false},
   {"func_name": "TO_TIMESTAMP", "is_support_func": false},
-  {"func_name": "CURRENT_WATERMARK", "is_support_func": false},
+  {"func_name": "CURRENT_WATERMARK", "is_support_func": true,
+   "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ"]
+  },
 
   {"func_name": "CASE", "is_support_func": true,
   "is_supported_type": [
@@ -444,7 +446,7 @@
     }
   },
   {"func_name": "TRY_CAST", "is_support_func": false},
-  {"func_name": "TYPEOF", "is_support_func": false},
+  {"func_name": "TYPEOF", "is_support_func": true},
 
 
   {"func_name": "CARDINALITY", "is_support_func": false},

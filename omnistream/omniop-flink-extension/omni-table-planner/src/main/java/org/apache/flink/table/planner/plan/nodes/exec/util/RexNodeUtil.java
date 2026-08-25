@@ -24,6 +24,8 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.TimestampString;
 import org.apache.calcite.util.Sarg;
+import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
+import org.apache.flink.table.types.logical.LogicalType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -98,6 +100,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("COALESCE", SpecialExprType.COALESCE);
         // IFNULL reuses the COALESCE native path (equivalent to 2-arg COALESCE)
         specialOperatorMap.put("IFNULL", SpecialExprType.COALESCE);
+        specialOperatorMap.put("TYPEOF", SpecialExprType.TYPEOF);
     }
 
     static {
@@ -133,6 +136,7 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.AND, RexNodeUtil::handleAnd);
         specialHandlerMap.put(SpecialExprType.OR, RexNodeUtil::handleOr);
         specialHandlerMap.put(SpecialExprType.CAST, RexNodeUtil::handleCast);
+        specialHandlerMap.put(SpecialExprType.TYPEOF, RexNodeUtil::handleTypeOf);
 
         // Category handlers self-register their operator names, native function names and
         // handlers. Adding a function within a category touches only that category's file
@@ -229,6 +233,7 @@ public class RexNodeUtil {
         JSON_ARRAY,
         JSON_OBJECT,
         CURRENT_TIMESTAMP,
+        CURRENT_WATERMARK,
         DATE_ADD,
         ROUND,
         GREATEST,
@@ -275,6 +280,7 @@ public class RexNodeUtil {
         IS_JSON_SCALAR,
         IS_JSON_ARRAY,
         IS_JSON_OBJECT,
+        TYPEOF,
         LEFT,
         RIGHT,
         STR_TO_MAP,
@@ -544,6 +550,27 @@ public class RexNodeUtil {
                 stringList.add(literalMap);
             }
             jsonMap.put("arguments", stringList);
+        } else if (sarg.isComplementedPoints()) {
+            // NOT IN: complement point-set Sarg -> recover points -> UNARY(NOT, IN(points)).
+            // Guava Range shaded (Flink relocates) -> lambda param type inferred.
+            jsonMap.put("exprType", "UNARY");
+            setDataType(rexCall, jsonMap, "returnType");
+            jsonMap.put("operator", "NOT");
+            Map<String, Object> inMap = new LinkedHashMap<>();
+            inMap.put("exprType", "IN");
+            setDataType(rexCall, inMap, "returnType");
+            List<Map<String, Object>> inArgs = new ArrayList<>();
+            inArgs.add(buildJsonMap(operands.get(0))); // value to test
+            sarg.rangeSet.complement().asRanges().forEach(r -> {
+                Map<String, Object> literalMap = new LinkedHashMap<>();
+                literalMap.put("exprType", "LITERAL");
+                literalMap.put("isNull", false);
+                literalMap.put("value", extractSargEndpoint(r.lowerEndpoint()));
+                setDataType(operands.get(0), literalMap, "dataType");
+                inArgs.add(literalMap);
+            });
+            inMap.put("arguments", inArgs);
+            jsonMap.put("expr", inMap);
         } else { // a range
             // Per-range bounds as [hasLower, hasUpper, lower, upper]; Guava Range not importable (Flink relocates) -> type inferred.
             List<Object[]> rangeInfo = new ArrayList<>();
@@ -705,6 +732,48 @@ public class RexNodeUtil {
         List<Map<String, Object>> castArgList = new ArrayList<>();
         castArgList.add(buildJsonMap(operands.get(0)));
         jsonMap.put("arguments", castArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleTypeOf(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (operands.size() < 1 || operands.size() > 2) {
+            LOG.warn("TYPEOF expects one input and an optional BOOLEAN literal");
+            jsonMap.put("exprType", OperatorExprType.INVALID.name());
+            return jsonMap;
+        }
+
+        boolean forceSerializable = false;
+        if (operands.size() == 2) {
+            RexNode forceOperand = operands.get(1);
+            if (!(forceOperand instanceof RexLiteral)
+                    || forceOperand.getType().getSqlTypeName() != SqlTypeName.BOOLEAN) {
+                LOG.warn("TYPEOF force_serializable must be a BOOLEAN literal");
+                jsonMap.put("exprType", OperatorExprType.INVALID.name());
+                return jsonMap;
+            }
+            Boolean forceValue = ((RexLiteral) forceOperand).getValueAs(Boolean.class);
+            forceSerializable = Boolean.TRUE.equals(forceValue);
+        }
+
+        LogicalType inputType = FlinkTypeFactory.toLogicalType(operands.get(0).getType());
+        String typeString;
+        if (forceSerializable) {
+            try {
+                typeString = inputType.asSerializableString();
+            } catch (Exception exception) {
+                typeString = null;
+            }
+        } else {
+            typeString = inputType.asSummaryString();
+        }
+
+        jsonMap.put("exprType", OperatorExprType.LITERAL.name());
+        setDataType(rexCall, jsonMap, "dataType");
+        jsonMap.put("isNull", typeString == null);
+        if (typeString != null) {
+            jsonMap.put("value", typeString);
+        }
         return jsonMap;
     }
 
