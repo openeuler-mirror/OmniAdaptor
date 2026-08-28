@@ -25,6 +25,8 @@ import java.util.Set;
 public abstract class AbstractValidateOperatorStrategy {
 
     public static final Map<String, Integer> RexTypeToIdMap = new HashMap<>();
+    // 所有 validate 策略共用的类型白名单。OVERLAPS 自身仍在 RexNodeUtil 中拒绝精度大于 3
+    // 的 TIME/TIMESTAMP；这里保留基线已有的 TIMESTAMP(9)，避免改变其他表达式的支持范围。
     protected static final Set<String> SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",

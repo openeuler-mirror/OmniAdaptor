@@ -1,4 +1,4 @@
-package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.entity;
+package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.entity;
 
 import java.util.List;
 

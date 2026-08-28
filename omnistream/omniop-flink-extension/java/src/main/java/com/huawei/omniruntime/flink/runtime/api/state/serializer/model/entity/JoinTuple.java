@@ -1,4 +1,4 @@
-package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.entity;
+package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.entity;
 
 public class JoinTuple {
     private int f0;
