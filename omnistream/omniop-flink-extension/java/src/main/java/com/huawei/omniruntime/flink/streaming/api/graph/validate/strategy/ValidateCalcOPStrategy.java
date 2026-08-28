@@ -28,6 +28,9 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     private static final String DATETIME_PLUS_DAY_TIME = "datetime_plus_day_time";
     private static final String DATETIME_MINUS_DAY_TIME = "datetime_minus_day_time";
 
+    // Calc 算子在 AbstractValidateOperatorStrategy 共享白名单之外额外接受的类型。
+    // 注意：TIME 未加入——OmniOperator 的比较运算(codegen 类型分发与向量化签名)都无 TIME 支持，
+    // 放进白名单会让 TIME 比较链下推 native 后崩溃或算错，必须回退 vanilla。
     private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "DOUBLE",
             "DATE",
@@ -59,6 +62,8 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
         return dataTypesList.stream()
                 .flatMap(List::stream)
                 .allMatch(type -> {
+                    type = stripNotNull(type);
+
                     if (type.matches("^VARCHAR\\([^)]*\\)$")) {
                         type = "VARCHAR";
                         LOG.info("converted to VARCHAR");
@@ -407,7 +412,12 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
 
                 // Validate json_split function signature: 1 STRING argument, STRING return type
-                String functionName = (String) exprMap.get("function_name");
+                Object functionNameObj = exprMap.get("function_name");
+                if (!(functionNameObj instanceof String)) {
+                    LOG.info("ERROR: function_name is not a string");
+                    return false;
+                }
+                String functionName = (String) functionNameObj;
                 if ((DATETIME_PLUS_DAY_TIME.equals(functionName)
                                 || DATETIME_MINUS_DAY_TIME.equals(functionName))
                         && !validateTimestampDayTimeFunction(exprMap)) {
@@ -476,6 +486,23 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                             LOG.info("ERROR: current_timestamp expects LONG return type, but got typeId {}", retType);
                             return false;
                         }
+                    }
+                }
+
+                if ("current_watermark".equalsIgnoreCase(functionName)) {
+                    if (!"current_watermark".equals(functionName)) {
+                        LOG.info("ERROR: current_watermark function name must use the native lowercase spelling");
+                        return false;
+                    }
+                    Object argumentsObj = exprMap.get("arguments");
+                    if (!(argumentsObj instanceof List) || !((List<?>) argumentsObj).isEmpty()) {
+                        LOG.info("ERROR: current_watermark expects an empty arguments list");
+                        return false;
+                    }
+                    if (!Integer.valueOf(2).equals(exprMap.get("returnType"))) {
+                        LOG.info("ERROR: current_watermark expects LONG return type, but got {}",
+                                exprMap.get("returnType"));
+                        return false;
                     }
                 }
 
@@ -553,6 +580,17 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 return true;
             case "IS_NOT_NULL":
                 return validateReturnTypeAndArguments(exprMap, inputSize);
+            case "SIMILAR_TO":
+                Object similarValue = exprMap.get("value");
+                Object similarPattern = exprMap.get("pattern");
+                if (!exprMap.containsKey("returnType")
+                        || !(similarValue instanceof Map)
+                        || !(similarPattern instanceof Map)) {
+                    LOG.info("SIMILAR_TO's value or pattern is not a map");
+                    return false;
+                }
+                return validateCalcExpr((Map<String, Object>) similarValue, inputSize)
+                        && validateCalcExpr((Map<String, Object>) similarPattern, inputSize);
             case "MULTIPLE_AND_OR":
                 if (!exprMap.containsKey("returnType") || !exprMap.containsKey("conditions")) {
                     return false;

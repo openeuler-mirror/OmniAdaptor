@@ -58,6 +58,9 @@ public class DescriptionUtil {
                 typeName += "(" + varcharType.getLength() + ")";
             }
         }
+        if (typeRoot == LogicalTypeRoot.TIME_WITHOUT_TIME_ZONE && fieldType instanceof TimeType) {
+            typeName += "(" + ((TimeType) fieldType).getPrecision() + ")";
+        }
         if (typeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE
                 || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE
                 || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
@@ -83,6 +86,10 @@ public class DescriptionUtil {
                 }
                 typeName += "(" + precision.toString() + "," + scale.toString() + ")";
             }
+        }
+        // 追加 NOT NULL 后缀，保留 nullable 信息供 C++ 侧 SavepointAdaptor 解析
+        if (!fieldType.isNullable()) {
+            typeName += " NOT NULL";
         }
         return typeName;
     }

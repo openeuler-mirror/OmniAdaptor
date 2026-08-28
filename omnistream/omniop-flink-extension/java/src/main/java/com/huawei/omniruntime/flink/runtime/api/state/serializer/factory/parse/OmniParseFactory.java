@@ -1,12 +1,13 @@
 package com.huawei.omniruntime.flink.runtime.api.state.serializer.factory.parse;
 
-import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.SC;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerType;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniNativeSerializerJsonInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniSerializerAttributesInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniSerializerJsonInfo;
-import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.type.BinaryTypeInfo;
-import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.type.TimerTypeInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type.BinaryTypeInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type.TimerTypeInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type.WindowTypeInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.utils.OmniStateSerializerUtils;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
@@ -25,23 +26,18 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.api.java.typeutils.runtime.PojoSerializer;
 import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
 import org.apache.flink.runtime.state.VoidNamespaceTypeInfo;
-import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
-import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonParser;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.streaming.api.operators.TimerSerializer;
+import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.data.binary.BinaryRowData;
-import org.apache.flink.table.gateway.rest.serde.LogicalTypeJsonDeserializer;
-import org.apache.flink.table.gateway.rest.serde.LogicalTypeJsonSerializer;
-import org.apache.flink.table.runtime.typeutils.BinaryRowDataSerializer;
-import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
-import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
+import org.apache.flink.table.runtime.typeutils.*;
+import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.CollectionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -59,6 +55,7 @@ public abstract class OmniParseFactory {
     public static final String TYPE_SERIALIZER_PRIVATE_KEY_FIELDS = "fields";
     public static final String TYPE_SERIALIZER_PRIVATE_KEY_TYPES = "types";
     public static final String TYPE_SERIALIZER_PRIVATE_KEY_FIELD_SERIALIZERS = "fieldSerializers";
+    public static final String TYPE_SERIALIZER_PRIVATE_KEY_INTERNAL_SERIALIZERS = "internalSerializer";
 
     // recursion depth max
     protected static final int DEPTH_MAX = 100;
@@ -90,6 +87,8 @@ public abstract class OmniParseFactory {
                 case TIMER:
                 case ROW:
                 case BINARY_ROW:
+                case EXTERNAL:
+                case TIME_WINDOW:
                     factory = new OmniParseValueFactory();
                     break;
                 case UNKNOWN:
@@ -129,7 +128,7 @@ public abstract class OmniParseFactory {
                     ? TypeInformation.of(Object.class) : buildTypeInformationBy(valueSerializerInfo, depth + DEPTH_INTERVAL);
             return Types.MAP(keyTypeInfo, valueTypeInfo);
         } else if (OmniSerializerType.POJO.equals(info.getSerializerType())) {
-            return Types.POJO(info.getElementTypeClazz());
+            return Types.POJO(info.getSerializerAttributes().getClazz());
         } else if (OmniSerializerType.TUPLE.equals(info.getSerializerType())) {
             // 优先用 C++ 端递归传过来的 fieldSerializers 重建带具体字段类型的 TupleTypeInfo；
             // 走 TypeExtractor.createTypeInfo(Tuple2.class) 会因为 raw type 拿到 GenericType，
@@ -140,7 +139,7 @@ public abstract class OmniParseFactory {
                 for (int i = 0; i < fieldInfos.size(); i++) {
                     fieldTypes[i] = buildTypeInformationBy(fieldInfos.get(i), depth + DEPTH_INTERVAL);
                 }
-                Class<?> tupleClass = info.getElementTypeClazz();
+                Class<?> tupleClass = info.getSerializerAttributes().getClazz();
                 if (tupleClass == null) {
                     // C++ 端漏传 element_type 时按 arity 兜底到 TupleN.class
                     tupleClass = Tuple.getTupleClass(fieldTypes.length);
@@ -148,22 +147,20 @@ public abstract class OmniParseFactory {
                 return new TupleTypeInfo(tupleClass, fieldTypes);
             }
             // 兼容老 JSON：无 fieldSerializers 时退回基于 raw class 的解析
-            return TypeExtractor.createTypeInfo(info.getElementTypeClazz());
+            return TypeExtractor.createTypeInfo(info.getSerializerAttributes().getClazz());
         } else if (OmniSerializerType.VOID_NAMESPACE.equals(info.getSerializerType())) {
             return new VoidNamespaceTypeInfo();
         } else if (OmniSerializerType.TIMER.equals(info.getSerializerType())) {
             OmniNativeSerializerJsonInfo keySerializerInfo = info.getKeySerializer();
             OmniNativeSerializerJsonInfo namespaceSerializerInfo = info.getNamespaceSerializer();
-            TypeInformation<?> keyTypeInfo =  (null == keySerializerInfo)
+            TypeInformation<?> keyTypeInfo = (null == keySerializerInfo)
                     ? Types.STRING : buildTypeInformationBy(keySerializerInfo, depth + DEPTH_INTERVAL);
-            TypeInformation<?> namespaceTypeInfo =  (null == namespaceSerializerInfo)
+            TypeInformation<?> namespaceTypeInfo = (null == namespaceSerializerInfo)
                     ? new VoidNamespaceTypeInfo() : buildTypeInformationBy(namespaceSerializerInfo, depth + DEPTH_INTERVAL);
             return new TimerTypeInfo<>(keyTypeInfo, namespaceTypeInfo);
         } else if (OmniSerializerType.ROW.equals(info.getSerializerType())) {
             try {
-                JsonParser logicalTypeParser = info.getLogicalType();
-                LogicalTypeJsonDeserializer deserializer = new LogicalTypeJsonDeserializer();
-                RowType rowType = (RowType) deserializer.deserialize(logicalTypeParser, null);
+                RowType rowType = (RowType) OmniStateSerializerUtils.logicalTypeJsonDeserialize(info.getLogicalType());
                 return InternalTypeInfo.of(rowType);
             } catch (Exception e) {
                 LOG.error("method : buildTypeInformationBy -> build row exception", e);
@@ -172,6 +169,23 @@ public abstract class OmniParseFactory {
         } else if (OmniSerializerType.BINARY_ROW.equals(info.getSerializerType())) {
             int arity = CollectionUtil.isNullOrEmpty(info.getFieldNames()) ? 0 : info.getFieldNames().size();
             return BinaryTypeInfo.of(new BinaryRowData(arity), info.getFieldNames());
+        } else if (OmniSerializerType.EXTERNAL.equals(info.getSerializerType())) {
+            try {
+                OmniSerializerAttributesInfo serializerAttributes = info.getSerializerAttributes();
+                boolean isInternalInput = null == serializerAttributes.getExternalIsInternalInput()
+                        ? Boolean.FALSE : serializerAttributes.getExternalIsInternalInput();
+
+                LogicalType logicalType = OmniStateSerializerUtils.logicalTypeJsonDeserialize(info.getLogicalType());
+                DataType dataType = null == serializerAttributes.getClazz()
+                        ? DataTypes.of(logicalType) : DataTypes.of(logicalType).bridgedTo(serializerAttributes.getClazz());
+
+                return ExternalTypeInfo.of(dataType, isInternalInput);
+            } catch (Exception e) {
+                LOG.error("method : buildTypeInformationBy -> build external exception", e);
+                throw new GeneralRuntimeException(e);
+            }
+        } else if (OmniSerializerType.TIME_WINDOW.equals(info.getSerializerType())) {
+            return WindowTypeInfo.ofClass(info.getSerializerAttributes().getClazz());
         }
 
         return null;
@@ -182,11 +196,14 @@ public abstract class OmniParseFactory {
             throw new GeneralRuntimeException(String.format("max recursion depth (%s) exceeded. Input may be malformed or malicious.", DEPTH_MAX));
         }
         if (null == typeSerializer || null == serializerType) {
+            LOG.warn("method : buildJsonInfoBy -> typeSerializer or serializerType is null.");
             return null;
         }
         OmniSerializerJsonInfo jsonInfo = new OmniSerializerJsonInfo();
         jsonInfo.setSerializerName(typeSerializer.getClass().getName());
-        jsonInfo.setSerializerInstanceClazz(typeSerializer.createInstance().getClass().getName());
+        Class<?> serializerInstance = OmniStateSerializerUtils.getSerializerInstance(typeSerializer, serializerType);
+        String serializerInstanceName = null == serializerInstance ? null : serializerInstance.getName();
+        jsonInfo.setSerializerInstanceClazz(serializerInstanceName);
         if (serializerType.isBasic()) {
             return jsonInfo;
         } else if (serializerType.isPrimitiveArray()) {
@@ -200,6 +217,7 @@ public abstract class OmniParseFactory {
                     OmniSerializerType.get(listSerializer.getElementSerializer().getClass()),
                     depth + DEPTH_INTERVAL);
             jsonInfo.setElementSerializer(elementSerializerJsonInfo);
+            jsonInfo.setSerializerAttributes(OmniSerializerAttributesInfo.ofClazz(serializerInstanceName));
             return jsonInfo;
         } else if (OmniSerializerType.MAP.equals(serializerType)) {
             MapSerializer<?, ?> mapSerializer = (MapSerializer<?, ?>) typeSerializer;
@@ -220,7 +238,7 @@ public abstract class OmniParseFactory {
             return jsonInfo;
         } else if (OmniSerializerType.POJO.equals(serializerType)) {
             PojoSerializer<?> pojoSerializer = (PojoSerializer<?>) typeSerializer;
-            Class<?> clazz = ReflectionUtils.retrievePrivateField(pojoSerializer, TYPE_SERIALIZER_PRIVATE_KEY_CLAZZ);
+            Class<?> pojoClazz = ReflectionUtils.retrievePrivateField(pojoSerializer, TYPE_SERIALIZER_PRIVATE_KEY_CLAZZ);
             Field[] fields = ReflectionUtils.retrievePrivateField(pojoSerializer, TYPE_SERIALIZER_PRIVATE_KEY_FIELDS);
             TypeSerializer<?>[] fieldSerializers = ReflectionUtils.retrievePrivateField(pojoSerializer, TYPE_SERIALIZER_PRIVATE_KEY_FIELD_SERIALIZERS);
             List<String> fieldInfoList = new ArrayList<>();
@@ -241,9 +259,10 @@ public abstract class OmniParseFactory {
                     fieldSerializerInfoList.add(fieldSerializerJsonInfo);
                 }
             }
-            jsonInfo.setClazz(null == clazz ? SC.EMPTY : clazz.getName());
+            jsonInfo.setClazz(null == pojoClazz ? SC.EMPTY : pojoClazz.getName());
             jsonInfo.setFields(fieldInfoList);
             jsonInfo.setFieldSerializers(fieldSerializerInfoList);
+            jsonInfo.setSerializerAttributes(OmniSerializerAttributesInfo.ofClazz(jsonInfo.getClazz()));
             return jsonInfo;
         } else if (OmniSerializerType.TUPLE.equals(serializerType)) {
             TupleSerializer<?> tupleSerializer = (TupleSerializer<?>) typeSerializer;
@@ -261,6 +280,7 @@ public abstract class OmniParseFactory {
                 }
             }
             jsonInfo.setFieldSerializers(fieldSerializerInfoList);
+            jsonInfo.setSerializerAttributes(OmniSerializerAttributesInfo.ofClazz(tupleSerializer.getTupleClass().getName()));
             return jsonInfo;
         } else if (OmniSerializerType.VOID_NAMESPACE.equals(serializerType)) {
             return jsonInfo;
@@ -286,17 +306,8 @@ public abstract class OmniParseFactory {
                 RowDataSerializer rowDataSerializer = (RowDataSerializer) typeSerializer;
                 LogicalType[] types = ReflectionUtils.retrievePrivateField(rowDataSerializer, TYPE_SERIALIZER_PRIVATE_KEY_TYPES);
                 RowType rowType = OmniStateSerializerUtils.getRowType(types);
-
-                LogicalTypeJsonSerializer serializer = new LogicalTypeJsonSerializer();
-                StringWriter stringWriter = new StringWriter();
-                try (JsonGenerator jsonGenerator = JsonHelper.getObjectMapper().createGenerator(stringWriter)) {
-                    serializer.serialize(rowType, jsonGenerator, null);
-                    jsonGenerator.flush();
-                }
-
-                String jsonString = stringWriter.toString();
-                JsonNode logicType = JsonHelper.fromJson(jsonString, JsonNode.class);
-                jsonInfo.setLogicalType(logicType);
+                JsonNode logicalType = OmniStateSerializerUtils.logicalTypeJsonSerialize(rowType);
+                jsonInfo.setLogicalType(logicalType);
                 return jsonInfo;
             } catch (Exception e) {
                 LOG.error("method : buildJsonInfoBy -> build row exception", e);
@@ -313,6 +324,32 @@ public abstract class OmniParseFactory {
                 jsonInfo.setFields(Collections.nCopies(arity, SC.EMPTY));
             }
             return jsonInfo;
+        } else if (OmniSerializerType.EXTERNAL.equals(serializerType)) {
+            try {
+                ExternalSerializer<?, ?> externalSerializer = (ExternalSerializer<?, ?>) typeSerializer;
+
+                JsonNode logicalType = OmniStateSerializerUtils.logicalTypeJsonSerialize(externalSerializer.getDataType().getLogicalType());
+                jsonInfo.setLogicalType(logicalType);
+
+                jsonInfo.setClazz(externalSerializer.getDataType().getConversionClass().getName());
+                jsonInfo.setSerializerAttributes(
+                        OmniSerializerAttributesInfo.ofExternal(externalSerializer.isInternalInput(),
+                                externalSerializer.getDataType().getConversionClass().getName()));
+
+                TypeSerializer<?> internalSerializer = ReflectionUtils.retrievePrivateField(externalSerializer, TYPE_SERIALIZER_PRIVATE_KEY_INTERNAL_SERIALIZERS);
+                if (internalSerializer != null) {
+                    jsonInfo.setValueSerializer(buildJsonInfoBy(internalSerializer, OmniSerializerType.get(internalSerializer.getClass()), depth + DEPTH_INTERVAL));
+                }
+                return jsonInfo;
+            } catch (Exception e) {
+                LOG.error("method : buildJsonInfoBy -> build external exception", e);
+                throw new GeneralRuntimeException(e);
+            }
+        } else if (OmniSerializerType.TIME_WINDOW.equals(serializerType)) {
+            jsonInfo.setSerializerAttributes(OmniSerializerAttributesInfo.ofClazz(serializerInstanceName));
+            return jsonInfo;
+        } else {
+            LOG.warn("method : buildJsonInfoBy -> unsupported serializerType : {}, typeSerializer : {}", serializerType.name(), typeSerializer.getClass().getName());
         }
 
         return null;
@@ -333,10 +370,6 @@ public abstract class OmniParseFactory {
         if (!check(typeSerializer, serializerType)) {
             return null;
         }
-        OmniSerializerJsonInfo jsonInfo = buildJsonInfoBy(typeSerializer, serializerType, DEPTH_START);
-        if (null == jsonInfo) {
-            return null;
-        }
-        return jsonInfo;
+        return buildJsonInfoBy(typeSerializer, serializerType, DEPTH_START);
     }
 }

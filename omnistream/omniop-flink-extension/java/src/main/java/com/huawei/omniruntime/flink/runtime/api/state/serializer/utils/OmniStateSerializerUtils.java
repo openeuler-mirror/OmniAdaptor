@@ -4,22 +4,33 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.OmniStateSerializerHelper;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.SC;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerOperatorStateMode;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerType;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniStateMetaSerializerInfo;
+import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.runtime.taskmanager.OmniTask;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
 import org.apache.flink.runtime.state.LocalRecoveryDirectoryProviderImpl;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonParser;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.DeserializationContext;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
+import org.apache.flink.table.gateway.rest.serde.LogicalTypeJsonDeserializer;
+import org.apache.flink.table.gateway.rest.serde.LogicalTypeJsonSerializer;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.StringWriter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -27,10 +38,96 @@ import java.util.stream.Collectors;
 public class OmniStateSerializerUtils {
     private static final Logger LOG = LoggerFactory.getLogger(OmniStateSerializerUtils.class);
 
+    private static final LogicalTypeJsonSerializer LOGICAL_TYPE_JSON_SERIALIZER = new LogicalTypeJsonSerializer();
+    private static final LogicalTypeJsonDeserializer LOGICAL_TYPE_JSON_DESERIALIZER = new LogicalTypeJsonDeserializer();
+
+    public static Class<?> getSerializerInstance(TypeSerializer<?> typeSerializer, OmniSerializerType serializerType) {
+        Object serializerInstance = typeSerializer.createInstance();
+        if (null != serializerInstance) {
+            return serializerInstance.getClass();
+        } else if (null != serializerType.getClazz()) {
+            return serializerType.getClazz();
+        }
+
+        return null;
+    }
+
+    public static String getSerializerInstanceClazz(TypeSerializer<?> typeSerializer, OmniSerializerType serializerType) {
+        Class<?> clazz = getSerializerInstance(typeSerializer, serializerType);
+        return null == clazz ? null : clazz.getName();
+    }
+
+    public static String firstNonBlank(String... values) {
+        return Arrays.stream(values)
+                .filter(Objects::nonNull)
+                .filter(StringUtils::isNotEmpty)
+                .findFirst()
+                .orElse(null);
+    }
+
+    public static Class<?> classForName(String name, boolean initialize, ClassLoader loader) {
+        if (StringUtils.isEmpty(name)) {
+            return null;
+        }
+        try {
+            String className = name.replace(SC.UNDERSCORE, SC.DOT);
+            LOG.error("method : classForName -> className : {}", className);
+            return Class.forName(className, initialize, loader);
+        } catch (ClassNotFoundException e) {
+            LOG.error("method : classForName -> format exception", e);
+            throw new GeneralRuntimeException(String.format("Could not find class '%s' for unsafe operations.", name), e);
+        }
+    }
+
+    public static <T> T objectFormat(Object obj, Class<T> clazz) {
+        try {
+            if (null == obj) {
+                return null;
+            }
+            return JsonHelper.fromJson(JsonHelper.toJson(obj), clazz);
+        } catch (Exception e) {
+            LOG.error("method : objectFormat -> format exception", e);
+            throw new GeneralRuntimeException(e);
+        }
+    }
+
+    public static JsonNode logicalTypeJsonSerialize(LogicalType logicalType) {
+        try {
+            StringWriter stringWriter = new StringWriter();
+            try (JsonGenerator jsonGenerator = JsonHelper.getObjectMapper().createGenerator(stringWriter)) {
+                LOGICAL_TYPE_JSON_SERIALIZER.serialize(logicalType, jsonGenerator, null);
+                jsonGenerator.flush();
+            }
+            String jsonString = stringWriter.toString();
+            return JsonHelper.fromJson(jsonString, JsonNode.class);
+        } catch (Exception e) {
+            LOG.error("method : logicalTypeJsonDeserialize -> serialize exception", e);
+            throw new GeneralRuntimeException(e);
+        }
+    }
+
+    public static LogicalType logicalTypeJsonDeserialize(JsonParser logicalTypeJsonParser, DeserializationContext ctx) {
+        try {
+            return LOGICAL_TYPE_JSON_DESERIALIZER.deserialize(logicalTypeJsonParser, ctx);
+        } catch (Exception e) {
+            LOG.error("method : logicalTypeJsonDeserialize -> deserialize exception", e);
+            throw new GeneralRuntimeException(e);
+        }
+    }
+
+    public static LogicalType logicalTypeJsonDeserialize(JsonNode logicalTypeJsonNode) {
+        try (JsonParser jsonParser = JsonHelper.getObjectMapper().treeAsTokens(logicalTypeJsonNode)) {
+            return logicalTypeJsonDeserialize(jsonParser, null);
+        } catch (Exception e) {
+            LOG.error("method : logicalTypeJsonDeserialize -> deserialize exception", e);
+            throw new GeneralRuntimeException(e);
+        }
+    }
+
     public static RowType getRowType(LogicalType[] types) {
         AtomicInteger i = new AtomicInteger();
         List<RowType.RowField> fields = Arrays.stream(types)
-                .map(type-> new RowType.RowField("f" + i.getAndIncrement(), type, SC.EMPTY))
+                .map(type -> new RowType.RowField("f" + i.getAndIncrement(), type, SC.EMPTY))
                 .collect(Collectors.toList());
         return new RowType(fields);
     }
@@ -62,7 +159,7 @@ public class OmniStateSerializerUtils {
 
     public static List<StateMetaInfoSnapshot> buildStateMetaInfoSnapshot(OmniTask omniTask, List<Map<String, Object>> stateMetaInfoMapList) {
         List<StateMetaInfoSnapshot> resultList = new ArrayList<>(stateMetaInfoMapList.size());
-        if(stateMetaInfoMapList.isEmpty()) {
+        if (stateMetaInfoMapList.isEmpty()) {
             return resultList;
         }
 
