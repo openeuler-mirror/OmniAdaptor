@@ -216,6 +216,9 @@ public class OperatorDescriptorHelper {
             VarCharType varcharType = (VarCharType) fieldType;
             typeName += "(" + varcharType.getLength() + ")";
         }
+        if (typeRoot == LogicalTypeRoot.TIME_WITHOUT_TIME_ZONE && fieldType instanceof TimeType) {
+            typeName += "(" + ((TimeType) fieldType).getPrecision() + ")";
+        }
         if (typeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE
             || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE
             || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
