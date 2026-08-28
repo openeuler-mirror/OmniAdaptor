@@ -53,6 +53,7 @@ final class StringExprHandlers {
         RexNodeUtil.specialOperatorMap.put("SUBSTR", SpecialExprType.SUBSTR);
         RexNodeUtil.specialOperatorMap.put("INSTR", SpecialExprType.INSTR);
         RexNodeUtil.specialOperatorMap.put("LIKE", SpecialExprType.LIKE);
+        RexNodeUtil.specialOperatorMap.put("SIMILAR TO", SpecialExprType.SIMILAR_TO);
         RexNodeUtil.specialOperatorMap.put("RPAD", SpecialExprType.RPAD);
         RexNodeUtil.specialOperatorMap.put("LPAD", SpecialExprType.LPAD);
         RexNodeUtil.specialOperatorMap.put("REPEAT", SpecialExprType.REPEAT);
@@ -93,6 +94,7 @@ final class StringExprHandlers {
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.CHAR_LENGTH, StringExprHandlers::handleCharLength);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.OVERLAY, StringExprHandlers::handleOverlay);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.LIKE, StringExprHandlers::handleLike);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.SIMILAR_TO, StringExprHandlers::handleSimilarTo);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.BIN, StringExprHandlers::handleBin);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.HEX, StringExprHandlers::handleHex);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.UUID, StringExprHandlers::handleUuid);
@@ -202,6 +204,20 @@ final class StringExprHandlers {
             likeArgList.add(argMap);
         }
         jsonMap.put("arguments", likeArgList);
+        return jsonMap;
+    }
+
+    static Map<String, Object> handleSimilarTo(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        // SIMILAR TO: 2-arg native via SimilarExpr (vectorized); 3-arg with ESCAPE not supported -> fallback.
+        if (operands.size() != 2) {
+            jsonMap.put("exprType", "INVALID");
+            return jsonMap;
+        }
+        jsonMap.put("exprType", "SIMILAR_TO");
+        RexNodeUtil.setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("value", RexNodeUtil.buildJsonMap(operands.get(0)));
+        jsonMap.put("pattern", RexNodeUtil.buildJsonMap(operands.get(1)));
         return jsonMap;
     }
 

@@ -194,11 +194,18 @@ public final class OmniGraphOverride {
 
     private static boolean isStreamRecordTimestampInserterSupportNative = true;
 
+    // native 时间类型是 int64 毫秒，因此只能表示精度 <= 3。
+    // TIME(0..3) 现已加入（时间向量化已落地）；TIMESTAMP(9)（纳秒）被移除，因为 native
+    // 无法承载——声明支持它会导致静默回退或数据丢失。下方 SINK_SUPPORT_DATA_TYPE 遵循相同的精度规则。
     private static final Set<String> SOURCE_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",
             "DOUBLE",
             "DATE",
+            "TIME_WITHOUT_TIME_ZONE(0)",
+            "TIME_WITHOUT_TIME_ZONE(1)",
+            "TIME_WITHOUT_TIME_ZONE(2)",
+            "TIME_WITHOUT_TIME_ZONE(3)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
@@ -215,11 +222,18 @@ public final class OmniGraphOverride {
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
 
+    // 与上方 SOURCE_SUPPORT_DATA_TYPE 相同的时间精度规则（仅精度 <= 3）。
+    // 不支持的 sink 类型会静默地把 isSinkSupportNative 置为 false，使整条链回退到 Flink，
+    // 因此精度上限必须与 native 的 int64-毫秒表示保持同步。
     private static final Set<String> SINK_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",
             "DOUBLE",
             "DATE",
+            "TIME_WITHOUT_TIME_ZONE(0)",
+            "TIME_WITHOUT_TIME_ZONE(1)",
+            "TIME_WITHOUT_TIME_ZONE(2)",
+            "TIME_WITHOUT_TIME_ZONE(3)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
