@@ -24,6 +24,9 @@ import java.util.Set;
 public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateCalcOPStrategy.class);
 
+    // Calc 算子在 AbstractValidateOperatorStrategy 共享白名单之外额外接受的类型。
+    // 注意：TIME 未加入——OmniOperator 的比较运算(codegen 类型分发与向量化签名)都无 TIME 支持，
+    // 放进白名单会让 TIME 比较链下推 native 后崩溃或算错，必须回退 vanilla。
     private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
                  "DOUBLE",
                  "DATE",
@@ -484,6 +487,17 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             case "IS_NOT_NULL":
             case "IS_NULL":
                 return validateReturnTypeAndArguments(exprMap, inputSize);
+            case "SIMILAR_TO":
+                Object similarValue = exprMap.get("value");
+                Object similarPattern = exprMap.get("pattern");
+                if (!exprMap.containsKey("returnType")
+                        || !(similarValue instanceof Map)
+                        || !(similarPattern instanceof Map)) {
+                    LOG.info("SIMILAR_TO's value or pattern is not a map");
+                    return false;
+                }
+                return validateCalcExpr((Map<String, Object>) similarValue, inputSize)
+                        && validateCalcExpr((Map<String, Object>) similarPattern, inputSize);
             case "MULTIPLE_AND_OR":
                 if (!exprMap.containsKey("returnType") || !exprMap.containsKey("conditions")) {
                     return false;
