@@ -72,7 +72,7 @@ final class MathExprHandlers {
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.RADIANS, "radians");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.PI, "pi");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.E, "e");
-        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.RAND, "rand");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.RAND, "flink_rand");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.RAND_INTEGER, "rand_integer");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.TRUNCATE, "truncate");
 
