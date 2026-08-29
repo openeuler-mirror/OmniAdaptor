@@ -133,6 +133,7 @@ import org.apache.flink.streaming.runtime.tasks.OperatorEventDispatcherImpl;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
+import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
@@ -1194,6 +1195,7 @@ public class OmniTask extends Task {
         List<HandleAndLocalPath> handles = new ArrayList<>();
         try (RocksDBStateUploader uploader = new RocksDBStateUploader(numberOfSnapshottingThreads)) {
             if (paths == null || paths.isEmpty()) {
+                LOG.debug("No RocksDB checkpoint files to upload");
                 return Collections.emptyList();
             }
 
@@ -1204,10 +1206,25 @@ public class OmniTask extends Task {
                             stateScope,
                             snapshotCloseableRegistry,
                             tmpResourcesRegistry);
-            LOG.info("Checkpoint files uploaded");
+            LOG.debug(
+                    "Uploaded {} RocksDB checkpoint files successfully; returned handles={}",
+                    paths.size(),
+                    handles.size());
         } catch (Throwable t) {
-            tmpResourcesRegistry.close();
-            LOG.info("Error closing registry", t);
+            try {
+                tmpResourcesRegistry.close();
+            } catch (Throwable cleanupError) {
+                t.addSuppressed(cleanupError);
+            }
+            LOG.error(
+                    "Failed to upload RocksDB checkpoint files; file count={}, first path={}",
+                    paths == null ? 0 : paths.size(),
+                    paths == null || paths.isEmpty() ? "N/A" : paths.get(0),
+                    t);
+            if (t instanceof Exception) {
+                throw (Exception) t;
+            }
+            throw new FlinkRuntimeException("Failed to upload RocksDB checkpoint files", t);
         } finally {
             snapshotCloseableRegistry.close();
         }
