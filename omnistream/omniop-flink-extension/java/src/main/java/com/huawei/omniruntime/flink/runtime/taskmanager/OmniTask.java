@@ -1221,10 +1221,7 @@ public class OmniTask extends Task {
                     paths == null ? 0 : paths.size(),
                     paths == null || paths.isEmpty() ? "N/A" : paths.get(0),
                     t);
-            if (t instanceof Exception) {
-                throw (Exception) t;
-            }
-            throw new FlinkRuntimeException("Failed to upload RocksDB checkpoint files", t);
+            ExceptionUtils.rethrowException(t, "Failed to upload RocksDB checkpoint files");
         } finally {
             snapshotCloseableRegistry.close();
         }
