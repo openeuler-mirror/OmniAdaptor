@@ -202,6 +202,7 @@ public final class OmniGraphOverride {
             "INTEGER",
             "DOUBLE",
             "DATE",
+            "BOOLEAN",
             "TIME_WITHOUT_TIME_ZONE(0)",
             "TIME_WITHOUT_TIME_ZONE(1)",
             "TIME_WITHOUT_TIME_ZONE(2)",
@@ -217,6 +218,8 @@ public final class OmniGraphOverride {
             "VARCHAR",
             "CHAR",
             "STRING",
+            "DECIMAL64",
+            "DECIMAL128",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(0)",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(1)",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
@@ -230,6 +233,7 @@ public final class OmniGraphOverride {
             "INTEGER",
             "DOUBLE",
             "DATE",
+            "BOOLEAN",
             "TIME_WITHOUT_TIME_ZONE(0)",
             "TIME_WITHOUT_TIME_ZONE(1)",
             "TIME_WITHOUT_TIME_ZONE(2)",
@@ -706,6 +710,14 @@ public final class OmniGraphOverride {
         }
         for (String type : inputTypeList) {
             type = AbstractValidateOperatorStrategy.stripNotNull(type);
+            if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                type = "DECIMAL64";
+                LOG.info("converted to DECIMAL64");
+            }
+            if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                type = "DECIMAL128";
+                LOG.info("converted to DECIMAL128");
+            }
             isSourceSupportNative = SOURCE_SUPPORT_DATA_TYPE.contains(type);
             if (!isSourceSupportNative) {
                 break;
@@ -735,6 +747,12 @@ public final class OmniGraphOverride {
             if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
                 LOG.info("getInputTypes normalized DECIMAL128: '{}' -> 'DECIMAL128'", type);
                 type = "DECIMAL128";
+            }
+            if (!SINK_SUPPORT_DATA_TYPE.contains(type)) {
+                if (type.matches("^VARCHAR\\([^)]*\\)$")) {
+                    type = "VARCHAR(2147483647)";
+                    LOG.info("converted to VARCHAR(2147483647)");
+                }
             }
             isSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);
             if (!isSupportNative) {

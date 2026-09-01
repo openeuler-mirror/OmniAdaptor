@@ -124,8 +124,13 @@ public class RexNodeUtil {
         specialOperatorMap.put("JSON_QUERY", SpecialExprType.JSON_QUERY);
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
         specialOperatorMap.put("CURRENT_TIMESTAMP", SpecialExprType.CURRENT_TIMESTAMP);
+        specialOperatorMap.put("NOW", SpecialExprType.CURRENT_TIMESTAMP);
         specialOperatorMap.put("CURRENT_WATERMARK", SpecialExprType.CURRENT_WATERMARK);
         specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
+        specialOperatorMap.put("FLOOR", SpecialExprType.FLOOR);
+        specialOperatorMap.put("CEIL", SpecialExprType.CEIL);
+        specialOperatorMap.put("CEILING", SpecialExprType.CEIL);
+        specialOperatorMap.put("LN", SpecialExprType.LN);
         specialOperatorMap.put("ROUND", SpecialExprType.ROUND);
         specialOperatorMap.put("GREATEST", SpecialExprType.GREATEST);
         specialOperatorMap.put("LEAST", SpecialExprType.LEAST);
@@ -138,10 +143,36 @@ public class RexNodeUtil {
         specialOperatorMap.put("PARSE_URL", SpecialExprType.PARSE_URL);
         specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
+        specialOperatorMap.put("IS FALSE", SpecialExprType.IS_FALSE);
+        specialOperatorMap.put("IS NOT FALSE", SpecialExprType.IS_NOT_FALSE);
+        specialOperatorMap.put("IS UNKNOWN", SpecialExprType.IS_NULL);
+        specialOperatorMap.put("IS NOT UNKNOWN", SpecialExprType.IS_NOT_UNKNOWN);
+        specialOperatorMap.put("LOCALTIME", SpecialExprType.LOCALTIME);
+        specialOperatorMap.put("LOCALTIMESTAMP", SpecialExprType.LOCALTIMESTAMP);
+        specialOperatorMap.put("CURRENT_TIME", SpecialExprType.LOCALTIME);
+        specialOperatorMap.put("CURRENT_DATE", SpecialExprType.CURRENT_DATE);
+        specialOperatorMap.put("CURRENT_ROW_TIMESTAMP", SpecialExprType.CURRENT_ROW_TIMESTAMP);
+        specialOperatorMap.put("NULLIF", SpecialExprType.NULLIF);
+        specialOperatorMap.put("IS NULL", SpecialExprType.IS_NULL);
+        specialOperatorMap.put("IS NOT TRUE", SpecialExprType.IS_NOT_TRUE);
         specialOperatorMap.put("LIKE", SpecialExprType.LIKE);
         specialOperatorMap.put("TYPEOF", SpecialExprType.TYPEOF);
         specialOperatorMap.put("LEFT", SpecialExprType.LEFT);
         specialOperatorMap.put("RIGHT", SpecialExprType.RIGHT);
+        specialOperatorMap.put("ABS", SpecialExprType.ABS);
+        specialOperatorMap.put("||", SpecialExprType.CONCAT);
+        specialOperatorMap.put("UPPER", SpecialExprType.UPPER);
+        specialOperatorMap.put("POSITION", SpecialExprType.POSITION);
+        specialOperatorMap.put("TRIM", SpecialExprType.TRIM);
+        specialOperatorMap.put("LTRIM", SpecialExprType.LTRIM);
+        specialOperatorMap.put("RTRIM", SpecialExprType.RTRIM);
+        specialOperatorMap.put("INITCAP", SpecialExprType.INITCAP);
+        specialOperatorMap.put("TO_BASE64", SpecialExprType.TO_BASE64);
+        specialOperatorMap.put("ASCII", SpecialExprType.ASCII);
+        specialOperatorMap.put("LOCATE", SpecialExprType.LOCATE);
+        specialOperatorMap.put("REVERSE", SpecialExprType.REVERSE);
+        specialOperatorMap.put("POWER", SpecialExprType.POWER);
+        specialOperatorMap.put("CHR", SpecialExprType.CHR);
         // SIMILAR TO: SQL regex match, Type B vectorized path (SimilarExpr + SimilarFunction)
         specialOperatorMap.put("SIMILAR TO", SpecialExprType.SIMILAR_TO);
     }
@@ -160,8 +191,25 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.PARSE_URL, "parse_url");
         simpleFunctionNameMap.put(SpecialExprType.UNIX_TIMESTAMP, "unix_timestamp");
         simpleFunctionNameMap.put(SpecialExprType.FROM_UNIXTIME, "from_unixtime");
+        simpleFunctionNameMap.put(SpecialExprType.IS_FALSE, "is_false");
+        simpleFunctionNameMap.put(SpecialExprType.IS_NOT_FALSE, "is_not_false");
+        simpleFunctionNameMap.put(SpecialExprType.IS_NOT_UNKNOWN, "is_not_unknown");
+        simpleFunctionNameMap.put(SpecialExprType.LOCALTIME, "flink_localtime");
+        simpleFunctionNameMap.put(SpecialExprType.LOCALTIMESTAMP, "flink_localtimestamp");
+        simpleFunctionNameMap.put(SpecialExprType.CURRENT_ROW_TIMESTAMP, "flink_current_row_timestamp");
+        simpleFunctionNameMap.put(SpecialExprType.CURRENT_DATE, "flink_current_date");
+        simpleFunctionNameMap.put(SpecialExprType.NULLIF, "nullif");
+        simpleFunctionNameMap.put(SpecialExprType.IS_NOT_TRUE, "is_not_true");
         simpleFunctionNameMap.put(SpecialExprType.LEFT, "left");
         simpleFunctionNameMap.put(SpecialExprType.RIGHT, "right");
+        simpleFunctionNameMap.put(SpecialExprType.ABS, "abs");
+        simpleFunctionNameMap.put(SpecialExprType.UPPER, "upper");
+        simpleFunctionNameMap.put(SpecialExprType.POSITION, "position");
+        simpleFunctionNameMap.put(SpecialExprType.INITCAP, "initcap");
+        simpleFunctionNameMap.put(SpecialExprType.TO_BASE64, "base64");
+        simpleFunctionNameMap.put(SpecialExprType.ASCII, "ascii");
+        simpleFunctionNameMap.put(SpecialExprType.REVERSE, "reverse");
+        simpleFunctionNameMap.put(SpecialExprType.CHR, "chr");
     }
 
     static {
@@ -171,6 +219,7 @@ public class RexNodeUtil {
     }
 
     static {
+        unaryOperatorMap.put("+", UnaryExprType.POSITIVE);
         unaryOperatorMap.put("-", UnaryExprType.NEGATION);
         unaryOperatorMap.put("IS TRUE", UnaryExprType.IS_TRUE);
         unaryOperatorMap.put("IS NOT TRUE", UnaryExprType.IS_NOT_TRUE);
@@ -221,6 +270,18 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.CURRENT_WATERMARK, RexNodeUtil::handleCurrentWatermark);
         specialHandlerMap.put(SpecialExprType.DATE_ADD, RexNodeUtil::handleDateAdd);
         specialHandlerMap.put(SpecialExprType.FROM_UNIXTIME, RexNodeUtil::handleFromUnixtime);
+        specialHandlerMap.put(SpecialExprType.FLOOR, RexNodeUtil::handleFloor);
+        specialHandlerMap.put(SpecialExprType.CEIL, RexNodeUtil::handleCeil);
+        specialHandlerMap.put(SpecialExprType.LN, RexNodeUtil::handleLn);
+        specialHandlerMap.put(SpecialExprType.IS_NULL, RexNodeUtil::handleIsNull);
+        specialHandlerMap.put(SpecialExprType.LIKE, RexNodeUtil::handleLike);
+        specialHandlerMap.put(SpecialExprType.TRIM, RexNodeUtil::handleTrim);
+        specialHandlerMap.put(SpecialExprType.LTRIM, RexNodeUtil::handleLtrim);
+        specialHandlerMap.put(SpecialExprType.RTRIM, RexNodeUtil::handleRtrim);
+        specialHandlerMap.put(SpecialExprType.LOCATE, RexNodeUtil::handleLocate);
+        specialHandlerMap.put(SpecialExprType.POWER, RexNodeUtil::handlePower);
+        specialHandlerMap.put(SpecialExprType.TYPEOF, RexNodeUtil::handleTypeOf);
+        specialHandlerMap.put(SpecialExprType.SIMILAR_TO, RexNodeUtil::handleSimilarTo);
         // Simple FUNCTION-forwarding expressions share one handler (function_name via simpleFunctionNameMap).
         specialHandlerMap.put(SpecialExprType.ROUND, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.GREATEST, RexNodeUtil::handleSimpleFunction);
@@ -232,11 +293,25 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.INSTR, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.PARSE_URL, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
-        specialHandlerMap.put(SpecialExprType.LIKE, RexNodeUtil::handleLike);
-        specialHandlerMap.put(SpecialExprType.TYPEOF, RexNodeUtil::handleTypeOf);
+        specialHandlerMap.put(SpecialExprType.IS_FALSE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_NOT_FALSE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_NOT_UNKNOWN, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.LOCALTIME, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.LOCALTIMESTAMP, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.CURRENT_ROW_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.CURRENT_DATE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.NULLIF, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_NOT_TRUE, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.LEFT, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.RIGHT, RexNodeUtil::handleSimpleFunction);
-        specialHandlerMap.put(SpecialExprType.SIMILAR_TO, RexNodeUtil::handleSimilarTo);
+        specialHandlerMap.put(SpecialExprType.ABS, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.UPPER, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.POSITION, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.INITCAP, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.TO_BASE64, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.ASCII, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.REVERSE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.CHR, RexNodeUtil::handleSimpleFunction);
     }
 
     private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
@@ -270,6 +345,7 @@ public class RexNodeUtil {
     }
 
     public enum UnaryExprType {
+        POSITIVE,
         NEGATION,
         IS_TRUE,
         IS_NOT_TRUE,
@@ -322,6 +398,10 @@ public class RexNodeUtil {
         CURRENT_TIMESTAMP,
         CURRENT_WATERMARK,
         DATE_ADD,
+        FLOOR,
+        LN,
+        CEIL,
+        IS_NULL,
         ROUND,
         GREATEST,
         LEAST,
@@ -333,10 +413,32 @@ public class RexNodeUtil {
         PARSE_URL,
         UNIX_TIMESTAMP,
         FROM_UNIXTIME,
+        IS_FALSE,
+        IS_NOT_FALSE,
+        IS_NOT_UNKNOWN,
+        LOCALTIME,
+        LOCALTIMESTAMP,
+        CURRENT_ROW_TIMESTAMP,
+        CURRENT_DATE,
+        NULLIF,
+        IS_NOT_TRUE,
         LIKE,
         TYPEOF,
         LEFT,
         RIGHT,
+        ABS,
+        UPPER,
+        POSITION,
+        TRIM,
+        LTRIM,
+        RTRIM,
+        INITCAP,
+        TO_BASE64,
+        ASCII,
+        LOCATE,
+        REVERSE,
+        POWER,
+        CHR,
         SIMILAR_TO
     }
 
@@ -379,7 +481,7 @@ public class RexNodeUtil {
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
             jsonMap.put("width", precision);
         } else if (rexNode.getType().getSqlTypeName() == SqlTypeName.DATE) {
-            jsonMap.put(keyStr, RexTypeToIdMap.get("DATE"));
+            jsonMap.put(keyStr, RexTypeToIdMap.get("INT"));
         } else if (SqlTypeName.DATETIME_TYPES.contains(rexNode.getType().getSqlTypeName())) {
             jsonMap.put(keyStr, 2);
         } else if (SqlTypeName.INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName())) {
@@ -1242,7 +1344,7 @@ public class RexNodeUtil {
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         jsonMap.put("exprType", "FUNCTION");
         setDataType(rexCall, jsonMap, "returnType");
-        jsonMap.put("function_name", "char_length");
+        jsonMap.put("function_name", "length");
         List<Map<String, Object>> charLengthArgList = new ArrayList<>();
         charLengthArgList.add(buildJsonMap(operands.get(0)));
         jsonMap.put("arguments", charLengthArgList);
@@ -1477,6 +1579,113 @@ public class RexNodeUtil {
         return jsonMap;
     }
 
+    private static Map<String, Object> handleFloor(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        if (operands.size() == 1) {
+            jsonMap.put("function_name", "floor");
+            List<Map<String, Object>> floorArgList = new ArrayList<>();
+            floorArgList.add(buildJsonMap(operands.get(0)));
+            jsonMap.put("arguments", floorArgList);
+        } else {
+            jsonMap.put("function_name", "flink_floor_time");
+            List<Map<String, Object>> floorTimeArgList = new ArrayList<>();
+            floorTimeArgList.add(buildJsonMap(operands.get(0)));
+            Map<String, Object> unitMap = buildJsonMap(operands.get(1));
+            unitMap.put("dataType", 15);
+            unitMap.put("width", 2147483647);
+            floorTimeArgList.add(unitMap);
+            jsonMap.put("arguments", floorTimeArgList);
+            if(rexCall.getType().getSqlTypeName() == SqlTypeName.TIME) {
+                String flag_floor = getSymbolLiteralName(operands.get(1));
+                switch(flag_floor){
+                    case "DAY":     
+                    case "WEEK":
+                    case "MONTH":
+                    case "QUARTER":
+                    case "YEAR":
+                        jsonMap.put("exprType", "INVALID");
+                        LOG.info("FLOOR function need HOUR, MINUTE or SECOND when use Time type");
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleCeil(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        if (operands.size() == 1) {
+            jsonMap.put("function_name", "ceil");
+            List<Map<String, Object>> ceilArgList = new ArrayList<>();
+            ceilArgList.add(buildJsonMap(operands.get(0)));
+            jsonMap.put("arguments", ceilArgList);
+        } else {
+            jsonMap.put("function_name", "flink_ceil_time");
+            List<Map<String, Object>> ceilTimeArgList = new ArrayList<>();
+            ceilTimeArgList.add(buildJsonMap(operands.get(0)));
+            Map<String, Object> ceilMap = buildJsonMap(operands.get(1));
+            ceilMap.put("dataType", 15);
+            ceilMap.put("width", 2147483647);
+            ceilTimeArgList.add(ceilMap);
+            jsonMap.put("arguments", ceilTimeArgList);
+            if(rexCall.getType().getSqlTypeName() == SqlTypeName.TIME) {
+                String flag_ceil = getSymbolLiteralName(operands.get(1));
+                switch(flag_ceil){
+                    case "DAY":     
+                    case "WEEK":
+                    case "MONTH":
+                    case "QUARTER":
+                    case "YEAR":
+                        jsonMap.put("exprType", "INVALID");
+                        LOG.info("CEIL function need HOUR, MINUTE or SECOND when use Time type");
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleLn(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "ln");
+        List<Map<String, Object>> lnArgList = new ArrayList<>();
+        Map<String, Object> lnOperandMap = buildJsonMap(operands.get(0));
+        if (operands.get(0).getType().getSqlTypeName() != SqlTypeName.DOUBLE) {
+            Map<String, Object> lnCastMap = new LinkedHashMap<>();
+            lnCastMap.put("exprType", "FUNCTION");
+            lnCastMap.put("function_name", "CAST");
+            lnCastMap.put("returnType", 3);
+            List<Map<String, Object>> lnCastArgs = new ArrayList<>();
+            lnCastArgs.add(lnOperandMap);
+            lnCastMap.put("arguments", lnCastArgs);
+            lnArgList.add(lnCastMap);
+        } else {
+            lnArgList.add(lnOperandMap);
+        }
+        jsonMap.put("arguments", lnArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleIsNull(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "IS_NULL");
+        setDataType(rexCall,jsonMap, "returnType");
+        List<Map<String, Object>> isnullArgList = new ArrayList<>();
+        isnullArgList.add(buildJsonMap(operands.get(0)));
+        jsonMap.put("arguments", isnullArgList);
+        return jsonMap;
+    }
+
     private static Map<String, Object> handleLike(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         // LIKE: 2-arg native via LikeFunction (vectorized); 3-arg ESCAPE -> INVALID fallback.
@@ -1497,6 +1706,129 @@ public class RexNodeUtil {
         jsonMap.put("arguments", likeArgList);
         return jsonMap;
     }
+
+    private static Map<String, Object> handleTrim(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        List<Map<String, Object>> TrimArgList = new ArrayList<>();
+        String flag = getSymbolLiteralName(operands.get(0));
+        switch(flag){
+            case "BOTH":
+                jsonMap.put("function_name", "Trim");
+                break;       
+            case "LEADING":
+                jsonMap.put("function_name", "LTrim");
+                break;  
+            case "TRAILING":
+                jsonMap.put("function_name", "RTrim");
+                break;
+            default:
+                break;
+        }
+        for (int i = 1; i < operands.size(); i++) {
+            Map<String, Object> argMap = buildJsonMap(operands.get(i));
+            if (argMap.containsKey("dataType") && argMap.get("dataType").equals(16)) {
+            argMap.put("dataType", 15);
+            }
+            TrimArgList.add(argMap);
+        }
+        jsonMap.put("arguments", TrimArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleLtrim(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "LTrim");
+        List<Map<String, Object>> LTrimArgList = new ArrayList<>();
+        if (operands.size() == 1) {
+            LTrimArgList.add(buildJsonMap(operands.get(0)));
+        } else {
+            Map<String, Object> argMap1 = buildJsonMap(operands.get(1));
+            if (argMap1.containsKey("dataType") && argMap1.get("dataType").equals(16)) {
+            argMap1.put("dataType", 15);
+            }
+            LTrimArgList.add(argMap1);
+            Map<String, Object> argMap0 = buildJsonMap(operands.get(0));
+            if (argMap0.containsKey("dataType") && argMap0.get("dataType").equals(16)) {
+            argMap0.put("dataType", 15);
+            }
+            LTrimArgList.add(argMap0);
+        }
+        jsonMap.put("arguments", LTrimArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleRtrim(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "RTrim");
+        List<Map<String, Object>> RTrimArgList = new ArrayList<>();
+        if (operands.size() == 1) {
+            RTrimArgList.add(buildJsonMap(operands.get(0)));
+        } else {
+            Map<String, Object> argMap1 = buildJsonMap(operands.get(1));
+            if (argMap1.containsKey("dataType") && argMap1.get("dataType").equals(16)) {
+            argMap1.put("dataType", 15);
+            }
+            RTrimArgList.add(argMap1);
+            Map<String, Object> argMap0 = buildJsonMap(operands.get(0));
+            if (argMap0.containsKey("dataType") && argMap0.get("dataType").equals(16)) {
+            argMap0.put("dataType", 15);
+            }
+            RTrimArgList.add(argMap0);
+        }
+        jsonMap.put("arguments", RTrimArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handleLocate(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        List<Map<String, Object>> locateArgList = new ArrayList<>();
+        if (operands.size() == 2) {
+            jsonMap.put("function_name", "position");
+            locateArgList.add(buildJsonMap(operands.get(0)));
+            locateArgList.add(buildJsonMap(operands.get(1)));
+        } else {
+            jsonMap.put("function_name", "locate");
+            locateArgList.add(buildJsonMap(operands.get(0)));
+            locateArgList.add(buildJsonMap(operands.get(1)));
+            locateArgList.add(buildJsonMap(operands.get(2)));
+        }      
+        jsonMap.put("arguments", locateArgList);
+        return jsonMap;
+    }
+
+    private static Map<String, Object> handlePower(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        jsonMap.put("function_name", "power");
+        List<Map<String, Object>> powerArgList = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            Map<String, Object> powerOperandMap = buildJsonMap(operands.get(i));
+            if (operands.get(i).getType().getSqlTypeName() != SqlTypeName.DOUBLE) {
+                Map<String, Object> powerCastMap = new LinkedHashMap<>();
+                powerCastMap.put("exprType", "FUNCTION");
+                powerCastMap.put("function_name", "CAST");
+                powerCastMap.put("returnType", 3);
+                List<Map<String, Object>> powerCastArgs = new ArrayList<>();
+                powerCastArgs.add(powerOperandMap);
+                powerCastMap.put("arguments", powerCastArgs);
+                powerArgList.add(powerCastMap);
+            } else {
+                powerArgList.add(powerOperandMap);
+            }
+        }
+        jsonMap.put("arguments", powerArgList);
+        return jsonMap;
+    }
+
 
     private static Map<String, Object> handleTypeOf(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {

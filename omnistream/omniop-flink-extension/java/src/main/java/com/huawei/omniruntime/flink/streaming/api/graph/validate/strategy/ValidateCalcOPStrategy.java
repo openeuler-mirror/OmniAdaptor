@@ -28,10 +28,10 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     // 注意：TIME 未加入——OmniOperator 的比较运算(codegen 类型分发与向量化签名)都无 TIME 支持，
     // 放进白名单会让 TIME 比较链下推 native 后崩溃或算错，必须回退 vanilla。
     private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
-            "DOUBLE",
-            "DATE",
-            "CHAR"));
-
+                 "DOUBLE",
+                 "DATE",
+                 "CHAR"));
+    
     private static final Set<String> SUPPORT_BINARYOP_NAME = new HashSet<>(Arrays.asList(
             "OR",
             "AND",
@@ -48,9 +48,9 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             "NOT_EQUAL",
             "DATE_FORMAT",
             "count_char"));
-    private static final Set<String> SUPPORT_UNARYOP_NAME = new HashSet<>(Arrays.asList("CAST", "NEGATION", "NOT"));
+    private static final Set<String> SUPPORT_UNARYOP_NAME = new HashSet<>(Arrays.asList("CAST", "NEGATION", "NOT", "POSITIVE"));
 
-    /**
+     /**
      * Calc-only type validation: shared whitelist plus CALC_EXTRA_SUPPORT_DATA_TYPE.
      */
     @Override
@@ -485,6 +485,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
                 return true;
             case "IS_NOT_NULL":
+            case "IS_NULL":
                 return validateReturnTypeAndArguments(exprMap, inputSize);
             case "SIMILAR_TO":
                 Object similarValue = exprMap.get("value");

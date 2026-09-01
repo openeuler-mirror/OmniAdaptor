@@ -210,6 +210,7 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
         jsonMap.put("outputTypes", outputTypeList);
         jsonMap.put("indices", indicesList);
         jsonMap.put("condition", conditionMap);
+        jsonMap.put("sessionTimezone", localTimeZone != null ? localTimeZone.getId() : "");
         String jsonString = "";
         try {
             jsonString = objectMapper.writeValueAsString(jsonMap);
