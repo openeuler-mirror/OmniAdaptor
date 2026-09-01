@@ -94,7 +94,7 @@ public class RexNodeUtil {
         RexTypeToIdMap.put("TIMESTAMP_WITH_LOCAL_TIME_ZONE", 24);
         RexTypeToIdMap.put("ARRAY", 23);
         RexTypeToIdMap.put("MULTISET", 24);
-        RexTypeToIdMap.put("MAP", 25);
+        RexTypeToIdMap.put("MAP", 31);
     }
 
     static {
