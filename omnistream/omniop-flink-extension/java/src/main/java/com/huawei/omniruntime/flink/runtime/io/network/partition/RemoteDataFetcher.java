@@ -161,12 +161,20 @@ public class RemoteDataFetcher implements Runnable {
                             LOG.info("Notify remote event buffer available, buffer address: {}, buffer class: {}, buffer type: {}",
                                     buffer.getMemorySegment().getAddress(), buffer.getClass().getSimpleName(), buffer.getDataType().toString());
                         }
-                        long bufferAddress = buffer.getMemorySegment().getAddress();
                         int readIndex = buffer.getReaderIndex();
+                        int memorySegmentOffset = buffer.getMemorySegmentOffset();
+                        if (jobType == JobType.SQL && isBuffer && (readIndex != 0 || memorySegmentOffset != 0)) {
+                            buffer.recycleBuffer();
+                            throw new IllegalStateException("SQL remote data buffer must have readerIndex and "
+                                    + "memorySegmentOffset equal to zero, but readerIndex=" + readIndex
+                                    + ", memorySegmentOffset=" + memorySegmentOffset + ", task=" + taskName
+                                    + ", inputGateIndex=" + inputGateIndex + ", channelIndex=" + channelIndex);
+                        }
+                        long bufferAddress = buffer.getMemorySegment().getAddress();
 
                         waitingForRecycleBuffers.put(bufferAddress, buffer);
                         this.notifyRemoteDataAvailable(nativeTaskRef, inputGateIndex, channelIndex, bufferAddress,
-                                bufferLength, readIndex,sequenceNumber, isBuffer, bufferType);
+                                bufferLength, readIndex, memorySegmentOffset, sequenceNumber, isBuffer, bufferType);
 
                         hasData = true;
                     }
@@ -257,10 +265,15 @@ public class RemoteDataFetcher implements Runnable {
      * @param channelIndex channelIndex
      * @param bufferAddress bufferAddress
      * @param bufferLength bufferLength
+     * @param readIndex readIndex
+     * @param memorySegmentOffset memorySegmentOffset
      * @param sequenceNumber sequenceNumber
+     * @param isBuffer isBuffer
+     * @param bufferType bufferType
      */
     public native void notifyRemoteDataAvailable(long nativeTaskRef, int inputGateIndex, int channelIndex,
-            long bufferAddress, int bufferLength, int readIndex, int sequenceNumber, boolean isBuffer, int bufferType);
+            long bufferAddress, int bufferLength, int readIndex, int memorySegmentOffset, int sequenceNumber,
+            boolean isBuffer, int bufferType);
 
     public native long getRecycleBufferAddress(long nativeTaskRef);
 
