@@ -50,15 +50,25 @@ final class DateTimeExprHandlers {
         RexNodeUtil.specialOperatorMap.put("TO_TIMESTAMP", SpecialExprType.TO_TIMESTAMP);
         RexNodeUtil.specialOperatorMap.put("TO_DATE", SpecialExprType.TO_DATE);
         RexNodeUtil.specialOperatorMap.put("CURRENT_TIMESTAMP", SpecialExprType.CURRENT_TIMESTAMP);
+        RexNodeUtil.specialOperatorMap.put("NOW", SpecialExprType.CURRENT_TIMESTAMP);
         RexNodeUtil.specialOperatorMap.put("CURRENT_WATERMARK", SpecialExprType.CURRENT_WATERMARK);
         RexNodeUtil.specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
         RexNodeUtil.specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
         RexNodeUtil.specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
         RexNodeUtil.specialOperatorMap.put("CONVERT_TZ", SpecialExprType.CONVERT_TZ);
+        RexNodeUtil.specialOperatorMap.put("LOCALTIME", SpecialExprType.LOCALTIME);
+        RexNodeUtil.specialOperatorMap.put("CURRENT_TIME", SpecialExprType.LOCALTIME);
+        RexNodeUtil.specialOperatorMap.put("LOCALTIMESTAMP", SpecialExprType.LOCALTIMESTAMP);
+        RexNodeUtil.specialOperatorMap.put("CURRENT_DATE", SpecialExprType.CURRENT_DATE);
+        RexNodeUtil.specialOperatorMap.put("CURRENT_ROW_TIMESTAMP", SpecialExprType.CURRENT_ROW_TIMESTAMP);
         RexNodeUtil.udfOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
 
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.TO_TIMESTAMP, "flink_to_timestamp");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.CONVERT_TZ, "convert_tz");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.LOCALTIME, "flink_localtime");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.LOCALTIMESTAMP, "flink_localtimestamp");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.CURRENT_DATE, "flink_current_date");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.CURRENT_ROW_TIMESTAMP, "flink_current_row_timestamp");
 
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.TO_TIMESTAMP_LTZ, DateTimeExprHandlers::handleToTimestampLtz);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.TO_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
@@ -72,6 +82,10 @@ final class DateTimeExprHandlers {
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.EXTRACT, DateTimeExprHandlers::handleExtract);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.UNIX_TIMESTAMP, DateTimeExprHandlers::handleUnixTimestamp);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.CONVERT_TZ, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.LOCALTIME, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.LOCALTIMESTAMP, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.CURRENT_DATE, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.CURRENT_ROW_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
     }
 
     static Map<String, Object> handleToTimestampLtz(RexCall rexCall, List<RexNode> operands,

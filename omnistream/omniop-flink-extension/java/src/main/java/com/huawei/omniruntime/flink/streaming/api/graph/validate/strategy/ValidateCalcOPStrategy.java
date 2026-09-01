@@ -49,9 +49,9 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             "NOT_EQUAL",
             "DATE_FORMAT",
             "count_char"));
-    private static final Set<String> SUPPORT_UNARYOP_NAME = new HashSet<>(Arrays.asList("CAST", "NEGATION", "NOT"));
+    private static final Set<String> SUPPORT_UNARYOP_NAME = new HashSet<>(Arrays.asList("CAST", "NEGATION", "NOT", "POSITIVE"));
 
-    /**
+     /**
      * Calc-only type validation: shared whitelist plus CALC_EXTRA_SUPPORT_DATA_TYPE.
      */
     @Override
@@ -486,6 +486,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
                 return true;
             case "IS_NOT_NULL":
+            case "IS_NULL":
                 return validateReturnTypeAndArguments(exprMap, inputSize);
             case "SIMILAR_TO":
                 Object similarValue = exprMap.get("value");

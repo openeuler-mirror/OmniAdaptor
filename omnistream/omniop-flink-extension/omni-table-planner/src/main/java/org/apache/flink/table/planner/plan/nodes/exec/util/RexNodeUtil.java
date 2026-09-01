@@ -113,9 +113,25 @@ public class RexNodeUtil {
         // IFNULL reuses the COALESCE native path (equivalent to 2-arg COALESCE)
         specialOperatorMap.put("IFNULL", SpecialExprType.COALESCE);
         specialOperatorMap.put("TYPEOF", SpecialExprType.TYPEOF);
+        specialOperatorMap.put("IS FALSE", SpecialExprType.IS_FALSE);
+        specialOperatorMap.put("IS NOT FALSE", SpecialExprType.IS_NOT_FALSE);
+        specialOperatorMap.put("IS UNKNOWN", SpecialExprType.IS_NULL);
+        specialOperatorMap.put("IS NOT UNKNOWN", SpecialExprType.IS_NOT_UNKNOWN);
+        specialOperatorMap.put("NULLIF", SpecialExprType.NULLIF);
+        specialOperatorMap.put("IS NULL", SpecialExprType.IS_NULL);
+        specialOperatorMap.put("IS NOT TRUE", SpecialExprType.IS_NOT_TRUE);
     }
 
     static {
+        simpleFunctionNameMap.put(SpecialExprType.IS_FALSE, "is_false");
+        simpleFunctionNameMap.put(SpecialExprType.IS_NOT_FALSE, "is_not_false");
+        simpleFunctionNameMap.put(SpecialExprType.IS_NOT_UNKNOWN, "is_not_unknown");
+        simpleFunctionNameMap.put(SpecialExprType.NULLIF, "nullif");
+        simpleFunctionNameMap.put(SpecialExprType.IS_NOT_TRUE, "is_not_true");
+    }
+
+    static {
+        unaryOperatorMap.put("+", UnaryExprType.POSITIVE);
         unaryOperatorMap.put("-", UnaryExprType.NEGATION);
         unaryOperatorMap.put("IS TRUE", UnaryExprType.IS_TRUE);
         unaryOperatorMap.put("IS NOT TRUE", UnaryExprType.IS_NOT_TRUE);
@@ -150,6 +166,12 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.OR, RexNodeUtil::handleOr);
         specialHandlerMap.put(SpecialExprType.CAST, RexNodeUtil::handleCast);
         specialHandlerMap.put(SpecialExprType.TYPEOF, RexNodeUtil::handleTypeOf);
+        specialHandlerMap.put(SpecialExprType.IS_NULL, RexNodeUtil::handleIsNull);
+        specialHandlerMap.put(SpecialExprType.IS_FALSE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_NOT_FALSE, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_NOT_UNKNOWN, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.NULLIF, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.IS_NOT_TRUE, RexNodeUtil::handleSimpleFunction);
 
         // Category handlers self-register their operator names, native function names and
         // handlers. Adding a function within a category touches only that category's file
@@ -191,6 +213,7 @@ public class RexNodeUtil {
     }
 
     public enum UnaryExprType {
+        POSITIVE,
         NEGATION,
         IS_TRUE,
         IS_NOT_TRUE,
@@ -249,6 +272,10 @@ public class RexNodeUtil {
         CURRENT_TIMESTAMP,
         CURRENT_WATERMARK,
         DATE_ADD,
+        FLOOR,
+        LN,
+        CEIL,
+        IS_NULL,
         ROUND,
         GREATEST,
         LEAST,
@@ -260,6 +287,15 @@ public class RexNodeUtil {
         PARSE_URL,
         UNIX_TIMESTAMP,
         FROM_UNIXTIME,
+        IS_FALSE,
+        IS_NOT_FALSE,
+        IS_NOT_UNKNOWN,
+        LOCALTIME,
+        LOCALTIMESTAMP,
+        CURRENT_ROW_TIMESTAMP,
+        CURRENT_DATE,
+        NULLIF,
+        IS_NOT_TRUE,
         LIKE,
         TO_DATE,
         RPAD,
@@ -299,6 +335,19 @@ public class RexNodeUtil {
         RIGHT,
         STR_TO_MAP,
         CONVERT_TZ,
+        ABS,
+        UPPER,
+        POSITION,
+        TRIM,
+        LTRIM,
+        RTRIM,
+        INITCAP,
+        TO_BASE64,
+        ASCII,
+        LOCATE,
+        REVERSE,
+        POWER,
+        CHR,
         SIMILAR_TO
     }
 
@@ -341,7 +390,7 @@ public class RexNodeUtil {
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
             jsonMap.put("width", precision);
         } else if (rexNode.getType().getSqlTypeName() == SqlTypeName.DATE) {
-            jsonMap.put(keyStr, 1);
+            jsonMap.put(keyStr, RexTypeToIdMap.get("INT"));
         } else if (SqlTypeName.DATETIME_TYPES.contains(rexNode.getType().getSqlTypeName())) {
             jsonMap.put(keyStr, 2);
         } else if (SqlTypeName.INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName())) {
@@ -1064,6 +1113,16 @@ public class RexNodeUtil {
         return jsonMap;
     }
 
+    private static Map<String, Object> handleIsNull(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "IS_NULL");
+        setDataType(rexCall, jsonMap, "returnType");
+        List<Map<String, Object>> isnullArgList = new ArrayList<>();
+        isnullArgList.add(buildJsonMap(operands.get(0)));
+        jsonMap.put("arguments", isnullArgList);
+        return jsonMap;
+    }
+
     private static Map<String, Object> handleTypeOf(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         if (operands.size() < 1 || operands.size() > 2) {
@@ -1104,6 +1163,44 @@ public class RexNodeUtil {
             jsonMap.put("value", typeString);
         }
         return jsonMap;
+    }
+
+    /**
+     * Extract a Calcite FLAG/symbol literal name (e.g. {@code FLAG(BOTH)} -> {@code BOTH}).
+     * Package-private so category handlers (JSON wrapping, TRIM flags, FLOOR/CEIL units) can reuse it.
+     */
+    static String getSymbolLiteralName(RexNode symbolNode) {
+        if (symbolNode instanceof RexLiteral) {
+            RexLiteral literal = (RexLiteral) symbolNode;
+            Object literalValue = literal.getValue();
+            if (literalValue != null) {
+                return normalizeSymbolLiteralName(literalValue.toString());
+            }
+
+            Object value2 = literal.getValue2();
+            if (value2 != null) {
+                return normalizeSymbolLiteralName(value2.toString());
+            }
+        }
+
+        return normalizeSymbolLiteralName(symbolNode.toString());
+    }
+
+    static String normalizeSymbolLiteralName(String symbolText) {
+        if (symbolText == null || symbolText.isEmpty()) {
+            return null;
+        }
+
+        if (symbolText.startsWith("FLAG(") && symbolText.endsWith(")")) {
+            symbolText = symbolText.substring(5, symbolText.length() - 1);
+        }
+
+        int bracketStart = symbolText.indexOf('[');
+        int bracketEnd = symbolText.lastIndexOf(']');
+        if (bracketStart >= 0 && bracketEnd > bracketStart) {
+            return symbolText.substring(bracketStart + 1, bracketEnd);
+        }
+        return symbolText;
     }
 
     /**

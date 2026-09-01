@@ -183,7 +183,7 @@ final class JsonExprHandlers {
 
         // Optional ON ERROR behavior (operand 2): SYMBOL literal -> synthesized VARCHAR literal.
         if (operands.size() == 3) {
-            String onErrorName = getSymbolLiteralName(operands.get(2));
+            String onErrorName = RexNodeUtil.getSymbolLiteralName(operands.get(2));
             if (onErrorName == null
                     || (!onErrorName.equalsIgnoreCase("TRUE")
                             && !onErrorName.equalsIgnoreCase("FALSE")
@@ -330,7 +330,7 @@ final class JsonExprHandlers {
      * JsonObjectFunction IsAbsentOnNull) only recognizes "ABSENT", defaulting to NULL ON NULL.
      */
     private static Map<String, Object> buildOnNullFlagLiteral(RexNode onNullNode) {
-        String symbolName = getSymbolLiteralName(onNullNode);
+        String symbolName = RexNodeUtil.getSymbolLiteralName(onNullNode);
         String flag = (symbolName != null && symbolName.toUpperCase(Locale.ROOT).contains("ABSENT"))
                 ? "ABSENT" : "NULL";
         Map<String, Object> flagMap = new LinkedHashMap<>();
@@ -389,7 +389,7 @@ final class JsonExprHandlers {
     }
 
     private static Map<String, Object> parseJsonQueryWrapperOperand(RexNode wrapperNode) {
-        String wrapperName = getSymbolLiteralName(wrapperNode);
+        String wrapperName = RexNodeUtil.getSymbolLiteralName(wrapperNode);
         if (wrapperName == null) {
             return null;
         }
@@ -405,7 +405,7 @@ final class JsonExprHandlers {
     }
 
     private static Map<String, Object> parseJsonQueryBehaviorOperand(RexNode behaviorNode) {
-        String behaviorName = getSymbolLiteralName(behaviorNode);
+        String behaviorName = RexNodeUtil.getSymbolLiteralName(behaviorNode);
         if (behaviorName == null) {
             return null;
         }
@@ -419,39 +419,5 @@ final class JsonExprHandlers {
             return behaviorMap;
         }
         return null;
-    }
-
-    private static String getSymbolLiteralName(RexNode symbolNode) {
-        if (symbolNode instanceof RexLiteral) {
-            RexLiteral literal = (RexLiteral) symbolNode;
-            Object literalValue = literal.getValue();
-            if (literalValue != null) {
-                return normalizeSymbolLiteralName(literalValue.toString());
-            }
-
-            Object value2 = literal.getValue2();
-            if (value2 != null) {
-                return normalizeSymbolLiteralName(value2.toString());
-            }
-        }
-
-        return normalizeSymbolLiteralName(symbolNode.toString());
-    }
-
-    private static String normalizeSymbolLiteralName(String symbolText) {
-        if (symbolText == null || symbolText.isEmpty()) {
-            return null;
-        }
-
-        if (symbolText.startsWith("FLAG(") && symbolText.endsWith(")")) {
-            symbolText = symbolText.substring(5, symbolText.length() - 1);
-        }
-
-        int bracketStart = symbolText.indexOf('[');
-        int bracketEnd = symbolText.lastIndexOf(']');
-        if (bracketStart >= 0 && bracketEnd > bracketStart) {
-            return symbolText.substring(bracketStart + 1, bracketEnd);
-        }
-        return symbolText;
     }
 }
