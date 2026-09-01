@@ -35,7 +35,13 @@ public class ValidateAggOPStrategy extends AbstractValidateOperatorStrategy {
             "MIN",
             "SUM",
             "SUM0",
-            "last_string_value_without_retract"));
+            "last_string_value_without_retract",
+            "JSON_OBJECTAGG",
+            "JSON_ARRAYAGG"));
+
+    // Value/element types supported by the native JSON_OBJECTAGG / JSON_ARRAYAGG handlers.
+    private static final List<String> SUPPORT_JSON_VALUE_TYPES = Arrays.asList(
+            "VARCHAR(2147483647)", "BIGINT", "INTEGER", "BOOLEAN", "DOUBLE");
 
     private static final Map<String, List<String>> SUPPORT_AGG_FUNCTION_DATATYPE = new HashMap<>();
 
@@ -47,9 +53,29 @@ public class ValidateAggOPStrategy extends AbstractValidateOperatorStrategy {
         SUPPORT_AGG_FUNCTION_DATATYPE.put("SUM", Collections.singletonList("BIGINT"));
         SUPPORT_AGG_FUNCTION_DATATYPE.put("SUM0", Collections.singletonList("BIGINT"));
         SUPPORT_AGG_FUNCTION_DATATYPE.put("last_string_value_without_retract", Collections.singletonList("VARCHAR(2147483647)"));
+        SUPPORT_AGG_FUNCTION_DATATYPE.put("JSON_OBJECTAGG", SUPPORT_JSON_VALUE_TYPES);
+        SUPPORT_AGG_FUNCTION_DATATYPE.put("JSON_ARRAYAGG", SUPPORT_JSON_VALUE_TYPES);
     }
 
     private static final List<String> SUPPORT_GROUP_KEY_TYPES = Arrays.asList("BIGINT", "INTEGER", "VARCHAR(2147483647)");
+
+    /**
+     * Map the ON NULL-suffixed JSON aggregate names produced by the Flink planner back to their
+     * base name so the native whitelist / per-function validation can match them. Only the
+     * non-retract NULL/ABSENT variants are normalized; retract variants (e.g. *_RETRACT) are left
+     * untouched so they fail the whitelist and fall back to Java.
+     */
+    private static String normalizeAggFunctionName(String functionName) {
+        if ("JSON_OBJECTAGG_NULL_ON_NULL".equals(functionName)
+                || "JSON_OBJECTAGG_ABSENT_ON_NULL".equals(functionName)) {
+            return "JSON_OBJECTAGG";
+        }
+        if ("JSON_ARRAYAGG_NULL_ON_NULL".equals(functionName)
+                || "JSON_ARRAYAGG_ABSENT_ON_NULL".equals(functionName)) {
+            return "JSON_ARRAYAGG";
+        }
+        return functionName;
+    }
 
     @SuppressWarnings("unchecked")
     @Override
@@ -70,6 +96,11 @@ public class ValidateAggOPStrategy extends AbstractValidateOperatorStrategy {
             if (functionName.contains("$")) {
                 functionName = functionName.replace("$", "");
             }
+            // Flink encodes the ON NULL clause into the aggregate name, e.g.
+            // JSON_OBJECTAGG_NULL_ON_NULL / JSON_OBJECTAGG_ABSENT_ON_NULL. Normalize the
+            // supported (non-retract) variants back to the base name for whitelist matching;
+            // any other variant (incl. *_RETRACT) stays as-is and falls back to Java.
+            functionName = normalizeAggFunctionName(functionName);
             if (!SUPPORT_AGG_FUNCTION_NAME.contains(functionName)) {
                 LOG.info("validateVertexChainInfoForOmniTask not support aggCall is {}", name);
                 return false;
@@ -78,12 +109,37 @@ public class ValidateAggOPStrategy extends AbstractValidateOperatorStrategy {
             if (inputTypesEmpty || CollectionUtil.isNullOrEmpty(argIndexes)) {
                 continue;
             }
-            int argIndex = argIndexes.get(0);
-            String argType = stripNotNull(inputTypeList.get(argIndex));
-            List<String> supportDataTypes = SUPPORT_AGG_FUNCTION_DATATYPE.get(functionName);
-            if (!supportDataTypes.contains(argType)) {
-                LOG.info("The aggregate data type {} is not supported in aggregate function {}.", argType, functionName);
-                return false;
+            if ("JSON_OBJECTAGG".equals(functionName)) {
+                // arg0 = key (must be VARCHAR), arg1 = value (must be a supported JSON value type).
+                if (argIndexes.size() < 2) {
+                    LOG.info("JSON_OBJECTAGG requires KEY and VALUE arguments: {}", name);
+                    return false;
+                }
+                String keyType = inputTypeList.get(argIndexes.get(0));
+                String valueType = inputTypeList.get(argIndexes.get(1));
+                if (!"VARCHAR(2147483647)".equals(keyType)) {
+                    LOG.info("JSON_OBJECTAGG key type {} is not supported (must be VARCHAR).", keyType);
+                    return false;
+                }
+                if (!SUPPORT_JSON_VALUE_TYPES.contains(valueType)) {
+                    LOG.info("JSON_OBJECTAGG value type {} is not supported.", valueType);
+                    return false;
+                }
+            } else if ("JSON_ARRAYAGG".equals(functionName)) {
+                String itemType = inputTypeList.get(argIndexes.get(0));
+                if (!SUPPORT_JSON_VALUE_TYPES.contains(itemType)) {
+                    LOG.info("JSON_ARRAYAGG item type {} is not supported.", itemType);
+                    return false;
+                }
+            } else {
+                int argIndex = argIndexes.get(0);
+                String argType = stripNotNull(inputTypeList.get(argIndex));
+                List<String> supportDataTypes = SUPPORT_AGG_FUNCTION_DATATYPE.get(functionName);
+                if (!supportDataTypes.contains(argType)) {
+                    LOG.info("The aggregate data type {} is not supported in aggregate function {}.",
+                            argType, functionName);
+                    return false;
+                }
             }
             List<Integer> uniqueKeys = (ArrayList<Integer>) operatorInfoMap.get("grouping");
             if (!CollectionUtil.isNullOrEmpty(uniqueKeys) && !CollectionUtil.isNullOrEmpty(inputTypeList)) {

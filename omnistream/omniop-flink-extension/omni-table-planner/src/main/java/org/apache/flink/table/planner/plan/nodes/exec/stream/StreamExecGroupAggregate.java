@@ -48,6 +48,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeMetadata;
 import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
 import org.apache.flink.table.planner.plan.utils.AggregateInfo;
 import org.apache.flink.table.planner.plan.utils.AggregateInfoList;
 import org.apache.flink.table.planner.plan.utils.AggregateUtil;
@@ -176,7 +177,7 @@ public class StreamExecGroupAggregate extends StreamExecAggregateBase {
         aggInfoListMap.put("aggregateCalls", aggregateCalls);
         List<String> accTypesList = new ArrayList<>();
         for (LogicalType accType : accTypes) {
-            accTypesList.add(accType.asSerializableString());
+            accTypesList.add(DescriptionUtil.toAccTypeString(accType));
         }
         aggInfoListMap.put("accTypes", accTypesList); // Empty list
 

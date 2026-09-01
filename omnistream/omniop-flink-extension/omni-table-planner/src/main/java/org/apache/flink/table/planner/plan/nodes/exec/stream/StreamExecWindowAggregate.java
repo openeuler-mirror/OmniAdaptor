@@ -291,7 +291,7 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
 
         List<String> accTypesList = new ArrayList<>();
         for (LogicalType accType : accTypes) {
-            accTypesList.add(accType.asSerializableString());
+            accTypesList.add(DescriptionUtil.toAccTypeString(accType));
         }
         aggInfoListMap.put("AccTypes", accTypesList); // Empty list
 
