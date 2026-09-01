@@ -60,8 +60,9 @@ public class RexNodeUtil {
     public static final Map<String, UnaryExprType> unaryOperatorMap = new HashMap<>();
     public static final Map<String, BinaryExprType> binaryOperatorMap = new HashMap<>();
     // Strategy registry: maps a SpecialExprType to the handler that builds its JSON.
-    // Handlers live in per-category classes (JsonExprHandlers, DateTimeExprHandlers,
-    // StringExprHandlers, MathExprHandlers) plus the core structural handlers below.
+    // Handlers live in per-category classes (LogicExprHandlers, JsonExprHandlers,
+    // DateTimeExprHandlers, StringExprHandlers, MathExprHandlers) plus the core
+    // structural handlers below.
     // Each category self-registers via its register() method (called in the static block),
     // so adding a function within a category touches only that category's file instead of
     // this shared class (reduces multi-developer merge conflicts).
@@ -104,7 +105,6 @@ public class RexNodeUtil {
         specialOperatorMap.put("CASE", SpecialExprType.SWITCH);
         specialOperatorMap.put("SEARCH", SpecialExprType.SEARCH);
         specialOperatorMap.put("HASH_CODE", SpecialExprType.HASH_CODE);
-        specialOperatorMap.put("IS NOT NULL", SpecialExprType.IS_NOT_NULL);
         specialOperatorMap.put("CAST", SpecialExprType.CAST);
         specialOperatorMap.put("AND", SpecialExprType.AND);
         specialOperatorMap.put("OR", SpecialExprType.OR);
@@ -113,21 +113,6 @@ public class RexNodeUtil {
         // IFNULL reuses the COALESCE native path (equivalent to 2-arg COALESCE)
         specialOperatorMap.put("IFNULL", SpecialExprType.COALESCE);
         specialOperatorMap.put("TYPEOF", SpecialExprType.TYPEOF);
-        specialOperatorMap.put("IS FALSE", SpecialExprType.IS_FALSE);
-        specialOperatorMap.put("IS NOT FALSE", SpecialExprType.IS_NOT_FALSE);
-        specialOperatorMap.put("IS UNKNOWN", SpecialExprType.IS_NULL);
-        specialOperatorMap.put("IS NOT UNKNOWN", SpecialExprType.IS_NOT_UNKNOWN);
-        specialOperatorMap.put("NULLIF", SpecialExprType.NULLIF);
-        specialOperatorMap.put("IS NULL", SpecialExprType.IS_NULL);
-        specialOperatorMap.put("IS NOT TRUE", SpecialExprType.IS_NOT_TRUE);
-    }
-
-    static {
-        simpleFunctionNameMap.put(SpecialExprType.IS_FALSE, "is_false");
-        simpleFunctionNameMap.put(SpecialExprType.IS_NOT_FALSE, "is_not_false");
-        simpleFunctionNameMap.put(SpecialExprType.IS_NOT_UNKNOWN, "is_not_unknown");
-        simpleFunctionNameMap.put(SpecialExprType.NULLIF, "nullif");
-        simpleFunctionNameMap.put(SpecialExprType.IS_NOT_TRUE, "is_not_true");
     }
 
     static {
@@ -161,21 +146,15 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.COALESCE, RexNodeUtil::handleCoalesce);
         specialHandlerMap.put(SpecialExprType.SEARCH, RexNodeUtil::handleSearch);
         specialHandlerMap.put(SpecialExprType.HASH_CODE, RexNodeUtil::handleHashCode);
-        specialHandlerMap.put(SpecialExprType.IS_NOT_NULL, RexNodeUtil::handleIsNotNull);
         specialHandlerMap.put(SpecialExprType.AND, RexNodeUtil::handleAnd);
         specialHandlerMap.put(SpecialExprType.OR, RexNodeUtil::handleOr);
         specialHandlerMap.put(SpecialExprType.CAST, RexNodeUtil::handleCast);
         specialHandlerMap.put(SpecialExprType.TYPEOF, RexNodeUtil::handleTypeOf);
-        specialHandlerMap.put(SpecialExprType.IS_NULL, RexNodeUtil::handleIsNull);
-        specialHandlerMap.put(SpecialExprType.IS_FALSE, RexNodeUtil::handleSimpleFunction);
-        specialHandlerMap.put(SpecialExprType.IS_NOT_FALSE, RexNodeUtil::handleSimpleFunction);
-        specialHandlerMap.put(SpecialExprType.IS_NOT_UNKNOWN, RexNodeUtil::handleSimpleFunction);
-        specialHandlerMap.put(SpecialExprType.NULLIF, RexNodeUtil::handleSimpleFunction);
-        specialHandlerMap.put(SpecialExprType.IS_NOT_TRUE, RexNodeUtil::handleSimpleFunction);
 
         // Category handlers self-register their operator names, native function names and
         // handlers. Adding a function within a category touches only that category's file
         // (plus the shared SpecialExprType enum). Adding a new category = one line here.
+        LogicExprHandlers.register();
         StringExprHandlers.register();
         DateTimeExprHandlers.register();
         MathExprHandlers.register();
@@ -797,9 +776,10 @@ public class RexNodeUtil {
 
     // =========================================================================
     // Core structural handlers kept in this class (wired in specialHandlerMap above).
-    // Category-specific handlers live in JsonExprHandlers / DateTimeExprHandlers /
-    // StringExprHandlers / MathExprHandlers. The shared handleSimpleFunction below is
-    // package-private so those classes can reference it for FUNCTION-forwarding expressions.
+    // Category-specific handlers live in LogicExprHandlers / JsonExprHandlers /
+    // DateTimeExprHandlers / StringExprHandlers / MathExprHandlers. The shared
+    // handleSimpleFunction below is package-private so those classes can reference it
+    // for FUNCTION-forwarding expressions.
     // =========================================================================
 
     private static Map<String, Object> handleSwitch(RexCall rexCall, List<RexNode> operands,
@@ -1042,17 +1022,6 @@ public class RexNodeUtil {
         return jsonMap;
     }
 
-    private static Map<String, Object> handleIsNotNull(RexCall rexCall, List<RexNode> operands,
-            Map<String, Object> jsonMap, SpecialExprType specialType) {
-        jsonMap.put("exprType", "IS_NOT_NULL");
-        setDataType(rexCall,jsonMap, "returnType");
-
-        List<Map<String, Object>> notnullArgList = new ArrayList<>();
-        notnullArgList.add(buildJsonMap(operands.get(0)));
-        jsonMap.put("arguments", notnullArgList);
-        return jsonMap;
-    }
-
     private static Map<String, Object> handleAnd(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         jsonMap.put("exprType", "MULTIPLE_AND_OR");
@@ -1110,16 +1079,6 @@ public class RexNodeUtil {
         List<Map<String, Object>> castArgList = new ArrayList<>();
         castArgList.add(buildJsonMap(operands.get(0)));
         jsonMap.put("arguments", castArgList);
-        return jsonMap;
-    }
-
-    private static Map<String, Object> handleIsNull(RexCall rexCall, List<RexNode> operands,
-            Map<String, Object> jsonMap, SpecialExprType specialType) {
-        jsonMap.put("exprType", "IS_NULL");
-        setDataType(rexCall, jsonMap, "returnType");
-        List<Map<String, Object>> isnullArgList = new ArrayList<>();
-        isnullArgList.add(buildJsonMap(operands.get(0)));
-        jsonMap.put("arguments", isnullArgList);
         return jsonMap;
     }
 
