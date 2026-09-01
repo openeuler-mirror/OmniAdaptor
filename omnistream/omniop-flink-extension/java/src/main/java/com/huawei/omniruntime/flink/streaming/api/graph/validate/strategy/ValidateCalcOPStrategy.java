@@ -28,10 +28,11 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     // 注意：TIME 未加入——OmniOperator 的比较运算(codegen 类型分发与向量化签名)都无 TIME 支持，
     // 放进白名单会让 TIME 比较链下推 native 后崩溃或算错，必须回退 vanilla。
     private static final Set<String> CALC_EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
-                 "DOUBLE",
-                 "DATE",
-                 "CHAR"));
-    
+            "DOUBLE",
+            "DATE",
+            "CHAR",
+            "MAP"));
+
     private static final Set<String> SUPPORT_BINARYOP_NAME = new HashSet<>(Arrays.asList(
             "OR",
             "AND",
