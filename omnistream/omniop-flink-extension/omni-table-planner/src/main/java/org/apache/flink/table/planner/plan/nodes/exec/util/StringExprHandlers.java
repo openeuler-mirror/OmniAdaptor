@@ -74,11 +74,13 @@ final class StringExprHandlers {
         //   REPLACE: Flink uses Java String.replace, so an empty search string inserts.
         //   SUBSTR:  Flink returns NULL for a negative length and '' for an out-of-range
         //            negative position.
+        //   LPAD/RPAD: Flink returns NULL for a negative length or empty pad string
+        //              (Spark lpad/rpad return '').
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.REPLACE, "flink_replace");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.SUBSTR, "flink_substr");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.INSTR, "instr");
-        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.RPAD, "rpad");
-        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.LPAD, "lpad");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.RPAD, "flink_rpad");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.LPAD, "flink_lpad");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.REPEAT, "repeat");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.FROM_BASE64, "unbase64");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.IS_ALPHA, "is_alpha");
