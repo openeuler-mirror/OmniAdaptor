@@ -118,8 +118,6 @@ public class RexNodeUtil {
     static {
         unaryOperatorMap.put("+", UnaryExprType.POSITIVE);
         unaryOperatorMap.put("-", UnaryExprType.NEGATION);
-        unaryOperatorMap.put("IS TRUE", UnaryExprType.IS_TRUE);
-        unaryOperatorMap.put("IS NOT TRUE", UnaryExprType.IS_NOT_TRUE);
         unaryOperatorMap.put("NOT", UnaryExprType.NOT);
     }
 
@@ -194,8 +192,6 @@ public class RexNodeUtil {
     public enum UnaryExprType {
         POSITIVE,
         NEGATION,
-        IS_TRUE,
-        IS_NOT_TRUE,
         NOT
     }
 
@@ -268,12 +264,12 @@ public class RexNodeUtil {
         FROM_UNIXTIME,
         IS_FALSE,
         IS_NOT_FALSE,
-        IS_NOT_UNKNOWN,
         LOCALTIME,
         LOCALTIMESTAMP,
         CURRENT_ROW_TIMESTAMP,
         CURRENT_DATE,
         NULLIF,
+        IS_TRUE,
         IS_NOT_TRUE,
         LIKE,
         TO_DATE,
@@ -394,6 +390,25 @@ public class RexNodeUtil {
         }
     }
 
+    /**
+     * OmniOperator native function signatures only register OMNI_VARCHAR (15) for string
+     * comparisons and casts; no CAST or comparison kernel involves OMNI_CHAR (16). Normalize
+     * any CHAR-typed operand in a binary expression subtree to VARCHAR so the native
+     * JSONParser resolves to existing {OMNI_VARCHAR, OMNI_VARCHAR} signatures without
+     * attempting an unregistered CAST_String_Char.
+     */
+    private static void normalizeCharToVarchar(Map<String, Object> jsonMap) {
+        if (jsonMap == null) {
+            return;
+        }
+        if (RexTypeToIdMap.get("CHAR").equals(jsonMap.get("dataType"))) {
+            jsonMap.put("dataType", RexTypeToIdMap.get("VARCHAR"));
+        }
+        if (RexTypeToIdMap.get("CHAR").equals(jsonMap.get("returnType"))) {
+            jsonMap.put("returnType", RexTypeToIdMap.get("VARCHAR"));
+        }
+    }
+
     // Sarg endpoint (NlsString for VARCHAR/CHAR, TimestampString for TIMESTAMP) -> primitive,
     // so OmniOperator ParseJSONLiteral reads a plain string/number not a structured object.
     public static Object extractSargEndpoint(Object endpoint) {
@@ -424,12 +439,6 @@ public class RexNodeUtil {
             SpecialExprType udfType = resolveOperatorType(udfOperatorMap, operatorName);
             SpecialExprType specialType = udfType != null ? udfType : resolveOperatorType(specialOperatorMap, operatorName);
             LOG.info("Current rexNode is {}", rexCall.toString());
-            // IS NOT TRUE 在 Calcite 里是 postfix 单操作数调用，没有 native 对应物。
-            // 翻成三值等价的 CASE WHEN x THEN FALSE ELSE TRUE END，
-            // 使 OVERLAPS 展开出的 IS NOT TRUE 比较可用 native SWITCH_GENERAL 执行。
-            if (unaryType == UnaryExprType.IS_NOT_TRUE) {
-                return handleIsNotNullTrue(rexCall, operands, jsonMap);
-            }
             // datetime + interval 在 Calcite 里被折叠成右操作数为 INTERVAL 类型的 PLUS 调用。
             // 它必须在通用 BINARY 分支之前处理：native 无法把 interval 当作普通 BIGINT 加数
             // （年月间隔没有固定毫秒宽度，且 TIME 需要按天回绕），因此下推为专用 FUNCTION。
@@ -444,15 +453,16 @@ public class RexNodeUtil {
                 // 由目标操作数决定是否提升。
                 Map<String, Object> leftMap = buildJsonMapWithTemporalPromotion(
                         operands.get(0), operands.get(1));
+                normalizeCharToVarchar(leftMap);
                 jsonMap.put("left", leftMap);
                 Map<String, Object> rightMap = buildJsonMapWithTemporalPromotion(
                         operands.get(1), operands.get(0));
+                normalizeCharToVarchar(rightMap);
                 jsonMap.put("right", rightMap);
                 return jsonMap;
             } else if (rexCall.operands.size() == 1 && unaryType != null) {
                 Map<String, Object> childMap = buildJsonMap(operands.get(0));
-                if (unaryType.equals(UnaryExprType.IS_TRUE) ||
-                        childMap.containsKey("exprType") && childMap.get("exprType").equals(SpecialExprType.SWITCH)) {
+                if (childMap.containsKey("exprType") && childMap.get("exprType").equals(SpecialExprType.SWITCH)) {
                     return childMap;
                 }
                 jsonMap.put("exprType",  OperatorExprType.UNARY.name());
@@ -481,6 +491,10 @@ public class RexNodeUtil {
             jsonMap.put("isNull", rexLiteral.isNull());
             if (!rexLiteral.isNull()){
                 Object value = rexLiteral.getValue2();
+                SqlTypeName typeName = rexLiteral.getType().getSqlTypeName();
+                if (typeName == SqlTypeName.DOUBLE && value instanceof Number) {
+                    value = ((Number) rexLiteral.getValue()).doubleValue();
+                }
                 jsonMap.put("value",value);
             }
             // todo: for DECIMAL64D and DECIMAL128, add fields: precision and scale
@@ -815,31 +829,6 @@ public class RexNodeUtil {
                 buildJsonMapWithTemporalPromotion(
                         operands.get(operands.size() - 1), rexCall));
         return jsonMap;
-    }
-
-    private static Map<String, Object> handleIsNotNullTrue(RexCall rexCall, List<RexNode> operands,
-            Map<String, Object> jsonMap) {
-        // CASE WHEN x THEN FALSE ELSE TRUE END == IS NOT TRUE(x) in SQL three-valued logic
-        jsonMap.put("exprType", "SWITCH_GENERAL");
-        setDataType(rexCall, jsonMap, "returnType");
-        jsonMap.put("numOfCases", 1);
-        Map<String, Object> caseMap = new LinkedHashMap<>();
-        caseMap.put("when", buildJsonMap(operands.get(0)));
-        caseMap.put("result", buildBooleanLiteral(false));
-        caseMap.put("exprType", "WHEN");
-        setDataType(rexCall, caseMap, "returnType");
-        jsonMap.put("Case1", caseMap);
-        jsonMap.put("else", buildBooleanLiteral(true));
-        return jsonMap;
-    }
-
-    private static Map<String, Object> buildBooleanLiteral(boolean value) {
-        Map<String, Object> literal = new LinkedHashMap<>();
-        literal.put("exprType", "LITERAL");
-        literal.put("dataType", RexTypeToIdMap.get("BOOLEAN"));
-        literal.put("isNull", false);
-        literal.put("value", value);
-        return literal;
     }
 
     private static Map<String, Object> handleCoalesce(RexCall rexCall, List<RexNode> operands,

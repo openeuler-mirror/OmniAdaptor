@@ -490,7 +490,7 @@ final class StringExprHandlers {
             locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(0)));
             locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(1)));
         } else {
-            jsonMap.put("function_name", "locate");
+            jsonMap.put("function_name", "flink_locate");
             locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(0)));
             locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(1)));
             locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(2)));
