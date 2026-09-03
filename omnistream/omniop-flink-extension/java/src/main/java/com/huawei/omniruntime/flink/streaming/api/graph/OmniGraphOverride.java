@@ -246,6 +246,7 @@ public final class OmniGraphOverride {
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",
             "VARCHAR(9)",
+            "VARCHAR",
             "CHAR",
             "STRING",
             "MAP",
@@ -719,6 +720,16 @@ public final class OmniGraphOverride {
                 type = "DECIMAL128";
                 LOG.info("converted to DECIMAL128");
             }
+            if (type.matches("^CHAR\\([^)]*\\)$")) {
+                type = "CHAR";
+                LOG.info("converted to CHAR");
+            }
+            if (!SOURCE_SUPPORT_DATA_TYPE.contains(type)) {
+                if (type.matches("^VARCHAR\\([^)]*\\)$")) {
+                    type = "VARCHAR";
+                    LOG.info("converted to VARCHAR");
+                }
+            }
             isSourceSupportNative = SOURCE_SUPPORT_DATA_TYPE.contains(type);
             if (!isSourceSupportNative) {
                 break;
@@ -749,10 +760,14 @@ public final class OmniGraphOverride {
                 LOG.info("getInputTypes normalized DECIMAL128: '{}' -> 'DECIMAL128'", type);
                 type = "DECIMAL128";
             }
+            if (type.matches("^CHAR\\([^)]*\\)$")) {
+                type = "CHAR";
+                LOG.info("converted to CHAR");
+            }
             if (!SINK_SUPPORT_DATA_TYPE.contains(type)) {
                 if (type.matches("^VARCHAR\\([^)]*\\)$")) {
-                    type = "VARCHAR(2147483647)";
-                    LOG.info("converted to VARCHAR(2147483647)");
+                    type = "VARCHAR";
+                    LOG.info("converted to VARCHAR");
                 }
             }
             isSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);

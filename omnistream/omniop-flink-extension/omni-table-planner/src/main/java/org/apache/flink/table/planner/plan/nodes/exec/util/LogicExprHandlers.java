@@ -42,13 +42,13 @@ final class LogicExprHandlers {
         RexNodeUtil.specialOperatorMap.put("IS NOT NULL", SpecialExprType.IS_NOT_NULL);
         RexNodeUtil.specialOperatorMap.put("IS FALSE", SpecialExprType.IS_FALSE);
         RexNodeUtil.specialOperatorMap.put("IS NOT FALSE", SpecialExprType.IS_NOT_FALSE);
-        RexNodeUtil.specialOperatorMap.put("IS NOT UNKNOWN", SpecialExprType.IS_NOT_UNKNOWN);
+        RexNodeUtil.specialOperatorMap.put("IS TRUE", SpecialExprType.IS_TRUE);
         RexNodeUtil.specialOperatorMap.put("IS NOT TRUE", SpecialExprType.IS_NOT_TRUE);
         RexNodeUtil.specialOperatorMap.put("NULLIF", SpecialExprType.NULLIF);
 
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.IS_FALSE, "is_false");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.IS_NOT_FALSE, "is_not_false");
-        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.IS_NOT_UNKNOWN, "is_not_unknown");
+        RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.IS_TRUE, "is_true");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.IS_NOT_TRUE, "is_not_true");
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.NULLIF, "nullif");
 
@@ -56,7 +56,7 @@ final class LogicExprHandlers {
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.IS_NOT_NULL, LogicExprHandlers::handleIsNotNull);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.IS_FALSE, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.IS_NOT_FALSE, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.IS_NOT_UNKNOWN, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.IS_TRUE, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.IS_NOT_TRUE, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.NULLIF, RexNodeUtil::handleSimpleFunction);
     }
