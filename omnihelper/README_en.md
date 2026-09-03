@@ -136,7 +136,7 @@ For details about feature changes in each version, see [Release Notes](docs/en/r
 
          Replace `3.4.3` with the actual Spark version.
      2. Run the script.
-     
+
             ```python
             import csv
             import os
@@ -153,58 +153,58 @@ For details about feature changes in each version, see [Release Notes](docs/en/r
                 print("Obtaining the database list...")
                 # Obtain all databases.
                 databases = spark.catalog.listDatabases()
-                
+
                 rows_data = []
-                
+
                 total_dbs = len(databases)
                 print(f"{total_dbs} databases found. Traversing...")
 
                 for db_index, db in enumerate(databases):
                     db_name = db.name
                     print(f"[{db_index + 1}/{total_dbs}] Processing database: {db_name}")
-                    
+
                     try:
                         # Obtain all tables in the current database.
                         tables = spark.catalog.listTables(db_name)
-                        
+
                         if not tables:
                             continue
 
                         for table in tables:
                             # Construct a complete table name (database_name.table_name).
                             full_table_name = f"{db_name}.{table.name}"
-                            
+
                             # Obtain the columns of the table.
                             # listColumns returns List[Column], including attributes such as name, dataType, and nullable.
                             columns = spark.catalog.listColumns(table.name, db_name)
-                            
+
                             for col in columns:
                                 rows_data.append({
                                     "full_table_name": full_table_name,
                                     "column_name": col.name,
                                     "data_type": col.dataType
                                 })
-                                
+
                     except Exception as e:
                         print(f"An error occurred when processing {db_name}: {str(e)}")
                         continue
 
                 print(f"Data collection is complete. A total of {len(rows_data)} columns are collected.")
-                
+
                 # Write to the local CSV file.
                 print(f"Writing to the local file: {output_path} ...")
                 try:
                     with open(output_path, mode='w', newline='', encoding='utf-8') as csvfile:
                         fieldnames = ['full_table_name', 'column_name', 'data_type']
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                        
+
                         # Write the header row.
                         writer.writeheader()
                         # Write data rows.
                         writer.writerows(rows_data)
-                        
+
                     print("Exported successfully!")
-                    
+
                 except IOError as e:
                     print(f"Failed to write to the file: {e}")
 
@@ -214,11 +214,11 @@ For details about feature changes in each version, see [Release Notes](docs/en/r
             if __name__ == "__main__":
                 # Define the output file path.
                 output_file = "spark_table_schema.csv"
-                
+
                 # Check whether the file already exists to avoid issues caused by unintended append writes.
                 if os.path.exists(output_file):
                     os.remove(output_file)
-                    
+
                 export_spark_schema_to_csv(output_file)
             ```
 
@@ -242,7 +242,7 @@ For details about feature changes in each version, see [Release Notes](docs/en/r
      - x86:
 
      ```bash
-     tar -zxvf omnihelper_release_x86.tar.gz 
+     tar -zxvf omnihelper_release_x86.tar.gz
      ```
 
 ### Command Line Usage
@@ -446,10 +446,5 @@ The documents of this project are licensed under CC-BY 4.0. For details, see [LI
 You are welcome to contribute to the community. If you have any questions or suggestions, please submit an [issue](https://gitcode.com/openeuler/OmniAdaptor). We will reply as soon as possible. Thank you for your support.
 
 ## Acknowledgments
-
-OmniHelper is jointly developed by the following Huawei department:
-
-- Kunpeng Computing DevKit Development Dept
-- Kunpeng Computing BoostKit Development Dept
 
 Thank you to everyone in the community for your PRs. We warmly welcome contributions to OmniHelper!

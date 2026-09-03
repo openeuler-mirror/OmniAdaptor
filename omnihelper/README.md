@@ -156,7 +156,7 @@ Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底
 
          请将版本号`3.4.3`替换为您实际使用的Spark版本。
      2. 执行脚本。
-     
+
             ```python
             import csv
             import os
@@ -173,58 +173,58 @@ Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底
                 print("开始获取数据库列表...")
                 # 获取所有数据库
                 databases = spark.catalog.listDatabases()
-                
+
                 rows_data = []
-                
+
                 total_dbs = len(databases)
                 print(f"共发现 {total_dbs} 个数据库，开始遍历...")
 
                 for db_index, db in enumerate(databases):
                     db_name = db.name
                     print(f"[{db_index + 1}/{total_dbs}] 正在处理数据库: {db_name}")
-                    
+
                     try:
                         # 获取当前数据库下的所有表
                         tables = spark.catalog.listTables(db_name)
-                        
+
                         if not tables:
                             continue
 
                         for table in tables:
                             # 构造完整的表名 (数据库.表名)
                             full_table_name = f"{db_name}.{table.name}"
-                            
+
                             # 获取该表的列信息
                             # listColumns 返回的是 List[Column]，包含 name, dataType, nullable 等属性
                             columns = spark.catalog.listColumns(table.name, db_name)
-                            
+
                             for col in columns:
                                 rows_data.append({
                                     "full_table_name": full_table_name,
                                     "column_name": col.name,
                                     "data_type": col.dataType
                                 })
-                                
+
                     except Exception as e:
                         print(f"处理数据库 {db_name} 时出错: {str(e)}")
                         continue
 
                 print(f"数据收集完成，共收集到 {len(rows_data)} 条列信息。")
-                
+
                 # 写入本地CSV文件
                 print(f"正在写入本地文件: {output_path} ...")
                 try:
                     with open(output_path, mode='w', newline='', encoding='utf-8') as csvfile:
                         fieldnames = ['full_table_name', 'column_name', 'data_type']
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                        
+
                         # 写入表头
                         writer.writeheader()
                         # 写入数据行
                         writer.writerows(rows_data)
-                        
+
                     print("导出成功！")
-                    
+
                 except IOError as e:
                     print(f"文件写入失败: {e}")
 
@@ -234,11 +234,11 @@ Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底
             if __name__ == "__main__":
                 # 定义输出文件路径
                 output_file = "spark_table_schema.csv"
-                
+
                 # 检查文件是否已存在，避免追加写入混乱
                 if os.path.exists(output_file):
                     os.remove(output_file)
-                    
+
                 export_spark_schema_to_csv(output_file)
             ```
 
@@ -260,7 +260,7 @@ Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底
 table_name,field_name,field_type
 datagen,event_type,int
 datagen,person,"ROW<id BIGINT, name VARCHAR, emailAddress VARCHAR, city VARCHAR>"
-datagen,auction,"ROW<id BIGINT, itemName VARCHAR, initialBid BIGINT, dateTime TIMESTAMP(3)>" 
+datagen,auction,"ROW<id BIGINT, itemName VARCHAR, initialBid BIGINT, dateTime TIMESTAMP(3)>"
 datagen,bid,"ROW<auction BIGINT,bidder BIGINT,price BIGINT,dateTime TIMESTAMP(3)>"
 ```
 
@@ -311,7 +311,7 @@ datagen,auction,"ROW<id BIGINT,itemName VARCHAR>"
      - x86架构：
 
      ```bash
-     tar -zxvf omnihelper_release_x86.tar.gz 
+     tar -zxvf omnihelper_release_x86.tar.gz
      ```
 
 
@@ -576,12 +576,6 @@ optional arguments:
 
 欢迎大家为社区做贡献。如果有任何疑问或建议，请提交[Issues](https://gitcode.com/openeuler/OmniAdaptor)，我们会尽快回复。感谢您的支持。
 
-
 ## 致谢
-
-OmniHelper由华为公司的下列部门联合贡献：
-
-- 鲲鹏计算DevKit开发部
-- 鲲鹏计算BoostKit开发部
 
 感谢来自社区的每一个PR，欢迎贡献OmniHelper！
