@@ -30,6 +30,10 @@ public abstract class AbstractValidateOperatorStrategy {
     protected static final Set<String> SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",
+            "TIME_WITHOUT_TIME_ZONE(0)",
+            "TIME_WITHOUT_TIME_ZONE(1)",
+            "TIME_WITHOUT_TIME_ZONE(2)",
+            "TIME_WITHOUT_TIME_ZONE(3)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
@@ -40,6 +44,7 @@ public abstract class AbstractValidateOperatorStrategy {
             "VARCHAR(2000)",
             "VARCHAR(9)",
             "STRING",
+            "CHAR",
             "BOOLEAN",
             "DECIMAL64",
             "DECIMAL128",
