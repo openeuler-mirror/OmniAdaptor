@@ -598,6 +598,10 @@
         "is_support_func": false
     },
     {
+        "func_name": "time",
+        "is_support_func": true
+    },
+    {
         "func_name": "timestamp_micros",
         "is_support_func": false
     },
@@ -608,6 +612,10 @@
     {
         "func_name": "timestamp_seconds",
         "is_support_func": false
+    },
+    {
+        "func_name": "timestampadd",
+        "is_support_func": true
     },
     {
         "func_name": "to_date",
