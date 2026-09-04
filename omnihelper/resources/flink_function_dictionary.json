@@ -77,7 +77,7 @@
   },
   {"func_name": "SIMILAR TO", "is_support_func": true},
   {"func_name": "NOT SIMILAR TO", "is_support_func": true},
-  {"func_name": "IN", "is_support_func": true},
+  {"func_name": "IN", "is_support_func": true, "is_supported_type": ["BOOLEAN", "TINYINT", "SMALLINT", "INTEGER", "BIGINT", "FLOAT", "DOUBLE", "VARCHAR", "STRING", "DATE", "TIMESTAMP", "DECIMAL"]},
   {"func_name": "NOT IN", "is_support_func": true},
   {"func_name": "EXISTS", "is_support_func": false},
 
@@ -136,14 +136,14 @@
   {"func_name": "ABS", "is_support_func":  true,
    "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
-  {"func_name": "SQRT", "is_support_func": false},
+  {"func_name": "SQRT", "is_support_func": true, "is_supported_type": ["DOUBLE"]},
   {"func_name": "LN", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DOUBLE", "DECIMAL64", "DECIMAL128"]
   },
-  {"func_name": "LOG10", "is_support_func": false},
-  {"func_name": "LOG2", "is_support_func": false},
+  {"func_name": "LOG10", "is_support_func": true, "is_supported_type": ["BIGINT", "INTEGER", "DOUBLE"]},
+  {"func_name": "LOG2", "is_support_func": true, "is_supported_type": ["BIGINT", "INTEGER", "DOUBLE"]},
   {"func_name": "LOG", "is_support_func": false},
-  {"func_name": "EXP", "is_support_func": false},
+  {"func_name": "EXP", "is_support_func": true, "is_supported_type": ["BIGINT", "INTEGER", "DOUBLE"]},
   {"func_name": "CEIL", "is_support_func": true,
    "is_supported_type": [
       "INT", "BIGINT", "DOUBLE", "DECIMAL64", "DECIMAL128",
@@ -259,7 +259,7 @@
   {"func_name": "REPEAT", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
-  {"func_name": "REGEXP_REPLACE", "is_support_func": false},
+  {"func_name": "REGEXP_REPLACE", "is_support_func": true, "is_supported_type": ["STRING", "STRING", "STRING"]},
   {"func_name": "OVERLAY", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
@@ -299,8 +299,12 @@
   {"func_name": "CHR", "is_support_func": true,
    "is_supported_type": ["BIGINT"]
   },
-  {"func_name": "DECODE", "is_support_func": false},
-  {"func_name": "ENCODE", "is_support_func": false},
+  {"func_name": "DECODE", "is_support_func": true,
+   "is_supported_type": ["STRING", "STRING"]
+  },
+  {"func_name": "ENCODE", "is_support_func": true,
+   "is_supported_type": ["STRING", "STRING"]
+  },
   {"func_name": "INSTR", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
@@ -331,8 +335,8 @@
   },
 
   {"func_name": "DATE", "is_support_func": true, "is_supported_type": ["VARCHAR", "CHAR"]},
-  {"func_name": "TIME", "is_support_func": true},
-  {"func_name": "TIMESTAMP", "is_support_func": true},
+  {"func_name": "TIME", "is_support_func": true, "is_supported_type": ["STRING"]},
+  {"func_name": "TIMESTAMP", "is_support_func": true, "is_supported_type": ["VARCHAR", "CHAR"]},
   {"func_name": "INTERVAL", "is_support_func": true},
   {"func_name": "LOCALTIME", "is_support_func": true},
   {"func_name": "LOCALTIMESTAMP", "is_support_func": true},
@@ -375,7 +379,9 @@
   {"func_name": "DATE_FORMAT", "is_support_func": true,
   "is_supported_type": ["TIMESTAMP", "TIMESTAMP_LTZ", "STRING"]
   },
-  {"func_name": "TIMESTAMPADD", "is_support_func": false},
+  {"func_name": "TIMESTAMPADD", "is_support_func": true,
+   "is_supported_type": ["BIGINT", "INTEGER", "DOUBLE", "STRING", "DECIMAL"]
+  },
   {"func_name": "TIMESTAMPDIFF", "is_support_func": false},
   {"func_name": "CONVERT_TZ", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
@@ -443,12 +449,15 @@
       "BYTE", "SHORT", "INT", "BIGINT", "DOUBLE", "DECIMAL64", "DECIMAL128"
     ]
   },
-  {"func_name": "IS_DIGIT", "is_support_func": false},
+  {"func_name": "IS_DIGIT", "is_support_func": true, "is_supported_type": ["STRING"]},
   {"func_name": "GREATEST", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DOUBLE"]
   },
   {"func_name": "LEAST", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INT", "DOUBLE"]
+  },
+  {"func_name": "DECODE", "is_support_func": true,
+   "is_supported_type": ["VARBINARY", "STRING"]
   },
 
   {"func_name": "CAST", "is_support_func": true,

@@ -518,6 +518,17 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                     }
                 }
 
+                if ("timestampadd".equals(functionName)) {
+                    Object returnTypeVal = exprMap.get("returnType");
+                    if (returnTypeVal instanceof Integer) {
+                        int retType = (Integer) returnTypeVal;
+                        if (retType != 20) {
+                            LOG.info("ERROR: timestampadd expects TIMESTAMP return type (20), but got typeId {}", retType);
+                            return false;
+                        }
+                    }
+                }
+
                 if ("to_timestamp_ltz".equals(functionName)) {
                     Object returnTypeVal = exprMap.get("returnType");
                     if (returnTypeVal instanceof Integer) {
