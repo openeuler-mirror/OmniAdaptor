@@ -12,6 +12,7 @@
 package org.apache.flink.table.planner.plan.nodes.exec.util;
 
 import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.functions.UserDefinedFunction;
 import org.apache.flink.table.planner.plan.utils.AggregateInfo;
 import org.apache.flink.table.types.logical.*;
@@ -92,6 +93,20 @@ public class DescriptionUtil {
             typeName += " NOT NULL";
         }
         return typeName;
+    }
+
+    /**
+     * Serialize an aggregate accumulator type for the native operator description.
+     *
+     * @param LogicalType accType
+     * @return String
+     */
+    public static String toAccTypeString(LogicalType accType) {
+        try {
+            return accType.asSerializableString();
+        } catch (TableException e) {
+            return accType.toString();
+        }
     }
 
     /**
