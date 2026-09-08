@@ -201,6 +201,7 @@ public class TaskStateSnapshotDeser {
         boolean isTaskFinished = rootNode.get("isTaskFinished").asBoolean();
 
         Map<OperatorID, OperatorSubtaskState> subtaskStates = new HashMap<>();
+        Map<java.nio.file.Path, StreamStateHandle> uploadedInflightHandles = new HashMap<>();
         JsonNode subtaskStatesNode = rootNode.get("subtaskStatesByOperatorID");
 
         Iterator<Map.Entry<String, JsonNode>> fields = subtaskStatesNode.fields();
@@ -239,7 +240,8 @@ public class TaskStateSnapshotDeser {
             JsonNode inputChannelStateArray = getStateObjectsNode(operatorStateNode.get("inputChannelState"));
 
             if (inputChannelStateArray.isArray()) {
-                parseInputChannelStateArray(inputChannelStateArray, inputChannelState, omniTask, checkpointId);
+                parseInputChannelStateArray(inputChannelStateArray, inputChannelState, omniTask, checkpointId,
+                    uploadedInflightHandles);
             }
 
             StateObjectCollection<ResultSubpartitionStateHandle> resultSubpartitionState = new StateObjectCollection<>();
@@ -247,7 +249,7 @@ public class TaskStateSnapshotDeser {
 
             if (resultSubpartitionStateArray.isArray()) {
                 parseResultSubpartitionStateArray(resultSubpartitionStateArray, resultSubpartitionState, omniTask,
-                    checkpointId);
+                    checkpointId, uploadedInflightHandles);
             }
             OperatorSubtaskState.Builder builder = OperatorSubtaskState.builder();
 
@@ -400,7 +402,8 @@ public class TaskStateSnapshotDeser {
     }
 
     private static void parseInputChannelStateArray(JsonNode inputChannelStateArray,
-        StateObjectCollection<InputChannelStateHandle> inputChannelState, OmniTask omniTask, long checkpointId) {
+        StateObjectCollection<InputChannelStateHandle> inputChannelState, OmniTask omniTask, long checkpointId,
+        Map<java.nio.file.Path, StreamStateHandle> uploadedInflightHandles) {
         if (omniTask == null) {
             LOG.error("parseResultSubpartitionStateArray failed. omniTask is null");
             return;
@@ -422,8 +425,8 @@ public class TaskStateSnapshotDeser {
                 } else if (className2.contains("FileStateHandle")) {
                     java.nio.file.Path filePath = Paths.get(delegateNode.get("filePath").asText());
                     try {
-                        delegate = uploadInflightFileToCheckpointFs(filePath,
-                            omniTask.getCheckpointStreamFactory(checkpointId), streamPos);
+                        delegate = getOrUploadInflightFile(filePath, omniTask, checkpointId, streamPos,
+                            uploadedInflightHandles);
                     } catch (Exception e) {
                         LOG.error("uploadFilesToCheckpointFs failed. filePath: {}", filePath);
                         throw new FlinkRuntimeException(e);
@@ -461,7 +464,7 @@ public class TaskStateSnapshotDeser {
 
     private static void parseResultSubpartitionStateArray(JsonNode resultSubpartitionStateArray,
         StateObjectCollection<ResultSubpartitionStateHandle> resultSubpartitionState, OmniTask omniTask,
-        long checkpointId) {
+        long checkpointId, Map<java.nio.file.Path, StreamStateHandle> uploadedInflightHandles) {
         if (omniTask == null) {
             LOG.error("parseResultSubpartitionStateArray failed. omniTask is null");
             return;
@@ -483,8 +486,8 @@ public class TaskStateSnapshotDeser {
                 } else if (className2.contains("FileStateHandle")) {
                     java.nio.file.Path filePath = Paths.get(delegateNode.get("filePath").asText());
                     try {
-                        delegate = uploadInflightFileToCheckpointFs(filePath,
-                            omniTask.getCheckpointStreamFactory(checkpointId), streamPos);
+                        delegate = getOrUploadInflightFile(filePath, omniTask, checkpointId, streamPos,
+                            uploadedInflightHandles);
                     } catch (Exception e) {
                         LOG.error("uploadFilesToCheckpointFs failed. filePath: {}", filePath);
                         throw new FlinkRuntimeException(e);
@@ -518,6 +521,25 @@ public class TaskStateSnapshotDeser {
                 throw new FlinkRuntimeException("handleType is failed. handleType: " + handleType);
             }
         }
+    }
+
+    private static StreamStateHandle getOrUploadInflightFile(java.nio.file.Path filePath, OmniTask omniTask,
+        long checkpointId, long streamPos, Map<java.nio.file.Path, StreamStateHandle> uploadedInflightHandles)
+        throws Exception {
+        java.nio.file.Path normalizedPath = filePath.toAbsolutePath().normalize();
+        StreamStateHandle cachedHandle = uploadedInflightHandles.get(normalizedPath);
+        if (cachedHandle != null) {
+            LOG.debug("Reuse uploaded inflight state file: {}", normalizedPath);
+            return cachedHandle;
+        }
+
+        StreamStateHandle uploadedHandle = uploadInflightFileToCheckpointFs(normalizedPath,
+            omniTask.getCheckpointStreamFactory(checkpointId), streamPos);
+        if (uploadedHandle == null) {
+            throw new IOException("Failed to upload inflight state file: " + normalizedPath);
+        }
+        uploadedInflightHandles.put(normalizedPath, uploadedHandle);
+        return uploadedHandle;
     }
 
     public static StreamStateHandle uploadInflightFileToCheckpointFs(java.nio.file.Path path,
@@ -613,7 +635,12 @@ public class TaskStateSnapshotDeser {
         return flinkHandle;
     }
 
-    public static String serializeTaskStateSnapshot(TaskStateSnapshot snapshot) throws IOException {
+    /**
+     * Serializes the reduced checkpoint-report representation. This format does
+     * not contain StateAssignmentOperation rescaling descriptors and must not
+     * be used for restore deployment snapshots.
+     */
+    public static String serializeCheckpointTaskStateSnapshot(TaskStateSnapshot snapshot) throws IOException {
         if (snapshot == null) {
             LOG.warn("snapshot is null!");
             return "";
