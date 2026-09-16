@@ -32,6 +32,8 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
             "DIVIDE",
             "MODULUS"));
     private static final Set<String> SUPPORT_UNARYOP_NAME = new HashSet<>(Arrays.asList("CAST", "NEGATION"));
+    private static final String DATETIME_PLUS_DAY_TIME = "datetime_plus_day_time";
+    private static final String DATETIME_MINUS_DAY_TIME = "datetime_minus_day_time";
 
     @Override
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {
@@ -168,9 +170,55 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
                     return false;
                 }
                 return true;
+            case "FUNCTION":
+                return validateDatetimeIntervalFunction(exprMap, inputSize);
             default:
+                LOG.info("Unsupported watermark exprType: {}", exprType);
                 return false; // Invalid expr type
         }
+    }
+
+    /**
+     * INTERVAL watermark expressions are lowered to {@code datetime_plus_day_time} /
+     * {@code datetime_minus_day_time}. Native WatermarkAssigner only consumes
+     * {@code rowtimeFieldIndex} and {@code intervalSecond}; this check keeps the JSON
+     * config aligned with that rewrite so the operator is not rejected as NOT SUITABLE.
+     */
+    @SuppressWarnings("unchecked")
+    private boolean validateDatetimeIntervalFunction(Map<String, Object> exprMap, int inputSize) {
+        if (!exprMap.containsKey("returnType")
+                || !exprMap.containsKey("function_name")
+                || !exprMap.containsKey("arguments")) {
+            return false;
+        }
+        Object functionNameObj = exprMap.get("function_name");
+        if (!(functionNameObj instanceof String)) {
+            LOG.info("Watermark function_name is not a string");
+            return false;
+        }
+        String functionName = (String) functionNameObj;
+        if (!DATETIME_PLUS_DAY_TIME.equals(functionName)
+                && !DATETIME_MINUS_DAY_TIME.equals(functionName)) {
+            LOG.info("Watermark does not support function {}", functionName);
+            return false;
+        }
+        Object argumentsObj = exprMap.get("arguments");
+        if (!(argumentsObj instanceof List)) {
+            LOG.info("Watermark {} arguments is not a list", functionName);
+            return false;
+        }
+        List<?> args = (List<?>) argumentsObj;
+        if (args.size() != 2) {
+            LOG.info("Watermark {} expects 2 arguments, but got {}", functionName, args.size());
+            return false;
+        }
+        for (Object arg : args) {
+            if (!(arg instanceof Map) || !validateCalcExpr((Map<String, Object>) arg, inputSize)) {
+                LOG.info("Invalid argument in watermark function {}", functionName);
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isSupportedWatermarkStrategy(String strategy) {

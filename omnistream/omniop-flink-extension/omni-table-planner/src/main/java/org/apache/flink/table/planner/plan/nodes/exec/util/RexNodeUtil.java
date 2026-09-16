@@ -1136,35 +1136,24 @@ public class RexNodeUtil {
         Sarg<?> sarg = ((RexLiteral) searchArg).getValueAs(Sarg.class);
         // Check if its a list or a range
         if (sarg.isPoints()) { // A point list - IN expression
-            jsonMap.put("exprType", "FUNCTION");
+            jsonMap.put("exprType", "IN");
             setDataType(rexCall, jsonMap, "returnType");
-            jsonMap.put("function_name", "in");
 
+            List<Map<String, Object>> inArgs = new ArrayList<>();
+            inArgs.add(buildJsonMap(operands.get(0)));
             // Extract all elements from the list
             List<?> values = new ArrayList<>(sarg.rangeSet.asRanges().stream()
                     .map(range -> range.lowerEndpoint()).collect(Collectors.toList()));
 
-            // Build arguments: [input_field, array_of_values]
-            List<Map<String, Object>> stringList = new ArrayList<>();
-            // first argument is the input field
-            stringList.add(buildJsonMap(operands.get(0)));
-
-            // second argument is the array of values
-            Map<String, Object> arrayMap = new LinkedHashMap<>();
-            arrayMap.put("exprType", "ARRAY");
-            setDataType(operands.get(0), arrayMap, "dataType");
-            List<Map<String, Object>> elementsList = new ArrayList<>();
             for (int i = 0; i < values.size(); i++) {
                 Map<String, Object> literalMap = new LinkedHashMap<>();
                 literalMap.put("exprType", "LITERAL");
                 literalMap.put("isNull", false);
                 literalMap.put("value", extractSargEndpoint(values.get(i)));
                 setDataType(operands.get(0), literalMap, "dataType");
-                elementsList.add(literalMap);
+                inArgs.add(literalMap);
             }
-            arrayMap.put("elements", elementsList);
-            stringList.add(arrayMap);
-            jsonMap.put("arguments", stringList);
+            jsonMap.put("arguments", inArgs);
         } else if (sarg.isComplementedPoints()) {
             // NOT IN: complement point-set Sarg -> recover points -> UNARY(NOT, IN(points)).
             // Guava Range shaded (Flink relocates) -> lambda param type inferred.
