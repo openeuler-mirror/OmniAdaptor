@@ -1659,7 +1659,7 @@
     },
     {
         "func_name": "encode",
-        "is_support_func": false
+        "is_support_func": true
     },
     {
         "func_name": "endswith",

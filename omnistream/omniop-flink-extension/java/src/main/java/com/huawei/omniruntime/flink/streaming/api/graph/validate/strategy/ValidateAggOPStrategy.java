@@ -82,12 +82,37 @@ public class ValidateAggOPStrategy extends AbstractValidateOperatorStrategy {
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {
         Map<String, Object> aggInfoListMap = (Map<String, Object>) operatorInfoMap.get("aggInfoList");
         List<Map<String, Object>> aggregateCalls = (ArrayList<Map<String, Object>>) aggInfoListMap.get("aggregateCalls");
-        if (CollectionUtil.isNullOrEmpty(aggregateCalls)) {
-            return false;
-        }
 
         List<String> inputTypeList = (ArrayList<String>) operatorInfoMap.get("inputTypes");
         boolean inputTypesEmpty = CollectionUtil.isNullOrEmpty(inputTypeList);
+
+        // Empty aggregateCalls with a non-empty grouping is a pure distinct/dedup
+        // aggregate (e.g. the "GroupAggregate(groupBy=[sub_val], select=[sub_val])"
+        // produced by Flink's IN (subquery) rewrite). The native GroupAggFunction
+        // handles it naturally: no agg functions are initialized, the accumulator
+        // arity is 0, and every distinct group key is emitted once (repeated keys
+        // are suppressed by the value equaliser). Validate the group key types
+        // below and fall through to the generic data-type check.
+        if (CollectionUtil.isNullOrEmpty(aggregateCalls)) {
+            List<Integer> grouping = (ArrayList<Integer>) operatorInfoMap.get("grouping");
+            if (CollectionUtil.isNullOrEmpty(grouping)) {
+                // No aggregate calls and no grouping keys: nothing meaningful to execute.
+                LOG.info("validateVertexChainInfoForOmniTask aggregateCalls is empty and grouping is empty");
+                return false;
+            }
+            if (inputTypesEmpty) {
+                return false;
+            }
+            for (Integer groupKey : grouping) {
+                String keyType = stripNotNull(inputTypeList.get(groupKey));
+                if (!SUPPORT_GROUP_KEY_TYPES.contains(keyType)) {
+                    LOG.info("The group key type {} is not supported.", keyType);
+                    return false;
+                }
+            }
+            return validateDataTypes(getDataTypes(operatorInfoMap, "inputTypes", "outputTypes"));
+        }
+
         for (Map<String, Object> aggregateCallMap : aggregateCalls) {
             String name = aggregateCallMap.get("name").toString();
             // aggCallName like "MAX($1)","AVG($2)","COUNT($1)"

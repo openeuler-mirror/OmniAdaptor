@@ -88,14 +88,22 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
             }
         }
 
-        // Checks if inputSpec is allowed
-        if (!operatorInfoMap.get("leftInputSpec").equals("NoUniqueKey")) {
-            LOG.warn("leftInputSpec only supports NoUniqueKey");
+        // Checks if inputSpec is allowed.
+        // The native join state view (InputSideHasNoUniqueKey) stores records as a
+        // per-(joinKey, recordHash) count map, which is a superset of the
+        // JoinKeyContainsUniqueKey semantics (each key maps to exactly one record,
+        // i.e. count is always 1). Therefore JoinKeyContainsUniqueKey inputs --
+        // e.g. the deduplicated subquery side produced by IN (subquery) rewrites --
+        // are handled correctly by the generic NoUniqueKey path.
+        if (!operatorInfoMap.get("leftInputSpec").equals("NoUniqueKey")
+                && !operatorInfoMap.get("leftInputSpec").equals("JoinKeyContainsUniqueKey")) {
+            LOG.warn("leftInputSpec only supports NoUniqueKey/JoinKeyContainsUniqueKey");
             return false;
         }
 
-        if (!operatorInfoMap.get("rightInputSpec").equals("NoUniqueKey")) {
-            LOG.warn("rightInputSpec only supports NoUniqueKey");
+        if (!operatorInfoMap.get("rightInputSpec").equals("NoUniqueKey")
+                && !operatorInfoMap.get("rightInputSpec").equals("JoinKeyContainsUniqueKey")) {
+            LOG.warn("rightInputSpec only supports NoUniqueKey/JoinKeyContainsUniqueKey");
             return false;
         }
 

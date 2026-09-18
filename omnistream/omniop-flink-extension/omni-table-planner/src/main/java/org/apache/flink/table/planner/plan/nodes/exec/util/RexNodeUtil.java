@@ -96,12 +96,15 @@ public class RexNodeUtil {
         RexTypeToIdMap.put("ROW", 17);
         RexTypeToIdMap.put("INVALID", 18);
         RexTypeToIdMap.put("TIME_WITHOUT_TIME_ZONE", 19); // TODO: Is this the same as TIME?
-        RexTypeToIdMap.put("TIMESTAMP_WITHOUT_TIME_ZONE", 20); // TODO: Omni's TIMESTAMP uses int64_t, Flink has the possibility of accuracy>3
-        RexTypeToIdMap.put("TIMESTAMP_TZ", 21); // TIMESTAMP_WITH_TIMEZONE
+        RexTypeToIdMap.put("VARBINARY", 20);
+        RexTypeToIdMap.put("BINARY", 20);
+        RexTypeToIdMap.put("TIMESTAMP_WITHOUT_TIME_ZONE", 22);
+        RexTypeToIdMap.put("TIMESTAMP_TZ", 23); // TIMESTAMP_WITH_TIMEZONE
         RexTypeToIdMap.put("TIMESTAMP_WITH_LOCAL_TIME_ZONE", 24);
-        RexTypeToIdMap.put("ARRAY", 23);
-        RexTypeToIdMap.put("MULTISET", 24);
+        RexTypeToIdMap.put("ARRAY", 30);
+        RexTypeToIdMap.put("MULTISET", 25);
         RexTypeToIdMap.put("MAP", 31);
+        RexTypeToIdMap.put("ROW", 32);
     }
 
     static {
@@ -119,8 +122,11 @@ public class RexNodeUtil {
         specialOperatorMap.put("IFNULL", SpecialExprType.COALESCE);
         specialOperatorMap.put("TYPEOF", SpecialExprType.TYPEOF);
         specialOperatorMap.put("EXP", SpecialExprType.EXP);
+        specialOperatorMap.put("LOG", SpecialExprType.LOG);
         specialOperatorMap.put("LOG2", SpecialExprType.LOG2);
         specialOperatorMap.put("LOG10", SpecialExprType.LOG10);
+        specialOperatorMap.put("REGEXP", SpecialExprType.REGEXP);
+        specialOperatorMap.put("RLIKE", SpecialExprType.REGEXP);
         specialOperatorMap.put("TIMESTAMP", SpecialExprType.TIMESTAMP);
         specialOperatorMap.put("SQRT", SpecialExprType.SQRT);
         specialOperatorMap.put("IS_DIGIT", SpecialExprType.IS_DIGIT);
@@ -137,6 +143,7 @@ public class RexNodeUtil {
         simpleFunctionNameMap.put(SpecialExprType.EXP, "exp");
         simpleFunctionNameMap.put(SpecialExprType.LOG2, "log2");
         simpleFunctionNameMap.put(SpecialExprType.LOG10, "log10");
+        simpleFunctionNameMap.put(SpecialExprType.REGEXP, "RLike");
         simpleFunctionNameMap.put(SpecialExprType.SQRT, "sqrt");
         simpleFunctionNameMap.put(SpecialExprType.IS_DIGIT, "is_digit");
         simpleFunctionNameMap.put(SpecialExprType.TIME, "time");
@@ -176,8 +183,10 @@ public class RexNodeUtil {
         specialHandlerMap.put(SpecialExprType.CAST, RexNodeUtil::handleCast);
         specialHandlerMap.put(SpecialExprType.TYPEOF, RexNodeUtil::handleTypeOf);
         specialHandlerMap.put(SpecialExprType.EXP, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.LOG, RexNodeUtil::handleLogFunction);
         specialHandlerMap.put(SpecialExprType.LOG2, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.LOG10, RexNodeUtil::handleSimpleFunction);
+        specialHandlerMap.put(SpecialExprType.REGEXP, RexNodeUtil::handleSimpleFunction);
         specialHandlerMap.put(SpecialExprType.TIMESTAMP, RexNodeUtil::handleTimestamp);
         specialHandlerMap.put(SpecialExprType.SQRT, RexNodeUtil::handleSimpleFunction);
 
@@ -372,8 +381,10 @@ public class RexNodeUtil {
         CHR,
         SIMILAR_TO,
         EXP,
+        LOG,
         LOG2,
         LOG10,
+        REGEXP,
         TIMESTAMP,
         SQRT,
         IS_DIGIT,
@@ -383,7 +394,8 @@ public class RexNodeUtil {
         REGEXP_REPLACE,
         IN_SUBQUERY,
         NOT_IN_SUBQUERY,
-        TIME
+        TIME,
+        DATE
     }
 
 
@@ -424,7 +436,15 @@ public class RexNodeUtil {
             int precision = rexNode.getType().getPrecision();
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
             jsonMap.put("width", precision);
+        } else if (rexNode.getType().getSqlTypeName() == SqlTypeName.BINARY
+                || rexNode.getType().getSqlTypeName() == SqlTypeName.VARBINARY) {
+            int precision = rexNode.getType().getPrecision();
+            jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
+            jsonMap.put("width", precision);
         } else if (rexNode.getType().getSqlTypeName() == SqlTypeName.DATE) {
+            // OmniStream carries DATE as INT (days since epoch): the operator-side
+            // time expressions work in microseconds, which OmniStream does not parse,
+            // so DATE/TIMESTAMP cross the boundary as OMNI_INT/OMNI_LONG.
             jsonMap.put(keyStr, RexTypeToIdMap.get("INT"));
         } else if (SqlTypeName.DATETIME_TYPES.contains(rexNode.getType().getSqlTypeName())) {
             jsonMap.put(keyStr, 2);
@@ -1326,6 +1346,19 @@ public class RexNodeUtil {
             return childMap;
         }
         setDataType(rexCall,jsonMap, "returnType");
+        // CAST(VARCHAR/CHAR AS TIMESTAMP): use flink_to_timestamp to parse the string.
+        // flink_to_timestamp returns epoch micros (OMNI_TIMESTAMP, type id 12), which allows
+        // subsequent CAST(TIMESTAMP AS VARCHAR) to format correctly.
+        if ((currentTypeName == SqlTypeName.TIMESTAMP)
+                && (childTypeName == SqlTypeName.VARCHAR || childTypeName == SqlTypeName.CHAR)) {
+            jsonMap.put("returnType", 12);
+            jsonMap.put("function_name", "flink_to_timestamp");
+            jsonMap.put("expr", childMap);
+            List<Map<String, Object>> castArgList2 = new ArrayList<>();
+            castArgList2.add(buildJsonMap(operands.get(0)));
+            jsonMap.put("arguments", castArgList2);
+            return jsonMap;
+        }
         jsonMap.put("function_name", specialType.name());
         jsonMap.put("expr", childMap);
         List<Map<String, Object>> castArgList = new ArrayList<>();
@@ -1463,17 +1496,19 @@ public class RexNodeUtil {
     }
 
     /**
-     * TIMESTAMP(str): parses a VARCHAR/CHAR literal into a TIMESTAMP via the native CAST path.
-     * function_name is "CAST" (not the operator name), forwarding only the first operand.
+     * TIMESTAMP(str): parses a VARCHAR/CHAR string into a TIMESTAMP.
+     * Uses flink_to_timestamp which returns epoch micros (OMNI_TIMESTAMP, type id 12).
      */
     private static Map<String, Object> handleTimestamp(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         jsonMap.put("exprType", "FUNCTION");
-        setDataType(rexCall, jsonMap, "returnType");
-        jsonMap.put("function_name", "CAST");
-        List<Map<String, Object>> timestampArgList = new ArrayList<>();
-        timestampArgList.add(buildJsonMap(operands.get(0)));
-        jsonMap.put("arguments", timestampArgList);
+        jsonMap.put("returnType", 12);
+        jsonMap.put("function_name", "flink_to_timestamp");
+        Map<String, Object> childMap = buildJsonMap(operands.get(0));
+        jsonMap.put("expr", childMap);
+        List<Map<String, Object>> argList = new ArrayList<>();
+        argList.add(buildJsonMap(operands.get(0)));
+        jsonMap.put("arguments", argList);
         return jsonMap;
     }
 
@@ -1513,6 +1548,28 @@ public class RexNodeUtil {
         jsonMap.put("exprType", "FUNCTION");
         setDataType(rexCall, jsonMap, "returnType");
         jsonMap.put("function_name", simpleFunctionNameMap.get(specialType));
+        List<Map<String, Object>> simpleArgList = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            Map<String, Object> argMap = buildJsonMap(operands.get(i));
+            normalizeCharLiteralToVarchar(argMap);
+            simpleArgList.add(argMap);
+        }
+        jsonMap.put("arguments", simpleArgList);
+        return jsonMap;
+    }
+
+    /**
+     * Handle LOG function which has two forms:
+     * - LOG(n) with 1 argument: natural logarithm, maps to "ln"
+     * - LOG(base, n) with 2 arguments: logarithm with specified base, maps to "log"
+     */
+    static Map<String, Object> handleLogFunction(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        setDataType(rexCall, jsonMap, "returnType");
+        // 1 arg -> "ln", 2 args -> "log"
+        String functionName = (operands.size() == 1) ? "ln" : "log";
+        jsonMap.put("function_name", functionName);
         List<Map<String, Object>> simpleArgList = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
             Map<String, Object> argMap = buildJsonMap(operands.get(i));

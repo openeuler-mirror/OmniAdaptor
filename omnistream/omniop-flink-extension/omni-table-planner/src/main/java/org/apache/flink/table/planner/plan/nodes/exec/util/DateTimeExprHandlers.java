@@ -61,6 +61,7 @@ final class DateTimeExprHandlers {
         RexNodeUtil.specialOperatorMap.put("LOCALTIMESTAMP", SpecialExprType.LOCALTIMESTAMP);
         RexNodeUtil.specialOperatorMap.put("CURRENT_DATE", SpecialExprType.CURRENT_DATE);
         RexNodeUtil.specialOperatorMap.put("CURRENT_ROW_TIMESTAMP", SpecialExprType.CURRENT_ROW_TIMESTAMP);
+        RexNodeUtil.specialOperatorMap.put("DATE", SpecialExprType.DATE);
         RexNodeUtil.udfOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
 
         RexNodeUtil.simpleFunctionNameMap.put(SpecialExprType.TO_TIMESTAMP, "flink_to_timestamp");
@@ -86,6 +87,7 @@ final class DateTimeExprHandlers {
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.LOCALTIMESTAMP, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.CURRENT_DATE, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.CURRENT_ROW_TIMESTAMP, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.DATE, DateTimeExprHandlers::handleDate);
     }
 
     static Map<String, Object> handleToTimestampLtz(RexCall rexCall, List<RexNode> operands,
@@ -131,6 +133,33 @@ final class DateTimeExprHandlers {
         toDateArgs.add(toDateFormatArg);
         jsonMap.put("arguments", toDateArgs);
         LOG.info("The TO_DATE expression is {} ", rexCall.toString());
+        return jsonMap;
+    }
+
+    /**
+     * DATE(string) -> DATE: parses a "yyyy-MM-dd" string into a SQL DATE.
+     * Semantically identical to TO_DATE(string, 'yyyy-MM-dd'); reuses the same
+     * vectorized to_date({VARCHAR,VARCHAR}) -> OMNI_INT kernel.
+     */
+    static Map<String, Object> handleDate(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        jsonMap.put("exprType", "FUNCTION");
+        jsonMap.put("returnType", RexNodeUtil.RexTypeToIdMap.get("INT"));
+        jsonMap.put("function_name", "to_date");
+        List<Map<String, Object>> dateArgs = new ArrayList<>();
+        Map<String, Object> dateInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
+        RexNodeUtil.normalizeCharLiteralToVarchar(dateInputArg);
+        dateArgs.add(dateInputArg);
+        // DATE(string) always uses 'yyyy-MM-dd' format
+        Map<String, Object> dateFormatArg = new LinkedHashMap<>();
+        dateFormatArg.put("exprType", "LITERAL");
+        dateFormatArg.put("dataType", RexNodeUtil.RexTypeToIdMap.get("VARCHAR"));
+        dateFormatArg.put("isNull", false);
+        dateFormatArg.put("value", "yyyy-MM-dd");
+        dateFormatArg.put("width", 10);
+        dateArgs.add(dateFormatArg);
+        jsonMap.put("arguments", dateArgs);
+        LOG.info("The DATE expression is {} ", rexCall.toString());
         return jsonMap;
     }
 
