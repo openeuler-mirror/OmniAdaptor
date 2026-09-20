@@ -1347,11 +1347,13 @@ public class RexNodeUtil {
         }
         setDataType(rexCall,jsonMap, "returnType");
         // CAST(VARCHAR/CHAR AS TIMESTAMP): use flink_to_timestamp to parse the string.
-        // flink_to_timestamp returns epoch micros (OMNI_TIMESTAMP, type id 12), which allows
-        // subsequent CAST(TIMESTAMP AS VARCHAR) to format correctly.
+        // flink_to_timestamp returns OMNI_LONG (type id 2), not OMNI_TIMESTAMP: OmniStream
+        // does not parse microseconds, so DATE/TIMESTAMP cross the operator boundary as
+        // OMNI_INT/OMNI_LONG. The returnType must match the operator-side registration,
+        // otherwise the signature lookup misses and the whole expression falls back.
         if ((currentTypeName == SqlTypeName.TIMESTAMP)
                 && (childTypeName == SqlTypeName.VARCHAR || childTypeName == SqlTypeName.CHAR)) {
-            jsonMap.put("returnType", 12);
+            jsonMap.put("returnType", 2);
             jsonMap.put("function_name", "flink_to_timestamp");
             jsonMap.put("expr", childMap);
             List<Map<String, Object>> castArgList2 = new ArrayList<>();
@@ -1496,13 +1498,16 @@ public class RexNodeUtil {
     }
 
     /**
-     * TIMESTAMP(str): parses a VARCHAR/CHAR string into a TIMESTAMP.
-     * Uses flink_to_timestamp which returns epoch micros (OMNI_TIMESTAMP, type id 12).
+     * TIMESTAMP(str): parses a VARCHAR/CHAR string into a TIMESTAMP via flink_to_timestamp.
+     * The operator registers it as OMNI_LONG (type id 2, epoch millis) — OmniStream does not
+     * parse microseconds, so TIMESTAMP crosses the operator boundary as OMNI_LONG. The
+     * returnType must match that registration or the signature lookup misses and the
+     * expression silently falls back to non-native evaluation.
      */
     private static Map<String, Object> handleTimestamp(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         jsonMap.put("exprType", "FUNCTION");
-        jsonMap.put("returnType", 12);
+        jsonMap.put("returnType", 2);
         jsonMap.put("function_name", "flink_to_timestamp");
         Map<String, Object> childMap = buildJsonMap(operands.get(0));
         jsonMap.put("expr", childMap);
