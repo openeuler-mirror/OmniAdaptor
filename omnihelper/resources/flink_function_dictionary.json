@@ -142,7 +142,7 @@
   },
   {"func_name": "LOG10", "is_support_func": true, "is_supported_type": ["BIGINT", "INTEGER", "DOUBLE"]},
   {"func_name": "LOG2", "is_support_func": true, "is_supported_type": ["BIGINT", "INTEGER", "DOUBLE"]},
-  {"func_name": "LOG", "is_support_func": false},
+  {"func_name": "LOG", "is_support_func": true, "is_supported_type": ["BIGINT", "INTEGER", "DOUBLE"]},
   {"func_name": "EXP", "is_support_func": true, "is_supported_type": ["BIGINT", "INTEGER", "DOUBLE"]},
   {"func_name": "CEIL", "is_support_func": true,
    "is_supported_type": [
@@ -320,7 +320,7 @@
   {"func_name": "PARSE_URL", "is_support_func": true,
    "is_supported_type": ["STRING", "VARCHAR"]
   },
-  {"func_name": "REGEXP", "is_support_func": false},
+  {"func_name": "REGEXP", "is_support_func": true, "is_supported_type": ["STRING", "STRING"]},
   {"func_name": "REVERSE", "is_support_func": true,
     "is_supported_type": ["STRING", "VARCHAR"]
   },

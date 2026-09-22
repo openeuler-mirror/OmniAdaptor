@@ -252,6 +252,8 @@ public final class OmniGraphOverride {
             "MAP",
             "DECIMAL64",
             "DECIMAL128",
+            "BINARY",
+            "VARBINARY",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
 
     private static boolean isIntervalOutputType(String type) {
@@ -834,6 +836,10 @@ public final class OmniGraphOverride {
                 return false;
             }
             Map<String, Object> jsonMap = toJsonMap(operatorDescription);
+            if (jsonMap == null) {
+                LOG.info("The operator description is not valid JSON: {}", operatorDescription);
+                return false;
+            }
 
             AbstractValidateOperatorStrategy validateStrategy =
                     ValidateOperatorStrategyFactory.getStrategy(opSimpleName);

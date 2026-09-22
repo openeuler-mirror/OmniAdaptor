@@ -35,7 +35,9 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             "DOUBLE",
             "DATE",
             "CHAR",
-            "MAP"));
+            "MAP",
+            "BINARY",
+            "VARBINARY"));
 
     private static final Set<String> SUPPORT_BINARYOP_NAME = new HashSet<>(Arrays.asList(
             "OR",
@@ -73,6 +75,16 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                     if (type.matches("^CHAR\\([^)]*\\)$")) {
                         type = "CHAR";
                         LOG.info("converted to CHAR");
+                    }
+
+                    if (type.matches("^BINARY\\([^)]*\\)$")) {
+                        type = "BINARY";
+                        LOG.info("converted to BINARY");
+                    }
+
+                    if (type.matches("^VARBINARY\\([^)]*\\)$")) {
+                        type = "VARBINARY";
+                        LOG.info("converted to VARBINARY");
                     }
 
                     if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
