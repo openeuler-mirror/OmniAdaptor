@@ -7,8 +7,10 @@ import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.Om
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerType;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.factory.parse.OmniParseFactory;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniNativeSerializerJsonInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniSerializerAttributesInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniSerializerJsonInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniStateMetaSerializerInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.utils.OmniStateSerializerUtils;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 import org.apache.commons.collections.MapUtils;
@@ -20,8 +22,8 @@ import org.apache.flink.api.common.typeutils.TypeSerializerSnapshot;
 import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
-import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonParser;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
@@ -165,14 +167,7 @@ public class OmniStateSerializerHelper {
 
         if (null != map.get(OmniSerializerJson.ELEMENT_TYPE.getKey())) {
             info.setElementType((String) map.get(OmniSerializerJson.ELEMENT_TYPE.getKey()));
-            if (StringUtils.isNotEmpty(info.getElementType())) {
-                info.setElementType(info.getElementType().replace(SC.UNDERSCORE, SC.DOT));
-                try {
-                    info.setElementTypeClazz(Class.forName(info.getElementType(), false, userCodeClassLoader));
-                } catch (ClassNotFoundException e) {
-                    throw new GeneralRuntimeException(String.format("Could not find class '%s' for unsafe operations.", info.getElementType()), e);
-                }
-            }
+            info.setElementTypeClazz(OmniStateSerializerUtils.classForName(info.getElementType(), false, userCodeClassLoader));
         }
 
         if (null != map.get(OmniSerializerJson.KEY_SERIALIZER.getKey())) {
@@ -233,7 +228,7 @@ public class OmniStateSerializerHelper {
                     String fieldNameStr = (String) field.get(OmniSerializerJson.FIELD_NAME.getKey());
                     fieldNameList.add(StringUtils.isEmpty(fieldNameStr) ? SC.EMPTY : fieldNameStr);
 
-                    String fieldSerializerStr = (String) field.get(OmniSerializerJson.FIELD_NAME.getKey());
+                    String fieldSerializerStr = (String) field.get(OmniSerializerJson.FIELD_SERIALIZER.getKey());
                     fieldSerializerList.add(StringUtils.isEmpty(fieldSerializerStr) ? null : convert(fieldSerializerStr, userCodeClassLoader, depth + DEPTH_INTERVAL));
                 } else {
                     fieldNameList.add(SC.EMPTY);
@@ -247,10 +242,27 @@ public class OmniStateSerializerHelper {
         if (null != map.get(OmniSerializerJson.LOGICAL_TYPE.getKey())) {
             String logicalTypeStr = JsonHelper.toJson(map.get(OmniSerializerJson.LOGICAL_TYPE.getKey()));
             if (StringUtils.isNotEmpty(logicalTypeStr)) {
-                JsonParser logicalTypeJsonParser = JsonHelper.getObjectMapper().createParser(logicalTypeStr);
-                info.setLogicalType(logicalTypeJsonParser);
+                info.setLogicalType(JsonHelper.fromJson(logicalTypeStr, JsonNode.class));
             }
         }
+
+        if (null != map.get(OmniSerializerJson.SERIALIZER_ATTRIBUTES.getKey())) {
+            String serializerAttributesStr = JsonHelper.toJson(map.get(OmniSerializerJson.SERIALIZER_ATTRIBUTES.getKey()));
+            if (StringUtils.isNotEmpty(serializerAttributesStr)) {
+                info.setSerializerAttributes(JsonHelper.fromJson(serializerAttributesStr, OmniSerializerAttributesInfo.class));
+            }
+        }
+        if(null == info.getSerializerAttributes()){
+            info.setSerializerAttributes(new OmniSerializerAttributesInfo());
+        }
+        // 获取类名（兼容旧逻辑）
+        String clazzName = OmniStateSerializerUtils.firstNonBlank(info.getSerializerAttributes().getClazzName(), info.getElementType());
+        // 转换
+        info.getSerializerAttributes().setClazz(
+                OmniStateSerializerUtils.classForName(
+                        clazzName,
+                        false,
+                        userCodeClassLoader));
 
         return info;
     }

@@ -4,8 +4,6 @@ import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.Omni
 import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * OmniParseMapFactory
