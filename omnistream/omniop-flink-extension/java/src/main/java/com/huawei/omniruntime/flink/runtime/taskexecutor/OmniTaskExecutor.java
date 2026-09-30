@@ -47,9 +47,9 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.contrib.streaming.state.RocksDBMemoryConfiguration;
-import org.apache.flink.contrib.streaming.state.RocksDBOperationUtils;
-import org.apache.flink.contrib.streaming.state.RocksDBSharedResources;
-import org.apache.flink.core.memory.ManagedMemoryUseCase;
+import com.huawei.omniruntime.flink.runtime.state.OmniRocksDBSharedResources;
+import com.huawei.omniruntime.flink.runtime.state.OmniRocksDBMemoryConfiguration;
+import com.huawei.omniruntime.flink.runtime.state.OmniRocksDBSharedResourcesFactory;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.runtime.checkpoint.SavepointType;
 import org.apache.flink.runtime.checkpoint.SnapshotType;
@@ -406,27 +406,40 @@ public class OmniTaskExecutor extends TaskExecutor {
 
             OmniTaskWrapper omniTaskWrapper = new OmniTaskWrapper(task);
 
-            String streamConfigPOJOJson = JsonHelper.toJson(streamConfigPOJO);
-            LOG.info("StreamConfigPOJO is {}", streamConfigPOJO);
-            LOG.info("StreamConfigPOJO JSON is {}", streamConfigPOJOJson);
-            String taskInformationPOJOJson = JsonHelper.toJson(taskInformationPOJO);
-            LOG.info("TaskInformationPOJO is {}", taskInformationPOJO);
-            LOG.info("TaskInformationPOJO JSON is {}", taskInformationPOJOJson);
-            String jobInformationPOJOJson = JsonHelper.toJson(jobInformationPOJO);
-            LOG.info("JobInformationPOJO is {}", jobInformationPOJO);
-            LOG.info("JobInformationPOJO JSON is {}", jobInformationPOJOJson);
-            String tddPojoJson = JsonHelper.toJson(tddPojo);
-            LOG.info("TaskDeploymentDescriptorPOJO is {}", tddPojo);
-            LOG.info("TaskDeploymentDescriptorPOJO JSON is {}", tddPojoJson);
+            OpaqueMemoryResource<OmniRocksDBSharedResources> rocksDBSharedResources =
+                    allocateNativeRocksDBSharedResources(taskInformationPOJO, memoryManager,
+                            taskInformationPOJO.getRocksDBMemoryConfiguration());
+            boolean resourcesTransferred = false;
+            try {
+                String streamConfigPOJOJson = JsonHelper.toJson(streamConfigPOJO);
+                LOG.info("StreamConfigPOJO is {}", streamConfigPOJO);
+                LOG.info("StreamConfigPOJO JSON is {}", streamConfigPOJOJson);
+                String taskInformationPOJOJson = JsonHelper.toJson(taskInformationPOJO);
+                LOG.info("TaskInformationPOJO is {}", taskInformationPOJO);
+                LOG.info("TaskInformationPOJO JSON is {}", taskInformationPOJOJson);
+                String jobInformationPOJOJson = JsonHelper.toJson(jobInformationPOJO);
+                LOG.info("JobInformationPOJO is {}", jobInformationPOJO);
+                LOG.info("JobInformationPOJO JSON is {}", jobInformationPOJOJson);
+                String tddPojoJson = JsonHelper.toJson(tddPojo);
+                LOG.info("TaskDeploymentDescriptorPOJO is {}", tddPojo);
+                LOG.info("TaskDeploymentDescriptorPOJO JSON is {}", tddPojoJson);
 
-            if (this.nativeTaskExecutorReference == -1) {
-                throw new TaskSubmissionException("nativeTaskExecutorReference cannot be -1.");
+                if (this.nativeTaskExecutorReference == -1) {
+                    throw new TaskSubmissionException("nativeTaskExecutorReference cannot be -1.");
+                }
+
+                long nativeTaskAddress = submitTaskNativeWithCheckpointing(this.nativeTaskExecutorReference, jobInformationPOJOJson,
+                        taskInformationPOJOJson, tddPojoJson, task.getTaskStateManagerWrapper(), omniTaskWrapper, task.getTaskOperatorGatewayWrapper(),
+                        rocksDBSharedResources == null ? 0 : rocksDBSharedResources.getResourceHandle().getHandle());
+                task.bindNativeTask(nativeTaskAddress);
+                task.setJobType(JobType.fromValue(jobType));
+                task.setRocksDBSharedResources(rocksDBSharedResources);
+                resourcesTransferred = true;
+            } finally {
+                if (!resourcesTransferred && rocksDBSharedResources != null) {
+                    rocksDBSharedResources.close();
+                }
             }
-
-            long nativeTaskAddress = submitTaskNativeWithCheckpointing(this.nativeTaskExecutorReference, jobInformationPOJOJson,
-                    taskInformationPOJOJson, tddPojoJson, task.getTaskStateManagerWrapper(), omniTaskWrapper, task.getTaskOperatorGatewayWrapper());
-            task.bindNativeTask(nativeTaskAddress);
-            task.setJobType(JobType.fromValue(jobType));
         } else {
             log.info("Task {} is not an OmniTask, no need to create OmniTask.", task.getExecutionId());
         }
@@ -697,7 +710,7 @@ public class OmniTaskExecutor extends TaskExecutor {
             long nativeTaskExecutorReference,
             String jobJson,
             String taskJson,
-            String tddJson);
+            String tddJson, long rocksDBSharedResourcesHandle);
 
     // return nativeTaskAddress
     private native long submitTaskNativeWithCheckpointing(
@@ -707,33 +720,22 @@ public class OmniTaskExecutor extends TaskExecutor {
             String tddJson,
             TaskStateManagerWrapper taskStateManagerWrapper,
             OmniTaskWrapper omniTaskWrapper,
-            TaskOperatorGatewayWrapper taskOperatorGatewayWrapper);
+            TaskOperatorGatewayWrapper taskOperatorGatewayWrapper, long rocksDBSharedResourcesHandle);
 
 
-    private OpaqueMemoryResource<RocksDBSharedResources> allocateNativeRocksDBSharedResources(
-            TaskInformationPOJO taskInformationPOJO,
-            ClassLoader cl,
-            MemoryManager memoryManager,
-            RocksDBMemoryConfiguration rocksDBMemoryConfiguration
-    ) throws IOException {
-
-        if (!"EmbeddedRocksDBStateBackend".equals(taskInformationPOJO.getStateBackend()) || taskInformationPOJO.getStateBackendManagedMemoryFraction() == 0.0) {
+    private OpaqueMemoryResource<OmniRocksDBSharedResources> allocateNativeRocksDBSharedResources(
+            TaskInformationPOJO taskInformationPOJO, MemoryManager memoryManager,
+            RocksDBMemoryConfiguration configuration) throws Exception {
+        if (!"EmbeddedRocksDBStateBackend".equals(taskInformationPOJO.getStateBackend())) {
             return null;
         }
-
-        OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources =
-                RocksDBOperationUtils.allocateSharedCachesIfConfigured(
-                        rocksDBMemoryConfiguration,
-                        memoryManager,
-                        taskInformationPOJO.getStateBackendManagedMemoryFraction(),
-                        LOG
-                );
-
-        if (rocksDBSharedResources == null) {
-            throw new IllegalArgumentException("rocksDBSharedResources is null, OmniStream not support. Please check the configuration.");
+        if (!configuration.isUsingFixedMemoryPerSlot()
+                && taskInformationPOJO.getStateBackendManagedMemoryFraction() == 0.0) {
+            return null;
         }
-
-        return rocksDBSharedResources;
+        return OmniRocksDBSharedResourcesFactory.acquire(memoryManager,
+                taskInformationPOJO.getStateBackendManagedMemoryFraction(),
+                new OmniRocksDBMemoryConfiguration(configuration));
     }
 
     private void checkJobTypeAndRecoverySavepointFormat(int jobType, String recoverySavepointFormat) {

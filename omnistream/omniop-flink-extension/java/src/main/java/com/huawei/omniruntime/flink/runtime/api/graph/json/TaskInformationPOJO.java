@@ -14,10 +14,10 @@ package com.huawei.omniruntime.flink.runtime.api.graph.json;
 import static org.apache.flink.util.Preconditions.checkState;
 
 import com.huawei.omniruntime.flink.runtime.api.graph.json.configuration.StreamConfigHelper;
+import com.huawei.omniruntime.flink.runtime.state.OmniRocksDBSharedResourcesFactory;
 
 import org.apache.flink.contrib.streaming.state.EmbeddedRocksDBStateBackend;
 import org.apache.flink.contrib.streaming.state.RocksDBMemoryConfiguration;
-import org.apache.flink.core.memory.ManagedMemoryUseCase;
 import org.apache.flink.runtime.executiongraph.TaskInformation;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.state.StateBackend;
@@ -66,8 +66,6 @@ public class TaskInformationPOJO {
     private int numberOfTransferThreads = 4;
     private double stateBackendManagedMemoryFraction;
     private long stateBackendManagedMemorySize;
-    private long cacheAddr;
-    private long writeBufferManagerAddr;
     private boolean splitWatermark = false;
     private String priorityQueueStateType = "";
 
@@ -139,8 +137,8 @@ public class TaskInformationPOJO {
             }
         }
 
-        stateBackendManagedMemoryFraction = tempStreamConfig.getManagedMemoryFractionOperatorUseCaseOfSlot(
-                ManagedMemoryUseCase.STATE_BACKEND,
+        stateBackendManagedMemoryFraction = OmniRocksDBSharedResourcesFactory.getStateBackendFractionOfSlot(
+                tempStreamConfig,
                 taskManagerConfiguration.getConfiguration(),
                 cl
         );
@@ -284,22 +282,6 @@ public class TaskInformationPOJO {
 
     public void setStateBackendManagedMemorySize(long stateBackendManagedMemorySize) {
         this.stateBackendManagedMemorySize = stateBackendManagedMemorySize;
-    }
-
-    public long getWriteBufferManagerAddr() {
-        return writeBufferManagerAddr;
-    }
-
-    public void setWriteBufferManagerAddr(long writeBufferManagerAddr) {
-        this.writeBufferManagerAddr = writeBufferManagerAddr;
-    }
-
-    public long getCacheAddr() {
-        return cacheAddr;
-    }
-
-    public void setCacheAddr(long cacheAddr) {
-        this.cacheAddr = cacheAddr;
     }
 
     public String getPriorityQueueStateType() {
