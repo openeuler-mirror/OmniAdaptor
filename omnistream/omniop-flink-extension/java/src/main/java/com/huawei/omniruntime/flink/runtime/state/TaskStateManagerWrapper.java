@@ -12,6 +12,7 @@
 package com.huawei.omniruntime.flink.runtime.state;
 
 import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskStateSnapshotDeser;
+import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 
 import com.huawei.omniruntime.flink.runtime.taskmanager.OmniTask;
@@ -165,7 +166,8 @@ public class TaskStateManagerWrapper {
                 return "NULL";
             }
 
-            snapshotStr = TaskStateSnapshotDeser.serializeTaskStateSnapshot(taskStateSnapshot);
+            // Local restore snapshots must preserve StateAssignmentOperation descriptors.
+            snapshotStr = JsonHelper.toJsonWithAllFields(taskStateSnapshot);
             LOG.info("Successfully retrieved snapshot for checkpointId: {}, snapshot size: {},snapshot str:{}",
                     restoreCheckpointId, snapshotStr.length(), snapshotStr);
         }catch (Exception e){

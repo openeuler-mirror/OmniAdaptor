@@ -423,7 +423,7 @@ public class OmniTaskExecutor extends TaskExecutor {
         JobManagerTaskRestore restore = tdd.getTaskRestore();
         if (restore != null) {
             try {
-                String restoreJson = serializeTaskStateSnapshot(restore.getTaskStateSnapshot());
+                String restoreJson = serializeRestoreTaskStateSnapshot(restore.getTaskStateSnapshot());
                 tddPojo.setTaskStateSnapshot(restoreJson);
                 tddPojo.setRestoreCheckpointId(restore.getRestoreCheckpointId());
                 LOG.debug("TaskStateSnapshot JSON is {}", restoreJson);
@@ -439,13 +439,17 @@ public class OmniTaskExecutor extends TaskExecutor {
         return tddPojo;
     }
 
-    private static String serializeTaskStateSnapshot(TaskStateSnapshot taskStateSnapshot) throws IOException {
- 	         if (containsChannelState(taskStateSnapshot)) {
- 	             LOG.debug("TaskStateSnapshot contains channel state, using JsonHelper serializer");
- 	             return JsonHelper.toJsonWithAllFields(taskStateSnapshot);
- 	         }
- 	         return TaskStateSnapshotDeser.serializeTaskStateSnapshot(taskStateSnapshot);
- 	     }
+    private static String serializeRestoreTaskStateSnapshot(TaskStateSnapshot taskStateSnapshot) throws IOException {
+	         // Preserve the complete Flink object graph, including rescaling descriptors.
+	         // The reduced serializer writes NO_RESCALE unconditionally and is only a fallback.
+	         try {
+	             LOG.info("Serialize restore TaskStateSnapshot with JsonHelper to preserve descriptors");
+	             return JsonHelper.toJsonWithAllFields(taskStateSnapshot);
+	         } catch (RuntimeException e) {
+	             LOG.error("JsonHelper failed to serialize TaskStateSnapshot; descriptor persistence is unavailable", e);
+	             throw new IOException("Failed to serialize TaskStateSnapshot with descriptor preservation", e);
+	         }
+	     }
 
  	     private static boolean containsChannelState(TaskStateSnapshot taskStateSnapshot) {
  	         if (taskStateSnapshot == null) {
