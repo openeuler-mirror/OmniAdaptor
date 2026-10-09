@@ -5,14 +5,18 @@
 package com.huawei.omniruntime.flink.runtime.metrics.utils;
 
 import com.huawei.omniruntime.flink.runtime.metrics.OmniDescriptiveStatisticsHistogram;
+import com.huawei.omniruntime.flink.runtime.metrics.OmniLongSizeGauge;
 import com.huawei.omniruntime.flink.runtime.metrics.OmniSizeGauge;
 import com.huawei.omniruntime.flink.runtime.metrics.OmniSimpleCounter;
 import com.huawei.omniruntime.flink.runtime.metrics.OmniSumCounter;
 import com.huawei.omniruntime.flink.runtime.metrics.OmniTimeGauge;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniInternalOperatorIOMetricGroup;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniOperatorStateMetricGroup;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskLocalNettyBufferMetricGroup;
 import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskIOMetricGroup;
 import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskMetricGroup;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.VectorBatchBufferPoolMetricGroup;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.metrics.SimpleCounter;
@@ -45,6 +49,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 /**
  * Utility class for creating and managing Omni metrics. This class provides methods to create various types of Omni
@@ -54,6 +60,11 @@ import java.util.Optional;
  */
 public class OmniMetricHelper {
     private static final Logger LOG = LoggerFactory.getLogger(OmniMetricHelper.class);
+
+    private static final long METRIC_REGISTRATION_TIMEOUT_MILLIS = 5_000L;
+
+    private static final long METRIC_REGISTRATION_POLL_MILLIS = 200L;
+
     /**
      * Creates an OmniSimpleCounter instance with the specified parameters.
      *
@@ -105,6 +116,36 @@ public class OmniMetricHelper {
     }
 
     /**
+     * Creates an OmniLongSizeGauge instance (64-bit) for byte-valued metrics that can exceed
+     * Integer.MAX_VALUE.
+     *
+     * @param omniTaskMetricRef The reference to the OmniTaskMetric.
+     * @param scope The scope of the metric.
+     * @param identifier The identifier of the metric.
+     * @return An instance of OmniLongSizeGauge.
+     */
+    public static OmniLongSizeGauge createLongSizeGauge(long omniTaskMetricRef, String scope, String identifier) {
+        long nativeRef = createNativeLongSizeGauge(omniTaskMetricRef, scope, identifier);
+        return new OmniLongSizeGauge(nativeRef);
+    }
+
+    /**
+     * Creates an OmniSizeGauge backed by a native LocalNettyBufferPool metric.
+     *
+     * @param nativeTaskMetricGroupRef The reference to the native task metric group.
+     * @param nativeLocalNettyBufferPoolRef The reference to the native LocalNettyBufferPool.
+     * @param scope The scope of the metric.
+     * @param identifier The identifier of the metric.
+     * @return An instance of OmniSizeGauge.
+     */
+    public static OmniSizeGauge createNettyBufferSizeGauge(long nativeTaskMetricGroupRef,
+            long nativeLocalNettyBufferPoolRef, String scope, String identifier) {
+        long nativeRef = createNativeNettyBufferSizeGauge(nativeTaskMetricGroupRef, nativeLocalNettyBufferPoolRef,
+                scope, identifier);
+        return new OmniSizeGauge(nativeRef);
+    }
+
+    /**
      * Creates an OmniDescriptiveStatisticsHistogram instance with the specified parameters.
      *
      * @param omniTaskMetricRef The reference to the OmniTaskMetric.
@@ -151,6 +192,28 @@ public class OmniMetricHelper {
     public static native long createNativeSizeGauge(long omniTaskMetricRef, String scope, String identifier);
 
     /**
+     * Creates a native long (64-bit) size gauge.
+     *
+     * @param omniTaskMetricRef The reference to the OmniTaskMetric.
+     * @param scope The scope of the metric.
+     * @param identifier The identifier of the metric.
+     * @return A long representing the native reference to the long size gauge.
+     */
+    public static native long createNativeLongSizeGauge(long omniTaskMetricRef, String scope, String identifier);
+
+    /**
+     * Creates a native size gauge for a LocalNettyBufferPool metric.
+     *
+     * @param nativeTaskMetricGroupRef The reference to the native task metric group.
+     * @param nativeLocalNettyBufferPoolRef The reference to the native LocalNettyBufferPool.
+     * @param scope The scope of the metric.
+     * @param identifier The identifier of the metric.
+     * @return A long representing the native reference to the size gauge.
+     */
+    public static native long createNativeNettyBufferSizeGauge(long nativeTaskMetricGroupRef,
+            long nativeLocalNettyBufferPoolRef, String scope, String identifier);
+
+    /**
      * Creates a native descriptive statistics histogram.
      *
      * @param omniTaskMetricRef The reference to the OmniTaskMetric.
@@ -169,8 +232,12 @@ public class OmniMetricHelper {
      * @param nativeRefTaskMetricGroupRef The reference to the native task metric group.
      * @return An instance of OmniTaskMetricGroup.
      */
-    public static OmniTaskMetricGroup registerOmniMetrics(TaskMetricGroup metrics, long nativeRefTaskMetricGroupRef) {
+    public static OmniTaskMetricGroup registerOmniMetrics(TaskMetricGroup metrics, long nativeRefTaskMetricGroupRef,
+            long nativeTaskRef, Map<String, OperatorID> operatorNameToId) {
         OmniTaskMetricGroup omniTaskMetricGroup = new OmniTaskMetricGroup();
+        // the Omni metrics below replace Flink's inside the MetricQueryService, so the group needs
+        // the Flink group to undo that at close()
+        omniTaskMetricGroup.setFlinkTaskMetricGroup(metrics);
         OmniTaskIOMetricGroup omniTaskIOMetricGroup = registerTaskIOMetrics(metrics, nativeRefTaskMetricGroupRef);
         List<OmniInternalOperatorIOMetricGroup> omniInternalOperatorIOMetricGroups =
                 registerInternalOperatorMetric(metrics, nativeRefTaskMetricGroupRef);
@@ -184,11 +251,37 @@ public class OmniMetricHelper {
             omniTaskMetricGroup.addOperator(omniInternalOperatorIOMetricGroup.getMetricGroupName(),
                     omniInternalOperatorIOMetricGroup);
         }
+        //create OmniNettyBufferMetricGroup. Both groups read through the raw nativeTaskRef, so they
+        //are handed to omniTaskMetricGroup and closed with it, before the native task can be deleted.
+        OmniTaskLocalNettyBufferMetricGroup omniTaskLocalNettyBufferMetricGroup = new OmniTaskLocalNettyBufferMetricGroup(metrics,nativeRefTaskMetricGroupRef,nativeTaskRef);
+        VectorBatchBufferPoolMetricGroup vectorBatchBufferPoolMetricGroup = new VectorBatchBufferPoolMetricGroup(metrics, nativeRefTaskMetricGroupRef, nativeTaskRef);
+        omniTaskMetricGroup.addNativeTaskBackedGroup(omniTaskLocalNettyBufferMetricGroup);
+        omniTaskMetricGroup.addNativeTaskBackedGroup(vectorBatchBufferPoolMetricGroup);
+        //create per-operator OmniOperatorStateMetricGroup for keyed-state metrics. Operator names
+        //and ids come from the task configuration (in OmniStream no Java operators are created, so
+        //the Flink TaskMetricGroup.operators map is empty and cannot be used here). The OperatorID
+        //is passed through so the scope mirrors Flink TaskMetricGroup.getOrAddOperator.
+        for (Map.Entry<String, OperatorID> entry : operatorNameToId.entrySet()) {
+            OmniOperatorStateMetricGroup omniOperatorStateMetricGroup = new OmniOperatorStateMetricGroup(metrics,
+                    nativeRefTaskMetricGroupRef, entry.getKey(), entry.getValue());
+            omniTaskMetricGroup.addNativeTaskBackedGroup(omniOperatorStateMetricGroup);
+        }
         return omniTaskMetricGroup;
     }
 
-    public static void registerNativeMetrics(TaskMetricGroup metrics, long nativeRefTaskMetricGroupRef,
+    /**
+     * Points Flink counters at native counters owned by the task metric group.
+     *
+     * @param metrics the task metric group
+     * @param nativeRefTaskMetricGroupRef native reference of the task metric group
+     * @param chainedConfigs the chained operator configs
+     * @return the counters that were pointed at native memory, so the caller can detach them again
+     *         before the native task that owns those counters is deleted
+     */
+    public static List<SimpleCounter> registerNativeMetrics(TaskMetricGroup metrics,
+                                             long nativeRefTaskMetricGroupRef,
                                              Collection<StreamConfig> chainedConfigs) {
+        List<SimpleCounter> nativeBackedCounters = new ArrayList<>();
         for (StreamConfig chainedConfig : chainedConfigs) {
             if (!chainedConfig.getOperatorName().contains("Source")) {
                 continue;
@@ -198,8 +291,12 @@ public class OmniMetricHelper {
                     "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_OUT);
             InternalOperatorMetricGroup operatorMetricGroup =
                     metrics.getOrAddOperator(chainedConfig.getOperatorID(), chainedConfig.getOperatorName());
-            ((SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter()).setNativeRef(nativeRef);
+            SimpleCounter counter =
+                    (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter();
+            counter.setNativeRef(nativeRef);
+            nativeBackedCounters.add(counter);
         }
+        return nativeBackedCounters;
     }
 
     private static String getMetricsMapKey(String operatorName, OperatorID operatorID) {
@@ -267,11 +364,15 @@ public class OmniMetricHelper {
      * @return The MetricRegistryImpl instance.
      */
     public static MetricRegistryImpl getMetricRegistry(TaskMetricGroup taskMetricGroup) {
+        return getMetricRegistry((AbstractMetricGroup<?>) taskMetricGroup);
+    }
+
+    public static MetricRegistryImpl getMetricRegistry(AbstractMetricGroup<?> metricGroup) {
         MetricRegistryImpl metricRegistry = null;
         try {
             Field field = AbstractMetricGroup.class.getDeclaredField("registry");
             field.setAccessible(true);
-            Object obj = field.get(taskMetricGroup);
+            Object obj = field.get(metricGroup);
             if (obj instanceof MetricRegistryImpl) {
                 metricRegistry = (MetricRegistryImpl) obj;
             }
@@ -540,13 +641,51 @@ public class OmniMetricHelper {
      */
     public static void waitMetricRegisteredInMetricQueryService(TaskMetricGroup metrics,
             Map<String, Metric> originalMetricMap) {
-        while (!checkIfMetricRegisteredInMetricQueryService(metrics, originalMetricMap)) {
+        boolean registered = waitForMetricRegistration(
+                () -> checkIfMetricRegisteredInMetricQueryService(metrics, originalMetricMap),
+                METRIC_REGISTRATION_TIMEOUT_MILLIS, METRIC_REGISTRATION_POLL_MILLIS);
+
+        if (!registered) {
+            LOG.warn("Timed out waiting for Flink metrics to reach MetricQueryService. Metrics that are still "
+                    + "absent will keep their original implementations.");
+        }
+    }
+
+    /**
+     * Polls until the registration completes or the timeout elapses. Registration in the MetricQueryService is
+     * asynchronous and may never complete, so task initialization must not block on it indefinitely.
+     *
+     * @param registrationComplete Supplier that reports whether registration has finished.
+     * @param timeoutMillis The maximum time to wait, in milliseconds.
+     * @param pollMillis The interval between checks, in milliseconds.
+     * @return true if registration completed, false on timeout or interruption.
+     */
+    static boolean waitForMetricRegistration(BooleanSupplier registrationComplete, long timeoutMillis,
+            long pollMillis) {
+        if (timeoutMillis < 0 || pollMillis <= 0) {
+            throw new IllegalArgumentException("Metric registration wait values must be positive");
+        }
+
+        long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+
+        while (!registrationComplete.getAsBoolean()) {
+            long remainingNanos = deadlineNanos - System.nanoTime();
+            if (remainingNanos <= 0) {
+                return false;
+            }
+
+            long sleepMillis = Math.min(pollMillis, Math.max(1L, TimeUnit.NANOSECONDS.toMillis(remainingNanos)));
+
             try {
-                Thread.sleep(200);
+                Thread.sleep(sleepMillis);
             } catch (InterruptedException e) {
-                throw new GeneralRuntimeException(e);
+                // Restore the flag so cancellation stays visible to the caller.
+                Thread.currentThread().interrupt();
+                return false;
             }
         }
+
+        return true;
     }
 
     /**
@@ -637,4 +776,47 @@ public class OmniMetricHelper {
             }
         }
     }
+
+    /**
+     * Undoes what updateOmniMetricsOnMetricQueryService did.
+     *
+     * <p>That method swaps Flink's metric objects out of the MetricQueryService maps and the
+     * ViewUpdater and puts the Omni metrics in their place. Both structures are keyed by object
+     * identity, and Flink's own teardown unregisters the ORIGINAL objects, which are no longer
+     * there. Nothing removes the Omni entries, so without this they stay registered for the life of
+     * the TaskManager, holding their QueryScopeInfo and the whole TaskMetricGroup behind them --
+     * one leaked group per task per job submission, until the metrics RPC no longer fits in heap.
+     *
+     * @param metrics the task metric group whose registry holds the entries
+     * @param omniMetrics the metrics that were swapped in
+     */
+    public static void removeOmniMetricsFromMetricQueryService(TaskMetricGroup metrics,
+            List<Metric> omniMetrics) {
+        if (omniMetrics.isEmpty()) {
+            return;
+        }
+        Map<Counter, Tuple2<QueryScopeInfo, String>> counterMap = getCountersFromQueryService(metrics);
+        Map<Gauge<?>, Tuple2<QueryScopeInfo, String>> gaugeMap = getGaugesFromQueryService(metrics);
+        Map<Meter, Tuple2<QueryScopeInfo, String>> meterMap = getMetersFromQueryService(metrics);
+        Map<Histogram, Tuple2<QueryScopeInfo, String>> histogramMap = getHistogramsFromQueryService(metrics);
+        ViewUpdater viewUpdater = getViewUpdater(metrics);
+        for (Metric metric : omniMetrics) {
+            if (metric instanceof Counter) {
+                counterMap.remove((Counter) metric);
+            } else if (metric instanceof Gauge) {
+                gaugeMap.remove((Gauge<?>) metric);
+            } else if (metric instanceof Meter) {
+                meterMap.remove((Meter) metric);
+            } else if (metric instanceof Histogram) {
+                histogramMap.remove((Histogram) metric);
+            } else {
+                continue;
+            }
+            if (metric instanceof View) {
+                viewUpdater.notifyOfRemovedView((View) metric);
+            }
+        }
+    }
+
+    public static native  long addGroup(long parentGroupRef,String groupName,String[] scope);
 }
