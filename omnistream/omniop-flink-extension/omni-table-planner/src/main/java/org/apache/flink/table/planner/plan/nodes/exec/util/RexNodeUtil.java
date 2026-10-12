@@ -622,8 +622,9 @@ public class RexNodeUtil {
      * any CHAR-typed operand in a binary expression subtree to VARCHAR so the native
      * JSONParser resolves to existing {OMNI_VARCHAR, OMNI_VARCHAR} signatures without
      * attempting an unregistered CAST_String_Char.
+     * Package-private so the per-category handler classes can reuse it.
      */
-    private static void normalizeCharToVarchar(Map<String, Object> jsonMap) {
+    static void normalizeCharToVarchar(Map<String, Object> jsonMap) {
         if (jsonMap == null) {
             return;
         }
@@ -1543,8 +1544,12 @@ public class RexNodeUtil {
     /**
      * Shared handler for expressions that translate to a plain FUNCTION node: the function_name
      * comes from {@link #simpleFunctionNameMap} and every operand is forwarded as an argument,
-     * with CHAR literals normalized to VARCHAR. Any expression whose native signature matches
-     * its Flink operands one-to-one can reuse this by registering a name in
+     * with CHAR literals normalized to VARCHAR. CHAR-typed operands (e.g. a CHAR column feeding
+     * a string method) and a CHAR-typed return are normalized to VARCHAR as well, so the emitted
+     * signatures match the native VARCHAR registries on both the codegen and the vectorized paths
+     * (otherwise mixing a codegen-only CHAR signature with a vectorization-only CHAR signature in
+     * one Calc stalls the native evaluator). Any expression whose native signature matches its
+     * Flink operands one-to-one can reuse this by registering a name in
      * {@link #simpleFunctionNameMap} plus a handler entry in {@link #specialHandlerMap}.
      * Package-private so the per-category handler classes can reference it.
      */
@@ -1552,11 +1557,13 @@ public class RexNodeUtil {
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         jsonMap.put("exprType", "FUNCTION");
         setDataType(rexCall, jsonMap, "returnType");
+        normalizeCharToVarchar(jsonMap);
         jsonMap.put("function_name", simpleFunctionNameMap.get(specialType));
         List<Map<String, Object>> simpleArgList = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
             Map<String, Object> argMap = buildJsonMap(operands.get(i));
             normalizeCharLiteralToVarchar(argMap);
+            normalizeCharToVarchar(argMap);
             simpleArgList.add(argMap);
         }
         jsonMap.put("arguments", simpleArgList);
