@@ -696,6 +696,13 @@ public class RexNodeUtil {
             if (isDatetimePlus(rexCall)) {
                 return handleDatetimePlus(rexCall, operands, jsonMap);
             } else if (rexCall.operands.size() == 2 && binaryType != null) {
+                // TIME 列在 native codegen 中尚无 GetRawAddr 支持，二元比较/算术只要操作数是
+                // TIME 就会在取列地址时崩溃，必须回退 vanilla（FLOOR/NULLIF 等 FUNCTION 不受影响）。
+                if (isTimeType(operands.get(0)) || isTimeType(operands.get(1))) {
+                    LOG.info("Binary operation over TIME is not supported by native codegen, "
+                            + "falling back to vanilla Flink: {}", rexCall);
+                    return invalidExpression();
+                }
                 jsonMap.put("exprType",  OperatorExprType.BINARY.name());
                 setDataType(rexCall,jsonMap, "returnType");
                 jsonMap.put("operator", binaryType.name());
@@ -864,6 +871,34 @@ public class RexNodeUtil {
         }
         int precision = rexNode.getType().getPrecision();
         return precision >= 0 && precision <= MAX_NATIVE_TIME_PRECISION;
+    }
+
+    /**
+     * 判定 RexNode 是否为 TIME 类型。native codegen 的 {@code GetRawAddr} 尚未支持
+     * {@code OMNI_TIME_WITHOUT_TIME_ZONE}（int64 毫秒向量类型），任何走 codegen 求值的
+     * 表达式只要引用 TIME 列就会在取列原始地址时崩溃，因此 TIME 的比较/CASE 链必须回退 vanilla。
+     */
+    private static boolean isTimeType(RexNode rexNode) {
+        return rexNode != null && rexNode.getType().getSqlTypeName() == SqlTypeName.TIME;
+    }
+
+    /**
+     * 递归判定 RexNode 子树是否包含 TIME 类型节点（含 TIME 字面量与 TIME 列引用）。
+     * 用于 CASE/SWITCH：只要任一 when 条件、结果或 else 分支涉及 TIME，整棵表达式
+     * 都无法在 native codegen 下安全求值。
+     */
+    private static boolean containsTimeOperand(RexNode rexNode) {
+        if (isTimeType(rexNode)) {
+            return true;
+        }
+        if (rexNode instanceof RexCall) {
+            for (RexNode operand : ((RexCall) rexNode).getOperands()) {
+                if (containsTimeOperand(operand)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** 构造 INVALID 标记 JSON；规划器据此判定该 RexNode "不被 native 支持"，
@@ -1095,6 +1130,15 @@ public class RexNodeUtil {
     private static Map<String, Object> handleSwitch(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         int numOperands = operands.size();
+        // TIME 参与的 CASE/SWITCH（when 条件通常是 time_col = TIME '...' 二元比较，native codegen
+        // 取 TIME 列地址即崩溃）整体回退 vanilla；FUNCTION（FLOOR/NULLIF 等）不受影响。
+        for (RexNode operand : operands) {
+            if (containsTimeOperand(operand)) {
+                LOG.info("CASE/SWITCH over TIME operand is not supported by native codegen, "
+                        + "falling back to vanilla Flink: {}", rexCall);
+                return invalidExpression();
+            }
+        }
         jsonMap.put("exprType",  "SWITCH_GENERAL");
         setDataType(rexCall,jsonMap, "returnType");
         // SWITCH([input_expr, condition1], 'result1', [input_expr, condition2], 'result2', 'optional other')
@@ -1163,6 +1207,11 @@ public class RexNodeUtil {
 
     private static Map<String, Object> handleSearch(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
+        if (isTimeType(operands.get(0))) {
+            LOG.info("SEARCH/IN/BETWEEN over TIME probe is not supported by native codegen, "
+                    + "falling back to vanilla Flink: {}", rexCall);
+            return invalidExpression();
+        }
         RexLiteral searchArg = (RexLiteral) operands.get(1);  // Sarg object
         // Get the Sarg value
         Sarg<?> sarg = ((RexLiteral) searchArg).getValueAs(Sarg.class);
