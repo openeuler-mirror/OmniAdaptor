@@ -195,17 +195,17 @@ public class OmniStateSerializerHelper {
         // 内嵌 JSON 字符串，作为 List<String> 形式存在 "fieldSerializers" 键下。这里把它们再
         // 递归 convert 回 OmniNativeSerializerJsonInfo，供 OmniParseFactory 在 TUPLE/POJO
         // 分支重建带泛型字段类型的 TupleTypeInfo。无字段则跳过，保留旧行为。
-        Object fieldSers = map.get(OmniSerializerJson.FIELD_SERIALIZERS.getKey());
-        if (fieldSers instanceof List) {
-            List<OmniNativeSerializerJsonInfo> fieldList = new ArrayList<>();
-            for (Object item : (List<?>) fieldSers) {
+        Object fieldSerializersObj = map.get(OmniSerializerJson.FIELD_SERIALIZERS.getKey());
+        if (fieldSerializersObj instanceof List) {
+            List<OmniNativeSerializerJsonInfo> fieldSerializerList = new ArrayList<>();
+            for (Object item : (List<?>) fieldSerializersObj) {
                 if (item instanceof String && StringUtils.isNotEmpty((String) item)) {
-                    fieldList.add(convert((String) item, userCodeClassLoader, depth + DEPTH_INTERVAL));
+                    fieldSerializerList.add(convert((String) item, userCodeClassLoader, depth + DEPTH_INTERVAL));
                 } else {
-                    fieldList.add(null);
+                    fieldSerializerList.add(null);
                 }
             }
-            info.setFieldSerializers(fieldList);
+            info.setFieldSerializers(fieldSerializerList);
         }
 
         Object fieldNamesObj = map.get(OmniSerializerJson.FIELD_NAMES.getKey());
