@@ -190,6 +190,17 @@ public class OmniMetricHelper {
     public static void registerNativeMetrics(TaskMetricGroup metrics, long nativeRefTaskMetricGroupRef,
                                              Collection<StreamConfig> chainedConfigs) {
         for (StreamConfig chainedConfig : chainedConfigs) {
+            if (chainedConfig.getOperatorName().contains("Correlate")) {
+                String metricsMapKey = getMetricsMapKey(chainedConfig.getOperatorName(), chainedConfig.getOperatorID());
+                long nativeRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
+                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_IN);
+                InternalOperatorMetricGroup operatorMetricGroup =
+                        metrics.getOrAddOperator(chainedConfig.getOperatorID(), chainedConfig.getOperatorName());
+                ((SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsInCounter()).setNativeRef(nativeRef);
+                if (chainedConfig.isChainStart()) {
+                    operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
+                }
+            }
             if (!chainedConfig.getOperatorName().contains("Source")) {
                 continue;
             }

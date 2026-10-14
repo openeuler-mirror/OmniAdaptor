@@ -153,6 +153,7 @@ public final class OmniGraphOverride {
             // performance mode supports all op temporarily.Some op will be proposed in the future.
             SUPPORT_OP_NAME.addAll(Arrays.asList(
                     "Calc",
+                    "Correlate",
                     "LookupJoin",
                     "WatermarkAssigner",
                     "StreamRecordTimestampInserter",
@@ -161,6 +162,7 @@ public final class OmniGraphOverride {
         } else {
             SUPPORT_OP_NAME.addAll(Arrays.asList(
                     "Calc",
+                    "Correlate",
                     "GroupAggregate",
                     "LocalGroupAggregate",
                     "GlobalGroupAggregate",
@@ -180,7 +182,7 @@ public final class OmniGraphOverride {
                     "ConstraintEnforcer"));
         }
         SUPPORT_KAFKA_SCHEMA_TYPE.add("JsonRowDataDeserializationSchema");
-        OP_NAME_OF_SQL.addAll(Arrays.asList("Calc", "GroupAggregate", "LocalGroupAggregate", "GlobalGroupAggregate",
+        OP_NAME_OF_SQL.addAll(Arrays.asList("Calc", "Correlate", "GroupAggregate", "LocalGroupAggregate", "GlobalGroupAggregate",
                 "IncrementalGroupAggregate", "Join", "LookupJoin", "WindowAggregate", "WindowJoin", "GroupWindowAggregate",
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",
                 "StreamRecordTimestampInserter", "ConstraintEnforcer"));
