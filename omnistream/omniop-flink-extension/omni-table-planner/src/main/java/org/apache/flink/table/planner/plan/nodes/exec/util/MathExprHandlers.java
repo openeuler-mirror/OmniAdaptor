@@ -26,10 +26,10 @@ import java.util.Map;
 /**
  * Math/numeric special-expression registrations extracted from {@link RexNodeUtil}.
  *
- * <p>All math functions here forward their operands one-to-one to a native function, so they share
- * the generic {@link RexNodeUtil#handleSimpleFunction} handler and only contribute operator-name
- * and native-function-name mappings. Adding a math function only touches this file (plus the shared
- * {@link SpecialExprType} enum).
+ * <p>Most math functions forward their operands one-to-one through
+ * {@link RexNodeUtil#handleSimpleFunction}. SIN / COS and the other double-or-decimal functions
+ * reuse that result, then wrap arguments that are neither DOUBLE nor DECIMAL in CAST to DOUBLE.
+ * Adding a math function only touches this file (plus the shared {@link SpecialExprType} enum).
  */
 final class MathExprHandlers {
     private static final Logger LOG = LoggerFactory.getLogger(MathExprHandlers.class);
@@ -97,20 +97,20 @@ final class MathExprHandlers {
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.ROUND, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.GREATEST, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.LEAST, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.SINH, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.COS, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.COT, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.ASIN, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.ACOS, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.ATAN, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.ATAN2, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.COSH, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.DEGREES, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.SINH, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.COS, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.COT, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.ASIN, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.ACOS, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.ATAN, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.ATAN2, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.COSH, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.DEGREES, MathExprHandlers::handleDoubleOrDecimalMath);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.SIGN, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.SIN, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.TAN, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.TANH, RexNodeUtil::handleSimpleFunction);
-        RexNodeUtil.specialHandlerMap.put(SpecialExprType.RADIANS, RexNodeUtil::handleSimpleFunction);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.SIN, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.TAN, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.TANH, MathExprHandlers::handleDoubleOrDecimalMath);
+        RexNodeUtil.specialHandlerMap.put(SpecialExprType.RADIANS, MathExprHandlers::handleDoubleOrDecimalMath);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.PI, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.E, RexNodeUtil::handleSimpleFunction);
         RexNodeUtil.specialHandlerMap.put(SpecialExprType.RAND, RexNodeUtil::handleSimpleFunction);
@@ -195,6 +195,54 @@ final class MathExprHandlers {
             }
         }
         return jsonMap;
+    }
+
+    /**
+     * Native overloads are DOUBLE and DECIMAL only.
+     * Reuse {@link RexNodeUtil#handleSimpleFunction}, then wrap every other argument in
+     * CAST(... AS DOUBLE). Flink already types these calls as DOUBLE.
+     */
+    static Map<String, Object> handleDoubleOrDecimalMath(RexCall rexCall, List<RexNode> operands,
+            Map<String, Object> jsonMap, SpecialExprType specialType) {
+        Map<String, Object> result = RexNodeUtil.handleSimpleFunction(rexCall, operands, jsonMap, specialType);
+        Object rawArgs = result.get("arguments");
+        if (!(rawArgs instanceof List)) {
+            return result;
+        }
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> args = (List<Map<String, Object>>) rawArgs;
+        for (int i = 0; i < args.size(); i++) {
+            if (!isDoubleOrDecimalArg(args.get(i))) {
+                args.set(i, castArgToDouble(args.get(i)));
+            }
+        }
+        return result;
+    }
+
+    private static boolean isDoubleOrDecimalArg(Map<String, Object> argMap) {
+        int id = nativeTypeId(argMap);
+        return id == RexNodeUtil.RexTypeToIdMap.get("DOUBLE")
+                || id == RexNodeUtil.RexTypeToIdMap.get("DECIMAL")
+                || id == RexNodeUtil.RexTypeToIdMap.get("DECIMAL128");
+    }
+
+    private static int nativeTypeId(Map<String, Object> argMap) {
+        Object typeId = argMap.get("returnType");
+        if (typeId == null) {
+            typeId = argMap.get("dataType");
+        }
+        return typeId instanceof Number ? ((Number) typeId).intValue() : -1;
+    }
+
+    private static Map<String, Object> castArgToDouble(Map<String, Object> operandMap) {
+        Map<String, Object> castMap = new LinkedHashMap<>();
+        castMap.put("exprType", "FUNCTION");
+        castMap.put("function_name", "CAST");
+        castMap.put("returnType", RexNodeUtil.RexTypeToIdMap.get("DOUBLE"));
+        List<Map<String, Object>> castArgs = new ArrayList<>();
+        castArgs.add(operandMap);
+        castMap.put("arguments", castArgs);
+        return castMap;
     }
 
     static Map<String, Object> handleLn(RexCall rexCall, List<RexNode> operands,

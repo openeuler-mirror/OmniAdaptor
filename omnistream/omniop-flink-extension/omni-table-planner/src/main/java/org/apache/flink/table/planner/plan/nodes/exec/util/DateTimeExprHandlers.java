@@ -279,6 +279,19 @@ final class DateTimeExprHandlers {
         Map<String, Object> fromUnixTimeInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
         RexNodeUtil.setDataType(operands.get(0), fromUnixTimeInputArg, "dataType");
         RexNodeUtil.normalizeCharLiteralToVarchar(fromUnixTimeInputArg);
+        // from_unixtime is registered as {LONG, VARCHAR}. INTEGER and other numeric
+        // inputs are cast to BIGINT first so codegen can match that signature.
+        Integer bigintTypeId = RexNodeUtil.RexTypeToIdMap.get("BIGINT");
+        if (!bigintTypeId.equals(fromUnixTimeInputArg.get("dataType"))) {
+            Map<String, Object> castMap = new LinkedHashMap<>();
+            castMap.put("exprType", "FUNCTION");
+            castMap.put("function_name", "CAST");
+            castMap.put("returnType", bigintTypeId);
+            List<Map<String, Object>> castArgs = new ArrayList<>();
+            castArgs.add(fromUnixTimeInputArg);
+            castMap.put("arguments", castArgs);
+            fromUnixTimeInputArg = castMap;
+        }
         fromUnixTimeArgs.add(fromUnixTimeInputArg);
         Map<String, Object> fromUnixTimeFormatArg;
         if (operands.size() >= 2) {
