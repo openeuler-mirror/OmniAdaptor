@@ -220,9 +220,7 @@ final class StringExprHandlers {
 
     static Map<String, Object> handleLike(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
-        // LIKE: 2-arg native via LikeFunction (vectorized); 3-arg ESCAPE -> INVALID fallback.
-        // NOT LIKE arrives as NOT(LIKE(..)) via sql2rel convertlet, reuses UNARY/NOT branch.
-        if (operands.size() != 2) {
+        if (operands.size() != 2 && operands.size() != 3) {
             jsonMap.put("exprType", "INVALID");
             return jsonMap;
         }
@@ -241,15 +239,23 @@ final class StringExprHandlers {
 
     static Map<String, Object> handleSimilarTo(RexCall rexCall, List<RexNode> operands,
             Map<String, Object> jsonMap, SpecialExprType specialType) {
-        // SIMILAR TO: 2-arg native via SimilarExpr (vectorized); 3-arg with ESCAPE not supported -> fallback.
-        if (operands.size() != 2) {
+        if (operands.size() != 2 && operands.size() != 3) {
             jsonMap.put("exprType", "INVALID");
             return jsonMap;
         }
         jsonMap.put("exprType", "SIMILAR_TO");
         RexNodeUtil.setDataType(rexCall, jsonMap, "returnType");
-        jsonMap.put("value", RexNodeUtil.buildJsonMap(operands.get(0)));
-        jsonMap.put("pattern", RexNodeUtil.buildJsonMap(operands.get(1)));
+        Map<String, Object> valueMap = RexNodeUtil.buildJsonMap(operands.get(0));
+        Map<String, Object> patternMap = RexNodeUtil.buildJsonMap(operands.get(1));
+        if (operands.size() == 3) {
+            RexNodeUtil.normalizeCharLiteralToVarchar(valueMap);
+            RexNodeUtil.normalizeCharLiteralToVarchar(patternMap);
+            Map<String, Object> escapeMap = RexNodeUtil.buildJsonMap(operands.get(2));
+            RexNodeUtil.normalizeCharLiteralToVarchar(escapeMap);
+            jsonMap.put("escape", escapeMap);
+        }
+        jsonMap.put("value", valueMap);
+        jsonMap.put("pattern", patternMap);
         return jsonMap;
     }
 
