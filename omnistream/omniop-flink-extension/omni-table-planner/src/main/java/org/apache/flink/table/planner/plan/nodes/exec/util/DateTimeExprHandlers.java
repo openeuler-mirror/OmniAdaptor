@@ -115,12 +115,12 @@ final class DateTimeExprHandlers {
         jsonMap.put("function_name", "to_date");
         List<Map<String, Object>> toDateArgs = new ArrayList<>();
         Map<String, Object> toDateInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
-        RexNodeUtil.normalizeCharLiteralToVarchar(toDateInputArg);
+        RexNodeUtil.normalizeCharToVarchar(toDateInputArg);
         toDateArgs.add(toDateInputArg);
         Map<String, Object> toDateFormatArg;
         if (operands.size() >= 2) {
             toDateFormatArg = RexNodeUtil.buildJsonMap(operands.get(1));
-            RexNodeUtil.normalizeCharLiteralToVarchar(toDateFormatArg);
+            RexNodeUtil.normalizeCharToVarchar(toDateFormatArg);
         } else {
             // Flink default: TO_DATE(string) -> 'yyyy-MM-dd'
             toDateFormatArg = new LinkedHashMap<>();
@@ -148,7 +148,7 @@ final class DateTimeExprHandlers {
         jsonMap.put("function_name", "to_date");
         List<Map<String, Object>> dateArgs = new ArrayList<>();
         Map<String, Object> dateInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
-        RexNodeUtil.normalizeCharLiteralToVarchar(dateInputArg);
+        RexNodeUtil.normalizeCharToVarchar(dateInputArg);
         dateArgs.add(dateInputArg);
         // DATE(string) always uses 'yyyy-MM-dd' format
         Map<String, Object> dateFormatArg = new LinkedHashMap<>();
@@ -278,7 +278,7 @@ final class DateTimeExprHandlers {
         List<Map<String, Object>> fromUnixTimeArgs = new ArrayList<>();
         Map<String, Object> fromUnixTimeInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
         RexNodeUtil.setDataType(operands.get(0), fromUnixTimeInputArg, "dataType");
-        RexNodeUtil.normalizeCharLiteralToVarchar(fromUnixTimeInputArg);
+        RexNodeUtil.normalizeCharToVarchar(fromUnixTimeInputArg);
         // from_unixtime is registered as {LONG, VARCHAR}. INTEGER and other numeric
         // inputs are cast to BIGINT first so codegen can match that signature.
         Integer bigintTypeId = RexNodeUtil.RexTypeToIdMap.get("BIGINT");
@@ -296,7 +296,7 @@ final class DateTimeExprHandlers {
         Map<String, Object> fromUnixTimeFormatArg;
         if (operands.size() >= 2) {
             fromUnixTimeFormatArg = RexNodeUtil.buildJsonMap(operands.get(1));
-            RexNodeUtil.normalizeCharLiteralToVarchar(fromUnixTimeFormatArg);
+            RexNodeUtil.normalizeCharToVarchar(fromUnixTimeFormatArg);
         } else {
             // Flink default: FROM_UNIXTIME(numeric) -> 'yyyy-MM-dd HH:mm:ss'
             fromUnixTimeFormatArg = new LinkedHashMap<>();
@@ -336,12 +336,12 @@ final class DateTimeExprHandlers {
             jsonMap.put("function_name", "flink_unix_timestamp_with_tz");
             // Input string.
             Map<String, Object> inputArg = RexNodeUtil.buildJsonMap(operands.get(0));
-            RexNodeUtil.normalizeCharLiteralToVarchar(inputArg);
+            RexNodeUtil.normalizeCharToVarchar(inputArg);
             args.add(inputArg);
             // Optional format (2-arg form).
             if (operands.size() >= 2) {
                 Map<String, Object> formatArg = RexNodeUtil.buildJsonMap(operands.get(1));
-                RexNodeUtil.normalizeCharLiteralToVarchar(formatArg);
+                RexNodeUtil.normalizeCharToVarchar(formatArg);
                 args.add(formatArg);
             }
             // Trailing session zone-id literal (Plan A).

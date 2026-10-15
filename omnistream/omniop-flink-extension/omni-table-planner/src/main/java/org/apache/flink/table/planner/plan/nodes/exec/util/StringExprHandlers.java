@@ -230,7 +230,7 @@ final class StringExprHandlers {
         List<Map<String, Object>> likeArgList = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
             Map<String, Object> argMap = RexNodeUtil.buildJsonMap(operands.get(i));
-            RexNodeUtil.normalizeCharLiteralToVarchar(argMap);
+            RexNodeUtil.normalizeCharToVarchar(argMap);
             likeArgList.add(argMap);
         }
         jsonMap.put("arguments", likeArgList);
@@ -248,10 +248,10 @@ final class StringExprHandlers {
         Map<String, Object> valueMap = RexNodeUtil.buildJsonMap(operands.get(0));
         Map<String, Object> patternMap = RexNodeUtil.buildJsonMap(operands.get(1));
         if (operands.size() == 3) {
-            RexNodeUtil.normalizeCharLiteralToVarchar(valueMap);
-            RexNodeUtil.normalizeCharLiteralToVarchar(patternMap);
+            RexNodeUtil.normalizeCharToVarchar(valueMap);
+            RexNodeUtil.normalizeCharToVarchar(patternMap);
             Map<String, Object> escapeMap = RexNodeUtil.buildJsonMap(operands.get(2));
-            RexNodeUtil.normalizeCharLiteralToVarchar(escapeMap);
+            RexNodeUtil.normalizeCharToVarchar(escapeMap);
             jsonMap.put("escape", escapeMap);
         }
         jsonMap.put("value", valueMap);
@@ -278,10 +278,10 @@ final class StringExprHandlers {
         jsonMap.put("function_name", "overlay");
         List<Map<String, Object>> overlayArgs = new ArrayList<>();
         Map<String, Object> overlayInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
-        RexNodeUtil.normalizeCharLiteralToVarchar(overlayInputArg);
+        RexNodeUtil.normalizeCharToVarchar(overlayInputArg);
         overlayArgs.add(overlayInputArg);
         Map<String, Object> overlayReplaceArg = RexNodeUtil.buildJsonMap(operands.get(1));
-        RexNodeUtil.normalizeCharLiteralToVarchar(overlayReplaceArg);
+        RexNodeUtil.normalizeCharToVarchar(overlayReplaceArg);
         overlayArgs.add(overlayReplaceArg);
         Map<String, Object> overlayPosArg = RexNodeUtil.buildJsonMap(operands.get(2));
         overlayArgs.add(overlayPosArg);
@@ -324,13 +324,13 @@ final class StringExprHandlers {
         // Native numeric overload is registered on {OMNI_LONG} only (HexBigintFunction
         // takes int64_t), so an INT-family input that is not BIGINT must be CAST to
         // BIGINT to match the native signature. String inputs ({VARCHAR}/{CHAR}) map
-        // directly; normalizeCharLiteralToVarchar coerces CHAR literals to OMNI_VARCHAR.
+        // directly; normalizeCharToVarchar coerces CHAR literals to OMNI_VARCHAR.
         jsonMap.put("exprType", "FUNCTION");
         jsonMap.put("returnType", RexNodeUtil.RexTypeToIdMap.get("VARCHAR"));
         jsonMap.put("function_name", "hex");
         List<Map<String, Object>> hexArgs = new ArrayList<>();
         Map<String, Object> hexInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
-        RexNodeUtil.normalizeCharLiteralToVarchar(hexInputArg);
+        RexNodeUtil.normalizeCharToVarchar(hexInputArg);
         SqlTypeName hexInputTypeName = operands.get(0).getType().getSqlTypeName();
         if (hexInputTypeName == SqlTypeName.INTEGER
                 || hexInputTypeName == SqlTypeName.TINYINT
@@ -361,13 +361,13 @@ final class StringExprHandlers {
         jsonMap.put("function_name", "str_to_map");
         List<Map<String, Object>> strToMapArgs = new ArrayList<>();
         Map<String, Object> strToMapInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
-        RexNodeUtil.normalizeCharLiteralToVarchar(strToMapInputArg);
+        RexNodeUtil.normalizeCharToVarchar(strToMapInputArg);
         strToMapArgs.add(strToMapInputArg);
         // entry delimiter (string2), default ','
         Map<String, Object> strToMapEntryDelimArg;
         if (operands.size() >= 2) {
             strToMapEntryDelimArg = RexNodeUtil.buildJsonMap(operands.get(1));
-            RexNodeUtil.normalizeCharLiteralToVarchar(strToMapEntryDelimArg);
+            RexNodeUtil.normalizeCharToVarchar(strToMapEntryDelimArg);
         } else {
             strToMapEntryDelimArg = new LinkedHashMap<>();
             strToMapEntryDelimArg.put("exprType", "LITERAL");
@@ -381,7 +381,7 @@ final class StringExprHandlers {
         Map<String, Object> strToMapKvDelimArg;
         if (operands.size() >= 3) {
             strToMapKvDelimArg = RexNodeUtil.buildJsonMap(operands.get(2));
-            RexNodeUtil.normalizeCharLiteralToVarchar(strToMapKvDelimArg);
+            RexNodeUtil.normalizeCharToVarchar(strToMapKvDelimArg);
         } else {
             strToMapKvDelimArg = new LinkedHashMap<>();
             strToMapKvDelimArg.put("exprType", "LITERAL");
