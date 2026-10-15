@@ -217,7 +217,7 @@ public class StreamExecGlobalGroupAggregate extends StreamExecAggregateBase {
 
         List<String> accTypesList = new ArrayList<>();
         for (LogicalType accType : globalAccTypes) {
-            accTypesList.add(accType.toString());
+            accTypesList.add(DescriptionUtil.toAccTypeString(accType));
         }
         aggInfoListMap.put("globalAccTypes", accTypesList); // Empty list
 
