@@ -484,16 +484,27 @@ final class StringExprHandlers {
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         jsonMap.put("exprType", "FUNCTION");
         RexNodeUtil.setDataType(rexCall, jsonMap, "returnType");
+        RexNodeUtil.normalizeCharToVarchar(jsonMap);
         List<Map<String, Object>> locateArgList = new ArrayList<>();
         if (operands.size() == 2) {
             jsonMap.put("function_name", "position");
-            locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(0)));
-            locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(1)));
+            Map<String, Object> subArg = RexNodeUtil.buildJsonMap(operands.get(0));
+            RexNodeUtil.normalizeCharToVarchar(subArg);
+            locateArgList.add(subArg);
+            Map<String, Object> strArg = RexNodeUtil.buildJsonMap(operands.get(1));
+            RexNodeUtil.normalizeCharToVarchar(strArg);
+            locateArgList.add(strArg);
         } else {
             jsonMap.put("function_name", "flink_locate");
-            locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(0)));
-            locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(1)));
-            locateArgList.add(RexNodeUtil.buildJsonMap(operands.get(2)));
+            Map<String, Object> subArg = RexNodeUtil.buildJsonMap(operands.get(0));
+            RexNodeUtil.normalizeCharToVarchar(subArg);
+            locateArgList.add(subArg);
+            Map<String, Object> strArg = RexNodeUtil.buildJsonMap(operands.get(1));
+            RexNodeUtil.normalizeCharToVarchar(strArg);
+            locateArgList.add(strArg);
+            Map<String, Object> posArg = RexNodeUtil.buildJsonMap(operands.get(2));
+            RexNodeUtil.normalizeCharToVarchar(posArg);
+            locateArgList.add(posArg);
         }
         jsonMap.put("arguments", locateArgList);
         return jsonMap;

@@ -622,8 +622,9 @@ public class RexNodeUtil {
      * any CHAR-typed operand in a binary expression subtree to VARCHAR so the native
      * JSONParser resolves to existing {OMNI_VARCHAR, OMNI_VARCHAR} signatures without
      * attempting an unregistered CAST_String_Char.
+     * Package-private so the per-category handler classes can reuse it.
      */
-    private static void normalizeCharToVarchar(Map<String, Object> jsonMap) {
+    static void normalizeCharToVarchar(Map<String, Object> jsonMap) {
         if (jsonMap == null) {
             return;
         }
@@ -633,6 +634,17 @@ public class RexNodeUtil {
         if (RexTypeToIdMap.get("CHAR").equals(jsonMap.get("returnType"))) {
             jsonMap.put("returnType", RexTypeToIdMap.get("VARCHAR"));
         }
+    }
+
+    /**
+     * SEARCH 下推出的 IN/BETWEEN 参数会直接沿用探针列的 SqlTypeName。当探针列是 CHAR 时，
+     * FIELD_REFERENCE 与字面量都会带 OMNI_CHAR（16），而 native 字符串 IN/BETWEEN 只注册了
+     * VARCHAR（15）签名，CHAR 会触发 native 拒绝求值并卡住无输出。此处把 CHAR 归一化为
+     * VARCHAR，与二进制比较路径（{@link #buildJsonMap} 内的 normalizeCharToVarchar）一致。
+     */
+    private static void normalizeInArgument(Map<String, Object> argMap) {
+        normalizeCharLiteralToVarchar(argMap);
+        normalizeCharToVarchar(argMap);
     }
 
     // Sarg endpoint (NlsString for VARCHAR/CHAR, TimestampString for TIMESTAMP) -> primitive,
@@ -1161,6 +1173,9 @@ public class RexNodeUtil {
 
             List<Map<String, Object>> inArgs = new ArrayList<>();
             inArgs.add(buildJsonMap(operands.get(0)));
+            // IN 探针列是 CHAR 时，FIELD_REFERENCE 与字面量都会带 OMNI_CHAR（16），而 native
+            // 字符串 IN 只注册了 VARCHAR 签名，必须归一化为 VARCHAR 否则 native 拒绝求值。
+            normalizeInArgument(inArgs.get(0));
             // Extract all elements from the list
             List<?> values = new ArrayList<>(sarg.rangeSet.asRanges().stream()
                     .map(range -> range.lowerEndpoint()).collect(Collectors.toList()));
@@ -1171,6 +1186,7 @@ public class RexNodeUtil {
                 literalMap.put("isNull", false);
                 literalMap.put("value", extractSargEndpoint(values.get(i)));
                 setDataType(operands.get(0), literalMap, "dataType");
+                normalizeInArgument(literalMap);
                 inArgs.add(literalMap);
             }
             jsonMap.put("arguments", inArgs);
@@ -1185,12 +1201,14 @@ public class RexNodeUtil {
             setDataType(rexCall, inMap, "returnType");
             List<Map<String, Object>> inArgs = new ArrayList<>();
             inArgs.add(buildJsonMap(operands.get(0))); // value to test
+            normalizeInArgument(inArgs.get(0));
             sarg.rangeSet.complement().asRanges().forEach(r -> {
                 Map<String, Object> literalMap = new LinkedHashMap<>();
                 literalMap.put("exprType", "LITERAL");
                 literalMap.put("isNull", false);
                 literalMap.put("value", extractSargEndpoint(r.lowerEndpoint()));
                 setDataType(operands.get(0), literalMap, "dataType");
+                normalizeInArgument(literalMap);
                 inArgs.add(literalMap);
             });
             inMap.put("arguments", inArgs);
@@ -1239,13 +1257,16 @@ public class RexNodeUtil {
                     Map<String, Object> betweenMap = new LinkedHashMap<>();
                     betweenMap.put("exprType", "BETWEEN");
                     setDataType(rexCall, betweenMap, "returnType");
-                    betweenMap.put("value", buildJsonMap(operands.get(0)));
+                    Map<String, Object> valueMap = buildJsonMap(operands.get(0));
+                    normalizeInArgument(valueMap);
+                    betweenMap.put("value", valueMap);
 
                     Map<String, Object> lowMap = new LinkedHashMap<>();
                     lowMap.put("exprType", "LITERAL");
                     lowMap.put("isNull", false);
                     lowMap.put("value", extractSargEndpoint(lowerBound));
                     setDataType(operands.get(0), lowMap, "dataType");
+                    normalizeInArgument(lowMap);
                     betweenMap.put("lower_bound", lowMap);
 
                     Map<String, Object> upMap = new LinkedHashMap<>();
@@ -1253,6 +1274,7 @@ public class RexNodeUtil {
                     upMap.put("isNull", false);
                     upMap.put("value", extractSargEndpoint(upperBound));
                     setDataType(operands.get(0), upMap, "dataType");
+                    normalizeInArgument(upMap);
                     betweenMap.put("upper_bound", upMap);
 
                     if (isComplement) {
@@ -1543,8 +1565,12 @@ public class RexNodeUtil {
     /**
      * Shared handler for expressions that translate to a plain FUNCTION node: the function_name
      * comes from {@link #simpleFunctionNameMap} and every operand is forwarded as an argument,
-     * with CHAR literals normalized to VARCHAR. Any expression whose native signature matches
-     * its Flink operands one-to-one can reuse this by registering a name in
+     * with CHAR literals normalized to VARCHAR. CHAR-typed operands (e.g. a CHAR column feeding
+     * a string method) and a CHAR-typed return are normalized to VARCHAR as well, so the emitted
+     * signatures match the native VARCHAR registries on both the codegen and the vectorized paths
+     * (otherwise mixing a codegen-only CHAR signature with a vectorization-only CHAR signature in
+     * one Calc stalls the native evaluator). Any expression whose native signature matches its
+     * Flink operands one-to-one can reuse this by registering a name in
      * {@link #simpleFunctionNameMap} plus a handler entry in {@link #specialHandlerMap}.
      * Package-private so the per-category handler classes can reference it.
      */
@@ -1552,11 +1578,13 @@ public class RexNodeUtil {
             Map<String, Object> jsonMap, SpecialExprType specialType) {
         jsonMap.put("exprType", "FUNCTION");
         setDataType(rexCall, jsonMap, "returnType");
+        normalizeCharToVarchar(jsonMap);
         jsonMap.put("function_name", simpleFunctionNameMap.get(specialType));
         List<Map<String, Object>> simpleArgList = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
             Map<String, Object> argMap = buildJsonMap(operands.get(i));
             normalizeCharLiteralToVarchar(argMap);
+            normalizeCharToVarchar(argMap);
             simpleArgList.add(argMap);
         }
         jsonMap.put("arguments", simpleArgList);
