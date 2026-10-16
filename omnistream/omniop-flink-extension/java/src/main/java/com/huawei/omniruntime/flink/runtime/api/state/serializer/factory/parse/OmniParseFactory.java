@@ -7,6 +7,7 @@ import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.Omni
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniSerializerJsonInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type.BinaryTypeInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type.TimerTypeInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.type.WindowTypeInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.utils.OmniStateSerializerUtils;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
@@ -87,6 +88,7 @@ public abstract class OmniParseFactory {
                 case ROW:
                 case BINARY_ROW:
                 case EXTERNAL:
+                case TIME_WINDOW:
                     factory = new OmniParseValueFactory();
                     break;
                 case UNKNOWN:
@@ -182,6 +184,8 @@ public abstract class OmniParseFactory {
                 LOG.error("method : buildTypeInformationBy -> build external exception", e);
                 throw new GeneralRuntimeException(e);
             }
+        } else if (OmniSerializerType.TIME_WINDOW.equals(info.getSerializerType())) {
+            return WindowTypeInfo.ofClass(info.getSerializerAttributes().getClazz());
         }
 
         return null;
@@ -197,7 +201,9 @@ public abstract class OmniParseFactory {
         }
         OmniSerializerJsonInfo jsonInfo = new OmniSerializerJsonInfo();
         jsonInfo.setSerializerName(typeSerializer.getClass().getName());
-        jsonInfo.setSerializerInstanceClazz(typeSerializer.createInstance().getClass().getName());
+        Class<?> serializerInstance = OmniStateSerializerUtils.getSerializerInstance(typeSerializer, serializerType);
+        String serializerInstanceName = null == serializerInstance ? null : serializerInstance.getName();
+        jsonInfo.setSerializerInstanceClazz(serializerInstanceName);
         if (serializerType.isBasic()) {
             return jsonInfo;
         } else if (serializerType.isPrimitiveArray()) {
@@ -211,7 +217,7 @@ public abstract class OmniParseFactory {
                     OmniSerializerType.get(listSerializer.getElementSerializer().getClass()),
                     depth + DEPTH_INTERVAL);
             jsonInfo.setElementSerializer(elementSerializerJsonInfo);
-            jsonInfo.setSerializerAttributes(OmniSerializerAttributesInfo.ofList(typeSerializer.createInstance().getClass().getName()));
+            jsonInfo.setSerializerAttributes(OmniSerializerAttributesInfo.ofList(serializerInstanceName));
             return jsonInfo;
         } else if (OmniSerializerType.MAP.equals(serializerType)) {
             MapSerializer<?, ?> mapSerializer = (MapSerializer<?, ?>) typeSerializer;
@@ -277,6 +283,9 @@ public abstract class OmniParseFactory {
             jsonInfo.setSerializerAttributes(OmniSerializerAttributesInfo.ofTuple(tupleSerializer.getTupleClass().getName()));
             return jsonInfo;
         } else if (OmniSerializerType.VOID_NAMESPACE.equals(serializerType)) {
+            return jsonInfo;
+        } else if (OmniSerializerType.TIME_WINDOW.equals(serializerType)) {
+            jsonInfo.setSerializerAttributes(OmniSerializerAttributesInfo.ofClazz(serializerInstanceName));
             return jsonInfo;
         } else if (OmniSerializerType.TIMER.equals(serializerType)) {
             TimerSerializer<?, ?> timerSerializer = (TimerSerializer<?, ?>) typeSerializer;
