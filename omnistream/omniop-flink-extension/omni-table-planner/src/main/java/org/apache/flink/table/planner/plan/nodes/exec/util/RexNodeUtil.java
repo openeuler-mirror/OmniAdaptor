@@ -457,21 +457,6 @@ public class RexNodeUtil {
         }
     }
 
-    /**
-     * Calcite may type string literals as CHAR(n); OmniOperator function signatures expect
-     * OMNI_VARCHAR. Normalize CHAR literals in the JSON subtree so JSONParser lookup matches.
-     * Package-private so the per-category handler classes can reuse it.
-     */
-    static void normalizeCharLiteralToVarchar(Map<String, Object> jsonMap) {
-        if (jsonMap == null) {
-            return;
-        }
-        if ("LITERAL".equals(jsonMap.get("exprType"))
-                && RexTypeToIdMap.get("CHAR").equals(jsonMap.get("dataType"))) {
-            jsonMap.put("dataType", RexTypeToIdMap.get("VARCHAR"));
-        }
-    }
-
     private static boolean isTimestampType(RexNode rexNode) {
         SqlTypeName typeName = rexNode.getType().getSqlTypeName();
         return typeName == SqlTypeName.TIMESTAMP
@@ -634,17 +619,6 @@ public class RexNodeUtil {
         if (RexTypeToIdMap.get("CHAR").equals(jsonMap.get("returnType"))) {
             jsonMap.put("returnType", RexTypeToIdMap.get("VARCHAR"));
         }
-    }
-
-    /**
-     * SEARCH 下推出的 IN/BETWEEN 参数会直接沿用探针列的 SqlTypeName。当探针列是 CHAR 时，
-     * FIELD_REFERENCE 与字面量都会带 OMNI_CHAR（16），而 native 字符串 IN/BETWEEN 只注册了
-     * VARCHAR（15）签名，CHAR 会触发 native 拒绝求值并卡住无输出。此处把 CHAR 归一化为
-     * VARCHAR，与二进制比较路径（{@link #buildJsonMap} 内的 normalizeCharToVarchar）一致。
-     */
-    private static void normalizeInArgument(Map<String, Object> argMap) {
-        normalizeCharLiteralToVarchar(argMap);
-        normalizeCharToVarchar(argMap);
     }
 
     // Sarg endpoint (NlsString for VARCHAR/CHAR, TimestampString for TIMESTAMP) -> primitive,
@@ -1175,7 +1149,7 @@ public class RexNodeUtil {
             inArgs.add(buildJsonMap(operands.get(0)));
             // IN 探针列是 CHAR 时，FIELD_REFERENCE 与字面量都会带 OMNI_CHAR（16），而 native
             // 字符串 IN 只注册了 VARCHAR 签名，必须归一化为 VARCHAR 否则 native 拒绝求值。
-            normalizeInArgument(inArgs.get(0));
+            normalizeCharToVarchar(inArgs.get(0));
             // Extract all elements from the list
             List<?> values = new ArrayList<>(sarg.rangeSet.asRanges().stream()
                     .map(range -> range.lowerEndpoint()).collect(Collectors.toList()));
@@ -1186,7 +1160,7 @@ public class RexNodeUtil {
                 literalMap.put("isNull", false);
                 literalMap.put("value", extractSargEndpoint(values.get(i)));
                 setDataType(operands.get(0), literalMap, "dataType");
-                normalizeInArgument(literalMap);
+                normalizeCharToVarchar(literalMap);
                 inArgs.add(literalMap);
             }
             jsonMap.put("arguments", inArgs);
@@ -1201,14 +1175,14 @@ public class RexNodeUtil {
             setDataType(rexCall, inMap, "returnType");
             List<Map<String, Object>> inArgs = new ArrayList<>();
             inArgs.add(buildJsonMap(operands.get(0))); // value to test
-            normalizeInArgument(inArgs.get(0));
+            normalizeCharToVarchar(inArgs.get(0));
             sarg.rangeSet.complement().asRanges().forEach(r -> {
                 Map<String, Object> literalMap = new LinkedHashMap<>();
                 literalMap.put("exprType", "LITERAL");
                 literalMap.put("isNull", false);
                 literalMap.put("value", extractSargEndpoint(r.lowerEndpoint()));
                 setDataType(operands.get(0), literalMap, "dataType");
-                normalizeInArgument(literalMap);
+                normalizeCharToVarchar(literalMap);
                 inArgs.add(literalMap);
             });
             inMap.put("arguments", inArgs);
@@ -1258,7 +1232,7 @@ public class RexNodeUtil {
                     betweenMap.put("exprType", "BETWEEN");
                     setDataType(rexCall, betweenMap, "returnType");
                     Map<String, Object> valueMap = buildJsonMap(operands.get(0));
-                    normalizeInArgument(valueMap);
+                    normalizeCharToVarchar(valueMap);
                     betweenMap.put("value", valueMap);
 
                     Map<String, Object> lowMap = new LinkedHashMap<>();
@@ -1266,7 +1240,7 @@ public class RexNodeUtil {
                     lowMap.put("isNull", false);
                     lowMap.put("value", extractSargEndpoint(lowerBound));
                     setDataType(operands.get(0), lowMap, "dataType");
-                    normalizeInArgument(lowMap);
+                    normalizeCharToVarchar(lowMap);
                     betweenMap.put("lower_bound", lowMap);
 
                     Map<String, Object> upMap = new LinkedHashMap<>();
@@ -1274,7 +1248,7 @@ public class RexNodeUtil {
                     upMap.put("isNull", false);
                     upMap.put("value", extractSargEndpoint(upperBound));
                     setDataType(operands.get(0), upMap, "dataType");
-                    normalizeInArgument(upMap);
+                    normalizeCharToVarchar(upMap);
                     betweenMap.put("upper_bound", upMap);
 
                     if (isComplement) {
@@ -1583,7 +1557,6 @@ public class RexNodeUtil {
         List<Map<String, Object>> simpleArgList = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
             Map<String, Object> argMap = buildJsonMap(operands.get(i));
-            normalizeCharLiteralToVarchar(argMap);
             normalizeCharToVarchar(argMap);
             simpleArgList.add(argMap);
         }
@@ -1606,7 +1579,7 @@ public class RexNodeUtil {
         List<Map<String, Object>> simpleArgList = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
             Map<String, Object> argMap = buildJsonMap(operands.get(i));
-            normalizeCharLiteralToVarchar(argMap);
+            normalizeCharToVarchar(argMap);
             simpleArgList.add(argMap);
         }
         jsonMap.put("arguments", simpleArgList);

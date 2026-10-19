@@ -80,7 +80,11 @@ final class JsonExprHandlers {
         jsonMap.put("function_name", "json_value");
 
         List<Map<String, Object>> jsonArgs = new ArrayList<>();
-        jsonArgs.add(RexNodeUtil.buildJsonMap(operands.get(0))); // json input
+        // json_value is registered as (VARCHAR, CHAR). CHAR columns must be rewritten to
+        // VARCHAR; the path literal stays CHAR so the signature still matches.
+        Map<String, Object> jsonInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
+        RexNodeUtil.normalizeCharToVarchar(jsonInputArg);
+        jsonArgs.add(jsonInputArg);
         jsonArgs.add(RexNodeUtil.buildJsonMap(operands.get(1))); // path expression
 
         // Parse ON EMPTY behavior (operands 2-4)
@@ -117,7 +121,10 @@ final class JsonExprHandlers {
         jsonMap.put("function_name", "json_query");
 
         List<Map<String, Object>> queryArgs = new ArrayList<>();
-        queryArgs.add(RexNodeUtil.buildJsonMap(operands.get(0)));
+        // json_query is registered as (VARCHAR, CHAR). Same document rewrite as json_value.
+        Map<String, Object> queryInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
+        RexNodeUtil.normalizeCharToVarchar(queryInputArg);
+        queryArgs.add(queryInputArg);
         queryArgs.add(RexNodeUtil.buildJsonMap(operands.get(1)));
 
         if (operands.size() > 2) {
@@ -175,10 +182,10 @@ final class JsonExprHandlers {
 
         List<Map<String, Object>> jsonExistsArgs = new ArrayList<>();
         Map<String, Object> jsonInputArg = RexNodeUtil.buildJsonMap(operands.get(0));
-        RexNodeUtil.normalizeCharLiteralToVarchar(jsonInputArg);
+        RexNodeUtil.normalizeCharToVarchar(jsonInputArg);
         jsonExistsArgs.add(jsonInputArg); // json value
         Map<String, Object> pathArg = RexNodeUtil.buildJsonMap(operands.get(1));
-        RexNodeUtil.normalizeCharLiteralToVarchar(pathArg);
+        RexNodeUtil.normalizeCharToVarchar(pathArg);
         jsonExistsArgs.add(pathArg); // path expression
 
         // Optional ON ERROR behavior (operand 2): SYMBOL literal -> synthesized VARCHAR literal.
