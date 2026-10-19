@@ -42,6 +42,8 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * OmniParseFactory
@@ -128,6 +130,29 @@ public abstract class OmniParseFactory {
                     ? TypeInformation.of(Object.class) : buildTypeInformationBy(valueSerializerInfo, depth + DEPTH_INTERVAL);
             return Types.MAP(keyTypeInfo, valueTypeInfo);
         } else if (OmniSerializerType.POJO.equals(info.getSerializerType())) {
+            List<String> fieldNames = info.getFieldNames();
+            List<OmniNativeSerializerJsonInfo> fieldInfos = info.getFieldSerializers();
+            boolean hasFieldNames = fieldNames != null && !fieldNames.isEmpty();
+            boolean hasFieldInfos = fieldInfos != null && !fieldInfos.isEmpty();
+            if (hasFieldNames || hasFieldInfos) {
+                if (!hasFieldNames || !hasFieldInfos || fieldNames.size() != fieldInfos.size()) {
+                    throw new GeneralRuntimeException("POJO field names and serializers must have matching sizes");
+                }
+                Map<String, TypeInformation<?>> fieldTypes = new LinkedHashMap<>();
+                for (int i = 0; i < fieldNames.size(); i++) {
+                    String fieldName = fieldNames.get(i);
+                    if (StringUtils.isBlank(fieldName) || fieldTypes.containsKey(fieldName)
+                            || fieldInfos.get(i) == null) {
+                        throw new GeneralRuntimeException("Invalid POJO field description at index " + i);
+                    }
+                    TypeInformation<?> fieldType = buildTypeInformationBy(fieldInfos.get(i), depth + DEPTH_INTERVAL);
+                    if (fieldType == null) {
+                        throw new GeneralRuntimeException("Unsupported POJO field type: " + fieldName);
+                    }
+                    fieldTypes.put(fieldName, fieldType);
+                }
+                return Types.POJO(info.getSerializerAttributes().getClazz(), fieldTypes);
+            }
             return Types.POJO(info.getSerializerAttributes().getClazz());
         } else if (OmniSerializerType.TUPLE.equals(info.getSerializerType())) {
             // 优先用 C++ 端递归传过来的 fieldSerializers 重建带具体字段类型的 TupleTypeInfo；
