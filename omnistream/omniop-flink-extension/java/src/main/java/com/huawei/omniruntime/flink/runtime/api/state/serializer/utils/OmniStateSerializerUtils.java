@@ -4,12 +4,14 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.OmniStateSerializerHelper;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.SC;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerOperatorStateMode;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerType;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniStateMetaSerializerInfo;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.runtime.taskmanager.OmniTask;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
@@ -38,6 +40,22 @@ public class OmniStateSerializerUtils {
 
     private static final LogicalTypeJsonSerializer LOGICAL_TYPE_JSON_SERIALIZER = new LogicalTypeJsonSerializer();
     private static final LogicalTypeJsonDeserializer LOGICAL_TYPE_JSON_DESERIALIZER = new LogicalTypeJsonDeserializer();
+
+    public static Class<?> getSerializerInstance(TypeSerializer<?> typeSerializer, OmniSerializerType serializerType) {
+        Object serializerInstance = typeSerializer.createInstance();
+        if (null != serializerInstance) {
+            return serializerInstance.getClass();
+        } else if (null != serializerType.getClazz()) {
+            return serializerType.getClazz();
+        }
+
+        return null;
+    }
+
+    public static String getSerializerInstanceClazz(TypeSerializer<?> typeSerializer, OmniSerializerType serializerType) {
+        Class<?> clazz = getSerializerInstance(typeSerializer, serializerType);
+        return null == clazz ? null : clazz.getName();
+    }
 
     public static String firstNonBlank(String... values) {
         return Arrays.stream(values)
