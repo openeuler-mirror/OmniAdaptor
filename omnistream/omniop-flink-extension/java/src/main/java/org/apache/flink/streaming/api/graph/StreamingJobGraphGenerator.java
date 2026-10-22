@@ -631,6 +631,17 @@ public class StreamingJobGraphGenerator {
 
         checkSourceOperator(jobType);
 
+        // BINARY/VARBINARY 驱动 VALUES 链时，Java→native 混合链路（createOutputBatch 等）尚不完整，
+        // 整作业回退 Flink 保证正确输出（与"BINARY 一律回退 Java"决策一致，且不改 SINK 白名单）。
+        if (jobType.equals(JobType.SQL) && OmniGraphOverride.isJobContainsValuesBinaryChain(chainInfos)) {
+            LOG.info("Job contains a VALUES source with BINARY/VARBINARY output, fall back the whole job to Flink.");
+            for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+                StreamConfig vertexConfig = new StreamConfig(vertexEntry.getValue().getConfiguration());
+                vertexConfig.setUseOmniEnabled(false);
+            }
+            return;
+        }
+
         boolean validateRes = true;
         boolean shouldDoSpiltWatermark = false;
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {

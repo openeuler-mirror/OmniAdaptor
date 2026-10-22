@@ -105,9 +105,12 @@ public class OperatorDescriptorHelper {
                 operatorFactory.getStreamOperatorClass(userCodeClassloader).getCanonicalName());
         fillBasicOperatorDescriptions(opDesc, operatorFactory, operatorConfig, userCodeClassloader);
         if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SimpleInputFormatOperatorFactory) {
-            LOG.info("operatorFactory is {}", operatorFactory.getClass().getCanonicalName());
-            // Add format field for VALUES-based sources to prevent native crash
-            // when the source description is sent to OmniStream native code
+            // VALUES-based sources: the full JSON description (format=values, tuples, outputTypes,
+            // outputNames, batch) is injected by CommonExecValues during planning and carried by the
+            // StreamConfig, so it is passed through verbatim to the native side. The format field is
+            // only ensured as a defensive fallback for non-injected legacy InputFormat sources.
+            LOG.info("operatorFactory is {} (VALUES source description passed through)",
+                    operatorFactory.getClass().getCanonicalName());
             String currentDesc = opDesc.getDescription();
             if (currentDesc != null && !currentDesc.isEmpty()) {
                 try {
@@ -117,7 +120,7 @@ public class OperatorDescriptorHelper {
                         opDesc.setDescription(descJson.toString());
                     }
                 } catch (Exception e) {
-                    LOG.warn("Failed to add format field to VALUES source description", e);
+                    LOG.warn("Failed to ensure format field in VALUES source description", e);
                 }
             }
         } else if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SourceOperatorFactory) {

@@ -260,6 +260,32 @@ public final class OmniGraphOverride {
         return type != null && type.matches("^INTERVAL(?: |_).*$");
     }
 
+    // 原生时间类型是 int64 毫秒，因此只能表示精度 <= 3。VALUES 源只放行白名单内的
+    // 字面量类型（LogicalType.toString() 形式，含可选的 " NOT NULL" 后缀）；FLOAT、
+    // INTERVAL、复杂 ROW/ARRAY/MAP、精度>3 的 TIME/TIMESTAMP、BINARY/VARBINARY 一律回退 Flink，
+    // 以保证与原生 Flink 输出严格一致。
+    private static final Set<String> VALUES_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
+            "BIGINT",
+            "INT",
+            "DOUBLE",
+            "DATE",
+            "BOOLEAN",
+            "TIME(0)",
+            "TIME(1)",
+            "TIME(2)",
+            "TIME(3)",
+            "TIMESTAMP(0)",
+            "TIMESTAMP(1)",
+            "TIMESTAMP(2)",
+            "TIMESTAMP(3)",
+            "TIMESTAMP(0) WITH LOCAL TIME ZONE",
+            "TIMESTAMP(1) WITH LOCAL TIME ZONE",
+            "TIMESTAMP(2) WITH LOCAL TIME ZONE",
+            "TIMESTAMP(3) WITH LOCAL TIME ZONE",
+            "VARCHAR",
+            "CHAR",
+            "DECIMAL"));
+
     /**
      * setStateBackend
      *
@@ -879,11 +905,12 @@ public final class OmniGraphOverride {
         if (!isSourceSupportNative) {
             return false;
         }
-        // VALUES-based sources (SimpleInputFormatOperatorFactory) are not supported
-        // in native SQL execution because OmniStream does not handle them
+        // VALUES-based sources (SimpleInputFormatOperatorFactory): the description is injected by
+        // CommonExecValues during planning (format=values, tuples, outputTypes, outputNames, batch).
+        // They are executed natively only when the description is complete and every output type is
+        // within the native VALUES whitelist; otherwise fall back to Flink.
         if (operatorFactory instanceof SimpleInputFormatOperatorFactory) {
-            LOG.info("validateSource: VALUES-based source (SimpleInputFormatOperatorFactory) is not supported for native execution");
-            return false;
+            return validateValuesSource(operatorDescription);
         }
         if (!operatorDescription.contains("originDescription")) {
             return true;
@@ -906,6 +933,121 @@ public final class OmniGraphOverride {
         }
         return jsonMap.containsKey("watermarkStrategy") && (jsonMap.get("watermarkStrategy") instanceof String)
                 && !((String) jsonMap.get("watermarkStrategy")).isEmpty();
+    }
+
+    private static boolean validateValuesSource(String operatorDescription) {
+        Map<String, Object> jsonMap = toJsonMap(operatorDescription);
+        if (jsonMap == null) {
+            LOG.info("validateSource: VALUES source description is not valid JSON, fall back to Flink.");
+            return false;
+        }
+        if (!"values".equals(jsonMap.get("format"))) {
+            LOG.info("validateSource: VALUES source description missing format=values, fall back to Flink.");
+            return false;
+        }
+        Object tuplesObj = jsonMap.get("tuples");
+        if (!(tuplesObj instanceof List)) {
+            LOG.info("validateSource: VALUES source description missing tuples, fall back to Flink.");
+            return false;
+        }
+        Object outputTypesObj = jsonMap.get("outputTypes");
+        if (!(outputTypesObj instanceof List) || ((List<?>) outputTypesObj).isEmpty()) {
+            LOG.info("validateSource: VALUES source description missing outputTypes, fall back to Flink.");
+            return false;
+        }
+        List<?> outputTypes = (List<?>) outputTypesObj;
+        for (Object outputType : outputTypes) {
+            if (!(outputType instanceof String) || !isValuesNativeSupportedType((String) outputType)) {
+                LOG.info("validateSource: VALUES source output type '{}' is not supported for native execution, "
+                        + "fall back to Flink.", outputType);
+                return false;
+            }
+        }
+        for (Object rowObj : (List<?>) tuplesObj) {
+            if (!(rowObj instanceof List) || ((List<?>) rowObj).size() != outputTypes.size()) {
+                LOG.info("validateSource: VALUES source tuples row width mismatch, fall back to Flink.");
+                return false;
+            }
+        }
+        LOG.info("validateSource: VALUES source is suitable for native execution.");
+        return true;
+    }
+
+    private static boolean isValuesNativeSupportedType(String type) {
+        String stripped = AbstractValidateOperatorStrategy.stripNotNull(type);
+        if (stripped == null) {
+            return false;
+        }
+        stripped = stripped.trim();
+        // VARCHAR(n) / CHAR(n)
+        if (stripped.startsWith("VARCHAR(") || stripped.startsWith("CHAR(")) {
+            return true;
+        }
+        // DECIMAL(p, s) with 1 <= p <= 38, Flink already validates the decimal range.
+        if (stripped.startsWith("DECIMAL")) {
+            return true;
+        }
+        return VALUES_SUPPORT_DATA_TYPE.contains(stripped);
+    }
+
+    /**
+     * Checks whether the chained node list contains a VALUES-based source
+     * (SimpleInputFormatOperatorFactory, i.e. the StreamExecValues InputFormat source).
+     */
+    private static boolean containsValuesSource(List<StreamNode> chainedNode) {
+        for (StreamNode node : chainedNode) {
+            if (node.getOperatorFactory() instanceof SimpleInputFormatOperatorFactory) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks whether any operator in the chained node list declares a BINARY/VARBINARY output type.
+     *
+     * <p>Flink restructures VALUES rows containing non-literal expressions (e.g. CAST) into a
+     * LogicalValues.createOneRow seed plus Calc projections, so the BINARY/VARBINARY columns may
+     * live in the downstream Calc nodes rather than in the VALUES source itself. The native Calc
+     * codegen cannot evaluate BINARY/VARBINARY literals (would hang), so such a chain must fall
+     * back to Flink.
+     */
+    private static boolean chainContainsBinaryOrVarbinaryOutput(List<StreamNode> chainedNode) {
+        for (StreamNode node : chainedNode) {
+            Map<String, Object> jsonMap = toJsonMap(node.getOperatorDescription());
+            if (jsonMap == null || !(jsonMap.get("outputTypes") instanceof List)) {
+                continue;
+            }
+            for (Object typeObj : (List<?>) jsonMap.get("outputTypes")) {
+                if (!(typeObj instanceof String)) {
+                    continue;
+                }
+                String type = AbstractValidateOperatorStrategy.stripNotNull((String) typeObj).trim();
+                if (type.startsWith("BINARY") || type.startsWith("VARBINARY")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks whether the whole job contains a VALUES-driven chain with BINARY/VARBINARY output.
+     *
+     * <p>Such a job would otherwise run in Java→native mixed mode (VALUES vertex falls back while
+     * the Sink stays native), where the native Java-RowData→VectorBatch conversion
+     * (OmniAbstractStreamTaskNetworkInput::createOutputBatch) is incomplete and crashes. The whole
+     * job must fall back to Flink to produce correct output.
+     */
+    public static boolean isJobContainsValuesBinaryChain(
+            Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
+        for (StreamingJobGraphGenerator.OperatorChainInfo chainInfo : chainInfos.values()) {
+            List<StreamNode> chainedNode = chainInfo.getAllChainedNodes();
+            if (containsValuesSource(chainedNode) && chainContainsBinaryOrVarbinaryOutput(chainedNode)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Map<String, Object> toJsonMap(String operatorDescription) {
