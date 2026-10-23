@@ -176,6 +176,7 @@ public final class OmniGraphOverride {
                     "LocalWindowAggregate",
                     "WatermarkAssigner",
                     "Rank",
+                    "WindowTableFunction",
                     "StreamRecordTimestampInserter",
                     "ConstraintEnforcer"));
         }
@@ -183,6 +184,7 @@ public final class OmniGraphOverride {
         OP_NAME_OF_SQL.addAll(Arrays.asList("Calc", "GroupAggregate", "LocalGroupAggregate", "GlobalGroupAggregate",
                 "IncrementalGroupAggregate", "Join", "LookupJoin", "WindowAggregate", "WindowJoin", "GroupWindowAggregate",
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",
+                "WindowTableFunction",
                 "StreamRecordTimestampInserter", "ConstraintEnforcer"));
     }
 
