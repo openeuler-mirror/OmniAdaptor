@@ -73,7 +73,10 @@ public class SimpleCounter implements Counter {
      */
     @Override
     public long getCount() {
-        return nativeRef == 0 ? count : getNativeCounterNew(nativeRef);
+        if (nativeRef != 0) {
+            count = getNativeCounterNew(nativeRef);
+        }
+        return count;
     }
 
     private native long getNativeCounterNew(long nativeRef);

@@ -283,29 +283,65 @@ public class OmniMetricHelper {
                                              Collection<StreamConfig> chainedConfigs) {
         List<SimpleCounter> nativeBackedCounters = new ArrayList<>();
         for (StreamConfig chainedConfig : chainedConfigs) {
-            if (chainedConfig.getOperatorName().contains("Correlate")) {
-                String metricsMapKey = getMetricsMapKey(chainedConfig.getOperatorName(), chainedConfig.getOperatorID());
-                long nativeRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
-                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_IN);
-                InternalOperatorMetricGroup operatorMetricGroup =
-                        metrics.getOrAddOperator(chainedConfig.getOperatorID(), chainedConfig.getOperatorName());
-                ((SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsInCounter()).setNativeRef(nativeRef);
-                if (chainedConfig.isChainStart()) {
-                    operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
-                }
-            }
-            if (!chainedConfig.getOperatorName().contains("Source")) {
+            String operatorName = chainedConfig.getOperatorName();
+            if (operatorName == null) {
                 continue;
             }
-            String metricsMapKey = getMetricsMapKey(chainedConfig.getOperatorName(), chainedConfig.getOperatorID());
-            long nativeRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
-                    "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_OUT);
-            InternalOperatorMetricGroup operatorMetricGroup =
-                    metrics.getOrAddOperator(chainedConfig.getOperatorID(), chainedConfig.getOperatorName());
-            SimpleCounter counter =
-                    (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter();
-            counter.setNativeRef(nativeRef);
-            nativeBackedCounters.add(counter);
+            boolean registerInputMetrics = operatorName.contains("Correlate") || operatorName.contains("Calc")
+                    || operatorName.contains("Sink");
+            boolean registerRecordsOut = registerInputMetrics || operatorName.contains("Source");
+            if (registerRecordsOut) {
+                LOG.info("registerNativeMetrics for operator, name is {}", operatorName);
+                String metricsMapKey = getMetricsMapKey(operatorName, chainedConfig.getOperatorID());
+                InternalOperatorMetricGroup operatorMetricGroup =
+                        metrics.getOrAddOperator(chainedConfig.getOperatorID(), operatorName);
+                long nativeRecordsOutRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
+                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_OUT);
+                SimpleCounter recordsOutCounter =
+                        (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter();
+                recordsOutCounter.setNativeRef(nativeRecordsOutRef);
+                nativeBackedCounters.add(recordsOutCounter);
+
+                long nativeBytesOutRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
+                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_BYTES_OUT);
+                SimpleCounter bytesOutCounter =
+                        (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumBytesOutCounter();
+                bytesOutCounter.setNativeRef(nativeBytesOutRef);
+                nativeBackedCounters.add(bytesOutCounter);
+
+                if (chainedConfig.isChainEnd()) {
+                    SimpleCounter taskBytesOutCounter =
+                            (SimpleCounter) metrics.getIOMetricGroup().getNumBytesOutCounter();
+                    taskBytesOutCounter.setNativeRef(nativeBytesOutRef);
+                    nativeBackedCounters.add(taskBytesOutCounter);
+                }
+
+                if (!registerInputMetrics) {
+                    continue;
+                }
+
+                long nativeRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
+                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_IN);
+                SimpleCounter recordsInCounter =
+                        (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsInCounter();
+                recordsInCounter.setNativeRef(nativeRef);
+                nativeBackedCounters.add(recordsInCounter);
+
+                long nativeBytesRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
+                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_BYTES_IN);
+                SimpleCounter bytesInCounter =
+                        (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumBytesInCounter();
+                bytesInCounter.setNativeRef(nativeBytesRef);
+                nativeBackedCounters.add(bytesInCounter);
+
+                if (chainedConfig.isChainStart()) {
+                    operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
+                    SimpleCounter taskBytesInCounter =
+                            (SimpleCounter) metrics.getIOMetricGroup().getNumBytesInCounter();
+                    taskBytesInCounter.setNativeRef(nativeBytesRef);
+                    nativeBackedCounters.add(taskBytesInCounter);
+                }
+            }
         }
         return nativeBackedCounters;
     }
