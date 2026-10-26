@@ -32,6 +32,8 @@ public class KafkaFormatPojo {
 
     private long outOfOrdernessMillis;
 
+    private long idleTimeout;
+
     private long rowtimeFieldIndex = -1;
 
     private String deserializationSchema;
@@ -88,6 +90,14 @@ public class KafkaFormatPojo {
 
     public void setOutOfOrdernessMillis(long outOfOrdernessMillis) {
         this.outOfOrdernessMillis = outOfOrdernessMillis;
+    }
+
+    public long getIdleTimeout() {
+        return idleTimeout;
+    }
+
+    public void setIdleTimeout(long idleTimeout) {
+        this.idleTimeout = idleTimeout;
     }
 
     public long getRowtimeFieldIndex() {

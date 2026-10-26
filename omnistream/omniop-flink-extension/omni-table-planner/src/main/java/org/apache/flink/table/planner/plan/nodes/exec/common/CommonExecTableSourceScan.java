@@ -25,6 +25,7 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.flink.api.common.eventtime.AscendingTimestampsWatermarks;
 import org.apache.flink.api.common.eventtime.BoundedOutOfOrdernessWatermarks;
 import org.apache.flink.api.common.eventtime.NoWatermarksGenerator;
@@ -310,7 +311,19 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
     }
 
     private void setWatermarkStrategy(WatermarkStrategy<?> watermarkStrategy, Map<String, Object> jsonMap) {
+        if (tableSourceSpec.getSourceAbilities() != null) {
+            for (SourceAbilitySpec spec : tableSourceSpec.getSourceAbilities()) {
+                if (spec instanceof WatermarkPushDownSpec) {
+                    Long idleTimeout = ReflectionUtils.retrievePrivateField(spec, "idleTimeoutMillis");
+                    jsonMap.put("idleTimeout", idleTimeout);
+                    break;
+                }
+            }
+        }
         WatermarkGenerator watermarkGenerator = watermarkStrategy.createWatermarkGenerator(null);
+        if (watermarkGenerator instanceof org.apache.flink.api.common.eventtime.WatermarksWithIdleness) {
+            watermarkGenerator = ReflectionUtils.retrievePrivateField(watermarkGenerator, "watermarks");
+        }
         if (watermarkGenerator instanceof NoWatermarksGenerator) {
             jsonMap.put("watermarkStrategy", "no");
         } else if (watermarkGenerator instanceof AscendingTimestampsWatermarks) {
@@ -348,7 +361,7 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
                 RexNode right = call.getOperands().get(1);
                 if (left instanceof RexInputRef
                         && right instanceof RexLiteral
-                        && right.getType().getSqlTypeName().getName().equals("INTERVAL_SECOND")
+                        && right.getType().getSqlTypeName().getFamily() == SqlTypeFamily.INTERVAL_DAY_TIME
                         && ((RexLiteral) right).getValue() instanceof BigDecimal) {
                     jsonMap.put("rowtimeFieldIndex", ((RexInputRef) left).getIndex());
                     long intervalValue = ((BigDecimal) ((RexLiteral) right).getValue()).longValue();
