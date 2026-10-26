@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -158,15 +159,28 @@ public class RemoteDataFetcher implements Runnable {
                             MemorySegment eventMemorySegment = MemorySegmentFactory.wrapOffHeapMemory(byteBuffer);
                             EventBuffer eventBuffer = new EventBuffer(eventMemorySegment);
                             buffer = eventBuffer;
+                            if(isEventIdEndOfPartition(byteBuffer)){
+                                //for EndOfPartitionEvent we need to close remote channel
+                                remoteInputChannel.releaseAllResources();
+                                remoteInputChannel.setConnected(false);
+                            }
                             LOG.info("Notify remote event buffer available, buffer address: {}, buffer class: {}, buffer type: {}",
                                     buffer.getMemorySegment().getAddress(), buffer.getClass().getSimpleName(), buffer.getDataType().toString());
                         }
-                        long bufferAddress = buffer.getMemorySegment().getAddress();
                         int readIndex = buffer.getReaderIndex();
+                        int memorySegmentOffset = buffer.getMemorySegmentOffset();
+                        if (jobType == JobType.SQL && isBuffer && (readIndex != 0 || memorySegmentOffset != 0)) {
+                            buffer.recycleBuffer();
+                            throw new IllegalStateException("SQL remote data buffer must have readerIndex and "
+                                    + "memorySegmentOffset equal to zero, but readerIndex=" + readIndex
+                                    + ", memorySegmentOffset=" + memorySegmentOffset + ", task=" + taskName
+                                    + ", inputGateIndex=" + inputGateIndex + ", channelIndex=" + channelIndex);
+                        }
+                        long bufferAddress = buffer.getMemorySegment().getAddress();
 
                         waitingForRecycleBuffers.put(bufferAddress, buffer);
                         this.notifyRemoteDataAvailable(nativeTaskRef, inputGateIndex, channelIndex, bufferAddress,
-                                bufferLength, readIndex,sequenceNumber, isBuffer, bufferType);
+                                bufferLength, readIndex, memorySegmentOffset, sequenceNumber, isBuffer, bufferType);
 
                         hasData = true;
                     }
@@ -249,6 +263,17 @@ public class RemoteDataFetcher implements Runnable {
         }
     }
 
+    private boolean isEventIdEndOfPartition(ByteBuffer eventBuffer){
+        eventBuffer.order(ByteOrder.BIG_ENDIAN);
+        int event = eventBuffer.getInt(0);
+        if(event == 0){
+            return true;
+        }else {
+            return false;
+        }
+
+    }
+
     /**
      * notifyRemoteDataAvailable
      *
@@ -257,10 +282,15 @@ public class RemoteDataFetcher implements Runnable {
      * @param channelIndex channelIndex
      * @param bufferAddress bufferAddress
      * @param bufferLength bufferLength
+     * @param readIndex readIndex
+     * @param memorySegmentOffset memorySegmentOffset
      * @param sequenceNumber sequenceNumber
+     * @param isBuffer isBuffer
+     * @param bufferType bufferType
      */
     public native void notifyRemoteDataAvailable(long nativeTaskRef, int inputGateIndex, int channelIndex,
-            long bufferAddress, int bufferLength, int readIndex, int sequenceNumber, boolean isBuffer, int bufferType);
+            long bufferAddress, int bufferLength, int readIndex, int memorySegmentOffset, int sequenceNumber,
+            boolean isBuffer, int bufferType);
 
     public native long getRecycleBufferAddress(long nativeTaskRef);
 

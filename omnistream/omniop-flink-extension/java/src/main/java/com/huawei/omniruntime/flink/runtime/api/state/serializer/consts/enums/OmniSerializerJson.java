@@ -17,6 +17,7 @@ public enum OmniSerializerJson {
     FIELDS("fields"),
     FIELD_NAME("fieldName"),
     FIELD_SERIALIZER("fieldSerializer"),
+    SERIALIZER_ATTRIBUTES("serializerAttributes"),
     ;
 
     private final String key;

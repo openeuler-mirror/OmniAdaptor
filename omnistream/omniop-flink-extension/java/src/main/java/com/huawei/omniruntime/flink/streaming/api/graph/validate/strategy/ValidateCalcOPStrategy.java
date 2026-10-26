@@ -417,6 +417,8 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                     return false;
                 }
                 return true;
+            case "IS_NULL":
+                return validateReturnTypeAndArguments(exprMap, inputSize);
             case "IS_NOT_NULL":
                 return validateReturnTypeAndArguments(exprMap, inputSize);
             case "MULTIPLE_AND_OR":

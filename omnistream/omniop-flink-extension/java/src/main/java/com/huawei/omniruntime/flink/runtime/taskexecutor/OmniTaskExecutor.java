@@ -31,6 +31,8 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.StreamConfigPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskInformationPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.descriptor.TaskDeploymentDescriptorPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain.OperatorPOJO;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskExecutorGlobalNettyMetricGroup;
+import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskExecutorGlobalVectorBatchMetricGroup;
 import com.huawei.omniruntime.flink.runtime.shuffle.OmniShuffleEnvironment;
 import com.huawei.omniruntime.flink.runtime.state.TaskStateManagerWrapper;
 import com.huawei.omniruntime.flink.runtime.taskmanager.OmniTask;
@@ -175,6 +177,7 @@ public class OmniTaskExecutor extends TaskExecutor {
     private OmniShuffleEnvironment omniShuffleEnvironment;
     private OmniTaskManagerServices omniTaskManagerServices;
     private Map<ExecutionAttemptID, OmniTaskReferenceCounter> taskMap = new ConcurrentHashMap<>();
+    private long nativeTaskExecutorMetricReference;
 
     public OmniTaskExecutor(RpcService rpcService,
                             TaskManagerConfiguration taskManagerConfiguration,
@@ -197,11 +200,22 @@ public class OmniTaskExecutor extends TaskExecutor {
         try {
             nativeTaskExecutorReference = createNativeTaskExecutor(taskExecutorConfig,
                     omniTaskManagerServices.getNativeOmniTaskManagerServicesAddress());
+            nativeTaskExecutorMetricReference = getNativeTaskManagerMetricGroupRef(nativeTaskExecutorReference);
         } catch (Throwable t) {
             LOG.error("Failed to create NativeTaskExecutor.", t);
         }
 
         log.info("nativeTaskExecutorReference: " + nativeTaskExecutorReference);
+        OmniTaskExecutorGlobalNettyMetricGroup omniTaskExecutorGlobalNettyMetricGroup =
+                new OmniTaskExecutorGlobalNettyMetricGroup(
+                        taskManagerMetricGroup,
+                        nativeTaskExecutorMetricReference,
+                        nativeTaskExecutorReference);
+        OmniTaskExecutorGlobalVectorBatchMetricGroup omniTaskExecutorGlobalVectorBatchMetricGroup =
+                new OmniTaskExecutorGlobalVectorBatchMetricGroup(
+                        taskManagerMetricGroup,
+                        nativeTaskExecutorMetricReference,
+                        nativeTaskExecutorReference);
     }
 
     private static UserCodeClassLoader createUserCodeClassloader(
@@ -423,7 +437,7 @@ public class OmniTaskExecutor extends TaskExecutor {
         JobManagerTaskRestore restore = tdd.getTaskRestore();
         if (restore != null) {
             try {
-                String restoreJson = serializeTaskStateSnapshot(restore.getTaskStateSnapshot());
+                String restoreJson = serializeRestoreTaskStateSnapshot(restore.getTaskStateSnapshot());
                 tddPojo.setTaskStateSnapshot(restoreJson);
                 tddPojo.setRestoreCheckpointId(restore.getRestoreCheckpointId());
                 LOG.debug("TaskStateSnapshot JSON is {}", restoreJson);
@@ -439,13 +453,17 @@ public class OmniTaskExecutor extends TaskExecutor {
         return tddPojo;
     }
 
-    private static String serializeTaskStateSnapshot(TaskStateSnapshot taskStateSnapshot) throws IOException {
- 	         if (containsChannelState(taskStateSnapshot)) {
- 	             LOG.debug("TaskStateSnapshot contains channel state, using JsonHelper serializer");
- 	             return JsonHelper.toJsonWithAllFields(taskStateSnapshot);
- 	         }
- 	         return TaskStateSnapshotDeser.serializeTaskStateSnapshot(taskStateSnapshot);
- 	     }
+    private static String serializeRestoreTaskStateSnapshot(TaskStateSnapshot taskStateSnapshot) throws IOException {
+	         // Preserve the complete Flink object graph, including rescaling descriptors.
+	         // The reduced serializer writes NO_RESCALE unconditionally and is only a fallback.
+	         try {
+	             LOG.info("Serialize restore TaskStateSnapshot with JsonHelper to preserve descriptors");
+	             return JsonHelper.toJsonWithAllFields(taskStateSnapshot);
+	         } catch (RuntimeException e) {
+	             LOG.error("JsonHelper failed to serialize TaskStateSnapshot; descriptor persistence is unavailable", e);
+	             throw new IOException("Failed to serialize TaskStateSnapshot with descriptor preservation", e);
+	         }
+	     }
 
  	     private static boolean containsChannelState(TaskStateSnapshot taskStateSnapshot) {
  	         if (taskStateSnapshot == null) {
@@ -863,5 +881,6 @@ public class OmniTaskExecutor extends TaskExecutor {
     }
 
 
+    public native static long getNativeTaskManagerMetricGroupRef(long nativeTaskExecutorAddress);
 
 }

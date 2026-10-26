@@ -59,7 +59,7 @@ class PlannerModule {
      */
     static final String FLINK_TABLE_PLANNER_FAT_JAR = "flink-table-planner.jar";
 
-    // The jar name finally should be flink-tnel-loader-0.1-SNAPSHOT.jar
+    // Bundled as a resource inside boostkit-omniadaptor-flink-<version>.jar
     static final String OMNI_FLINK_TABLE_PLANNER_FAT_JAR = "omni-flink-table-planner.jar";
     private static final String HINT_USAGE =
             "mvn clean package -pl flink-table/flink-table-planner,flink-table/flink-table-planner-loader -DskipTests";

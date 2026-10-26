@@ -10,8 +10,11 @@ import org.apache.flink.streaming.api.operators.TimerHeapInternalTimer;
 import org.apache.flink.streaming.api.operators.TimerSerializer;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.binary.BinaryRowData;
+import org.apache.flink.table.runtime.operators.window.TimeWindow;
 import org.apache.flink.table.runtime.typeutils.BinaryRowDataSerializer;
+import org.apache.flink.table.runtime.typeutils.ExternalSerializer;
 import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
+import org.apache.flink.table.types.DataType;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -51,6 +54,8 @@ public enum OmniSerializerType {
     BYTE_PRIMITIVE_ARRAY(OmniSerializerCategory.PRIMITIVE_ARRAY, byte[].class, BytePrimitiveArraySerializer.class, 14),
     ROW(OmniSerializerCategory.ROW, RowData.class, RowDataSerializer.class, 15),
     BINARY_ROW(OmniSerializerCategory.BINARY_ROW, BinaryRowData.class, BinaryRowDataSerializer.class, 16),
+    EXTERNAL(OmniSerializerCategory.EXTERNAL, DataType.class, ExternalSerializer.class, 17),
+    TIME_WINDOW(OmniSerializerCategory.TIME_WINDOW, TimeWindow.class, TimeWindow.Serializer.class, 18),
 
     UNKNOWN(OmniSerializerCategory.UNKNOWN, null, null, 0);
 
@@ -121,6 +126,6 @@ public enum OmniSerializerType {
             }
         }
 
-        return null;
+        return OmniSerializerType.UNKNOWN;
     }
 }

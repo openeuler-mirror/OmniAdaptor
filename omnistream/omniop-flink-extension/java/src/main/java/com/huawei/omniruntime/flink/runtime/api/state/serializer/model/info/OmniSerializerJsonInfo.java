@@ -26,6 +26,7 @@ public class OmniSerializerJsonInfo implements Serializable {
     private List<String> fields;
     private List<OmniSerializerJsonInfo> fieldSerializers;
     private JsonNode logicalType;
+    private OmniSerializerAttributesInfo serializerAttributes;
 
     public String getSerializerName() {
         return serializerName;
@@ -99,6 +100,14 @@ public class OmniSerializerJsonInfo implements Serializable {
         this.fieldSerializers = fieldSerializers;
     }
 
+    public OmniSerializerAttributesInfo getSerializerAttributes() {
+        return serializerAttributes;
+    }
+
+    public void setSerializerAttributes(OmniSerializerAttributesInfo serializerAttributes) {
+        this.serializerAttributes = serializerAttributes;
+    }
+
     public JsonNode getLogicalType() {
         return logicalType;
     }
@@ -130,6 +139,7 @@ public class OmniSerializerJsonInfo implements Serializable {
                 + "fields = [" + String.join(SC.BLANK + SC.COMMA, fieldInfoList) + "], "
                 + "fieldSerializers = [" + String.join(SC.BLANK + SC.COMMA, fieldSerializerInfoList) + "]"
                 + "logicalType = " + (null == this.logicalType ? null : this.logicalType.toString()) + ", "
+                + "serializerAttributes = " + (null == this.serializerAttributes ? null : this.serializerAttributes.toString()) + ", "
                 + "}";
     }
 }
