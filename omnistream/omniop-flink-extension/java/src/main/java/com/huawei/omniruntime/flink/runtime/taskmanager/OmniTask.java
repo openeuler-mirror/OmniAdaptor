@@ -37,7 +37,7 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.contrib.streaming.state.RocksDBSharedResources;
+import com.huawei.omniruntime.flink.runtime.state.OmniRocksDBSharedResources;
 import org.apache.flink.contrib.streaming.state.RocksDBStateUploader;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FileSystemSafetyNet;
@@ -135,7 +135,6 @@ import org.apache.flink.streaming.runtime.tasks.OperatorEventDispatcherImpl;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
-import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
@@ -220,7 +219,7 @@ public class OmniTask extends Task {
     // temporarily use public for easy access from OmniTaskWrapper
     public RuntimeEnvironment checkpointingEnv;
 
-    private OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources;
+    private OpaqueMemoryResource<OmniRocksDBSharedResources> rocksDBSharedResources;
 
     private boolean deleteNativeTaskInJavaSide = false;
 
@@ -379,6 +378,16 @@ public class OmniTask extends Task {
                 LOG.debug("Ensuring all FileSystem streams are closed for task {}", this);
                 FileSystemSafetyNet.closeSafetyNetAndGuardedResourcesForThread();
 
+                // Return the shared-memory lease before final-state notification can remove
+                // this task from the slot and allow its MemoryManager to shut down.
+                if (rocksDBSharedResources != null) {
+                    if (nativeTaskRef != 0) {
+                        closeNativeRocksDBSharedResources(nativeTaskRef);
+                    }
+                    rocksDBSharedResources.close();
+                    rocksDBSharedResources = null;
+                }
+
                 notifyFinalState();
             } catch (Throwable t) {
                 // an error in the resource cleanup is fatal
@@ -397,15 +406,6 @@ public class OmniTask extends Task {
             } catch (Throwable t) {
                 LOG.error("Error during metrics de-registration of task {} ({}).", taskNameWithSubtask, executionId,
                         t);
-            }
-
-            // if rocksDBSharedResources was created in java, we need to close them
-            try {
-                if (rocksDBSharedResources != null) {
-                    rocksDBSharedResources.close();
-                }
-            } catch (Throwable t) {
-                LOG.error("Error during closing rocksDBSharedResources of task {} ({}).", taskNameWithSubtask, executionId, t);
             }
 
             //待优化
@@ -1678,6 +1678,8 @@ public class OmniTask extends Task {
 
     private native void notifyNativeTaskRunFinished(long nativeTaskRef);
 
+    private native void closeNativeRocksDBSharedResources(long nativeTaskRef);
+
     private native void dispatchOperatorEvent(long nativeTaskRef, String operatorId, String eventDesc);
 
     private native long doRunNativeTask(long nativeTaskRef, long streamTaskRef /* possible other parameter */);
@@ -1694,7 +1696,7 @@ public class OmniTask extends Task {
         this.taskOperatorGatewayWrapper = taskOperatorGatewayWrapper;
     }
 
-    public void setRocksDBSharedResources(OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources) {
+    public void setRocksDBSharedResources(OpaqueMemoryResource<OmniRocksDBSharedResources> rocksDBSharedResources) {
         this.rocksDBSharedResources = rocksDBSharedResources;
     }
 
