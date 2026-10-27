@@ -25,6 +25,7 @@ public class ValidateCorrelateOPStrategy extends AbstractValidateOperatorStrateg
     private static final Set<String> SUPPORT_JOIN_TYPE = new HashSet<>(Arrays.asList("InnerJoin", "LeftOuterJoin"));
     private static final Set<String> NATIVE_SUPPORTED_FUNCTIONS =
             new HashSet<>(Arrays.asList("jsontest", "nrejsontest"));
+    private static final String NATIVE_SUPPORTED_FUNCTION_CLASS = "org.example.sql.JsonSplit";
 
     @SuppressWarnings("unchecked")
     @Override
@@ -46,6 +47,11 @@ public class ValidateCorrelateOPStrategy extends AbstractValidateOperatorStrateg
         String functionName = operatorInfoMap.get("functionName").toString();
         if (!NATIVE_SUPPORTED_FUNCTIONS.contains(functionName)) {
             LOG.info("Correlate function {} not natively supported, fallback", functionName);
+            return false;
+        }
+        String functionClass = operatorInfoMap.get("functionClass").toString();
+        if (!NATIVE_SUPPORTED_FUNCTION_CLASS.equals(functionClass)) {
+            LOG.info("Correlate function class {} not natively supported, fallback", functionClass);
             return false;
         }
 
