@@ -239,7 +239,7 @@ public final class OmniGraphOverride {
         if (performanceMode && stateBackend != null && !(stateBackend instanceof HashMapStateBackend)) {
             SUPPORT_OP_NAME.clear();
             SUPPORT_OP_NAME.addAll(
-                    Arrays.asList("Calc", "WatermarkAssigner", "StreamRecordTimestampInserter",
+                    Arrays.asList("Calc", "Correlate", "WatermarkAssigner", "StreamRecordTimestampInserter",
                             "ConstraintEnforcer"));
         }
     }
@@ -249,7 +249,7 @@ public final class OmniGraphOverride {
         if (performanceMode) {
             SUPPORT_OP_NAME.clear();
             SUPPORT_OP_NAME.addAll(
-                    Arrays.asList("Calc", "WatermarkAssigner", "StreamRecordTimestampInserter",
+                    Arrays.asList("Calc", "Correlate", "WatermarkAssigner", "StreamRecordTimestampInserter",
                             "ConstraintEnforcer"));
         }
     }
