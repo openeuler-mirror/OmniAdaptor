@@ -31,7 +31,6 @@ public class OmniInternalOperatorIOMetricGroup extends OmniMetricGroup {
 
     private Counter numBytesIn;
     private Counter numBytesOut;
-    private Meter numBytesInRate;
 
 
     public OmniInternalOperatorIOMetricGroup(long omniTaskMetricRef, String operatorName) {
@@ -58,9 +57,6 @@ public class OmniInternalOperatorIOMetricGroup extends OmniMetricGroup {
 
         this.numRecordsOutRate = new MeterView(numRecordsOut);
         registerMetric(MetricNames.IO_NUM_RECORDS_OUT_RATE, numRecordsOutRate);
-
-        this.numBytesInRate = new MeterView(numBytesIn);
-        registerMetric(MetricNames.IO_NUM_BYTES_IN_RATE, numBytesInRate);
     }
 
     public Counter getNumRecordsInCounter() {
@@ -85,10 +81,6 @@ public class OmniInternalOperatorIOMetricGroup extends OmniMetricGroup {
 
     public Counter getNumBytesOutCounter() {
         return numBytesOut;
-    }
-
-    public Meter getNumBytesInRateMeter() {
-        return numBytesInRate;
     }
 
     /**

@@ -14,20 +14,30 @@ import com.huawei.omniruntime.flink.runtime.metrics.OmniSizeGauge;
 import com.huawei.omniruntime.flink.runtime.metrics.OmniTimeGauge;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.Meter;
+import org.apache.flink.metrics.MeterView;
 import org.apache.flink.metrics.Metric;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.metrics.ViewUpdater;
+import org.apache.flink.runtime.metrics.NoOpMetricRegistry;
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.metrics.dump.QueryScopeInfo;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.metrics.groups.InternalOperatorIOMetricGroup;
+import org.apache.flink.runtime.metrics.groups.AbstractMetricGroup;
+import org.apache.flink.runtime.metrics.groups.InternalOperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
+import org.apache.flink.runtime.metrics.groups.TaskManagerMetricGroup;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.metrics.MetricNames;
+import org.apache.flink.streaming.api.graph.StreamConfig;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedConstruction;
@@ -36,6 +46,8 @@ import org.mockito.MockedStatic;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.lang.reflect.Field;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -54,6 +66,116 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 
 class OmniMetricHelperTest {
+    @Test
+    void nativeIoBindingsReuseJavaCountersAndSkipUnsupportedOperators() {
+        String[] names = {"Source: kafka", "Calc", "Correlate", "Sink: blackhole", "GroupAggregate", "Join",
+                "WindowJoin", "Expand", "WatermarkAssigner", "Calc(select=[SourceValue])",
+                "GroupAggregate(select=[CalcValue,SinkValue,SourceValue,CorrelateValue])"};
+        for (String name : names) {
+            for (boolean boundary : new boolean[] {false, true}) {
+                Map<String, Long> nativeRefs = new HashMap<>();
+                try (MockedConstruction<MeterView> ignored = mockConstruction(MeterView.class);
+                        MockedStatic<OmniMetricHelper> helper = mockStatic(OmniMetricHelper.class, invocation -> {
+                            if (invocation.getMethod().getName().equals("createNativeIoCounter")) {
+                                String key = invocation.getArgument(1) + ":" + invocation.getArgument(2);
+                                long ref = nativeRefs.size() + 1L;
+                                assertFalse(nativeRefs.containsKey(key), "duplicate native IO counter " + key);
+                                nativeRefs.put(key, ref);
+                                return ref;
+                            }
+                            return invocation.callRealMethod();
+                        })) {
+                    TaskManagerMetricGroup manager = TaskManagerMetricGroup.createTaskManagerMetricGroup(
+                            NoOpMetricRegistry.INSTANCE, "localhost", new ResourceID("native-io-test"));
+                    TaskMetricGroup task = manager.addJob(new JobID(), "native-io-test")
+                            .addTask(ExecutionAttemptID.randomId(), name);
+                    List<SimpleCounter> bound = Collections.emptyList();
+                    try {
+                        OperatorID id = new OperatorID();
+                        InternalOperatorIOMetricGroup io = task.getOrAddOperator(id, name).getIOMetricGroup();
+                        Counter[] original = {io.getNumRecordsInCounter(), io.getNumRecordsOutCounter(),
+                                io.getNumBytesInCounter(), io.getNumBytesOutCounter()};
+                        StreamConfig config = new StreamConfig(new Configuration());
+                        config.setOperatorID(id);
+                        config.setOperatorName(name);
+                        if (boundary) {
+                            config.setChainStart();
+                            config.setChainEnd();
+                            // OmniTask.prepareEnvironment performs this before Native registration.
+                            io.reuseOutputMetricsForTask();
+                        }
+                        bound = OmniMetricHelper.registerNativeMetrics(task, 1L, Collections.singletonList(config));
+                        boolean source = name.startsWith("Source");
+                        boolean supported = source || name.startsWith("Calc") || name.startsWith("Correlate")
+                                || name.startsWith("Sink");
+                        assertEquals(supported ? (source ? 2 : 4) : 0, nativeRefs.size(), name);
+                        assertEquals(supported ? (source ? (boundary ? 3 : 2) : (boundary ? 6 : 4)) : 0,
+                                bound.size(), name);
+                        assertSame(original[0], io.getNumRecordsInCounter());
+                        assertSame(original[1], io.getNumRecordsOutCounter());
+                        assertSame(original[2], io.getNumBytesInCounter());
+                        assertSame(original[3], io.getNumBytesOutCounter());
+                        for (int i = 0; i < original.length; i++) {
+                            boolean input = i == 0 || i == 2;
+                            assertEquals(supported && (!input || !source),
+                                    ((SimpleCounter) original[i]).getNativeRef() != 0L, name);
+                        }
+                        SimpleCounter taskBytesIn = (SimpleCounter) task.getIOMetricGroup().getNumBytesInCounter();
+                        SimpleCounter taskBytesOut = (SimpleCounter) task.getIOMetricGroup().getNumBytesOutCounter();
+                        assertEquals(boundary && supported && !source
+                                        ? ((SimpleCounter) original[2]).getNativeRef() : 0L,
+                                taskBytesIn.getNativeRef(), name);
+                        assertEquals(boundary && supported ? ((SimpleCounter) original[3]).getNativeRef() : 0L,
+                                taskBytesOut.getNativeRef(), name);
+                        // Clear stand-in addresses before reading Java counters; verify task sums only reuse once.
+                        for (SimpleCounter counter : bound) {
+                            counter.setNativeRef(0L);
+                        }
+                        original[0].inc(100);
+                        original[1].inc(30);
+                        assertEquals(boundary && supported && !source ? 100 : 0,
+                                task.getIOMetricGroup().getNumRecordsInCounter().getCount(), name);
+                        assertEquals(boundary ? 30 : 0,
+                                task.getIOMetricGroup().getNumRecordsOutCounter().getCount(), name);
+                    } finally {
+                        for (SimpleCounter counter : bound) {
+                            counter.setNativeRef(0L);
+                        }
+                        manager.close();
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void outputByteRateUsesExistingOperatorCounter() throws Exception {
+        TaskMetricGroup task = UnregisteredMetricGroups.createUnregisteredTaskMetricGroup();
+        try {
+            InternalOperatorMetricGroup operator = task.getOrAddOperator(new OperatorID(), "Source");
+            InternalOperatorIOMetricGroup io = operator.getIOMetricGroup();
+            Counter bytesOut = io.getNumBytesOutCounter();
+            OmniMetricHelper.registerOutputByteRate(io);
+
+            Field registeredField = AbstractMetricGroup.class.getDeclaredField("metrics");
+            registeredField.setAccessible(true);
+            Map<?, ?> registered = (Map<?, ?>) registeredField.get(operator);
+            Meter rate = (Meter) registered.get(MetricNames.IO_NUM_BYTES_OUT_RATE);
+            assertTrue(rate != null);
+            bytesOut.inc(100);
+            assertEquals(100, rate.getCount());
+            bytesOut.inc(25);
+            assertEquals(125, rate.getCount());
+            for (int i = 0; i < 12; i++) {
+                ((MeterView) rate).update();
+            }
+            assertEquals(125.0 / 60.0, rate.getRate(), 0.000001);
+            assertSame(bytesOut, io.getNumBytesOutCounter());
+        } finally {
+            task.close();
+        }
+    }
+
     @Test
     void memoryMetricRegistrationAndCleanupPreserveNativeIoBindings() {
         TaskMetricGroup task = UnregisteredMetricGroups.createUnregisteredTaskMetricGroup();
@@ -183,6 +305,8 @@ class OmniMetricHelperTest {
                     .thenReturn(mock(OmniDescriptiveStatisticsHistogram.class));
 
             OmniTaskIOMetricGroup runtime = new OmniTaskIOMetricGroup(1L, false);
+            runtime.reuseRecordsInputCounter(new SimpleCounter());
+            runtime.reuseRecordsOutputCounter(new SimpleCounter());
             assertTrue(runtime.getRegisteredMetrics().containsKey(MetricNames.TASK_HARD_BACK_PRESSURED_TIME));
             assertTrue(runtime.getRegisteredMetrics().containsKey(MetricNames.TASK_SOFT_BACK_PRESSURED_TIME));
             assertTrue(runtime.getRegisteredMetrics().containsKey(MetricNames.TASK_IDLE_TIME));

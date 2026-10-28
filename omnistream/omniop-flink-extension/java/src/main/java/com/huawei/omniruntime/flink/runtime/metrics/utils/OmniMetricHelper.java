@@ -280,66 +280,79 @@ public class OmniMetricHelper {
             if (operatorName == null) {
                 continue;
             }
-            boolean registerInputMetrics = operatorName.contains("Correlate") || operatorName.contains("Calc")
-                    || operatorName.contains("Sink");
-            boolean registerRecordsOut = registerInputMetrics || operatorName.contains("Source");
-            if (registerRecordsOut) {
-                LOG.info("registerNativeMetrics for operator, name is {}", operatorName);
-                String metricsMapKey = getMetricsMapKey(operatorName, chainedConfig.getOperatorID());
-                InternalOperatorMetricGroup operatorMetricGroup =
-                        metrics.getOrAddOperator(chainedConfig.getOperatorID(), operatorName);
-                long nativeRecordsOutRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
-                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_OUT);
-                SimpleCounter recordsOutCounter =
-                        (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter();
-                recordsOutCounter.setNativeRef(nativeRecordsOutRef);
-                nativeBackedCounters.add(recordsOutCounter);
+            boolean registerInputMetrics = operatorName.startsWith("Calc") || operatorName.startsWith("Correlate")
+                    || operatorName.startsWith("Sink");
+            if (!registerInputMetrics && !operatorName.startsWith("Source")) {
+                continue;
+            }
+            LOG.info("registerNativeMetrics for operator, name is {}", operatorName);
+            String metricsMapKey = getMetricsMapKey(operatorName, chainedConfig.getOperatorID());
+            InternalOperatorMetricGroup operatorMetricGroup =
+                    metrics.getOrAddOperator(chainedConfig.getOperatorID(), operatorName);
+            long nativeRecordsOutRef = createNativeIoCounter(nativeRefTaskMetricGroupRef,
+                    "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_OUT);
+            SimpleCounter recordsOutCounter =
+                    (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter();
+            recordsOutCounter.setNativeRef(nativeRecordsOutRef);
+            nativeBackedCounters.add(recordsOutCounter);
 
-                long nativeBytesOutRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
-                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_BYTES_OUT);
-                SimpleCounter bytesOutCounter =
-                        (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumBytesOutCounter();
-                bytesOutCounter.setNativeRef(nativeBytesOutRef);
-                nativeBackedCounters.add(bytesOutCounter);
+            long nativeBytesOutRef = createNativeIoCounter(nativeRefTaskMetricGroupRef,
+                    "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_BYTES_OUT);
+            SimpleCounter bytesOutCounter =
+                    (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumBytesOutCounter();
+            bytesOutCounter.setNativeRef(nativeBytesOutRef);
+            nativeBackedCounters.add(bytesOutCounter);
+            registerOutputByteRate(operatorMetricGroup.getIOMetricGroup());
+            LOG.info("Omni IO bind: operator={}, direction=out, recordsRef={}, bytesRef={}, counterClass={}",
+                    operatorName, nativeRecordsOutRef, nativeBytesOutRef, bytesOutCounter.getClass().getName());
 
-                if (chainedConfig.isChainEnd()) {
-                    SimpleCounter taskBytesOutCounter =
-                            (SimpleCounter) metrics.getIOMetricGroup().getNumBytesOutCounter();
-                    taskBytesOutCounter.setNativeRef(nativeBytesOutRef);
-                    nativeBackedCounters.add(taskBytesOutCounter);
-                }
+            if (chainedConfig.isChainEnd()) {
+                SimpleCounter taskBytesOutCounter =
+                        (SimpleCounter) metrics.getIOMetricGroup().getNumBytesOutCounter();
+                taskBytesOutCounter.setNativeRef(nativeBytesOutRef);
+                nativeBackedCounters.add(taskBytesOutCounter);
+            }
 
-                if (!registerInputMetrics) {
-                    continue;
-                }
+            if (!registerInputMetrics) {
+                continue;
+            }
 
-                long nativeRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
-                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_IN);
-                SimpleCounter recordsInCounter =
-                        (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsInCounter();
-                recordsInCounter.setNativeRef(nativeRef);
-                nativeBackedCounters.add(recordsInCounter);
+            long nativeRef = createNativeIoCounter(nativeRefTaskMetricGroupRef,
+                    "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_IN);
+            SimpleCounter recordsInCounter =
+                    (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsInCounter();
+            recordsInCounter.setNativeRef(nativeRef);
+            nativeBackedCounters.add(recordsInCounter);
 
-                long nativeBytesRef = createNativeSimpleCounter(nativeRefTaskMetricGroupRef,
-                        "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_BYTES_IN);
-                SimpleCounter bytesInCounter =
-                        (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumBytesInCounter();
-                bytesInCounter.setNativeRef(nativeBytesRef);
-                nativeBackedCounters.add(bytesInCounter);
-                // Keep the byte rate on the original Java counter, alongside the record meters.
-                operatorMetricGroup.getIOMetricGroup().meter(
-                        MetricNames.IO_NUM_BYTES_IN_RATE, new MeterView(bytesInCounter));
+            long nativeBytesRef = createNativeIoCounter(nativeRefTaskMetricGroupRef,
+                    "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_BYTES_IN);
+            SimpleCounter bytesInCounter =
+                    (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumBytesInCounter();
+            bytesInCounter.setNativeRef(nativeBytesRef);
+            nativeBackedCounters.add(bytesInCounter);
+            // Keep the byte rate on the original Java counter, alongside the record meters.
+            operatorMetricGroup.getIOMetricGroup().meter(
+                    MetricNames.IO_NUM_BYTES_IN_RATE, new MeterView(bytesInCounter));
+            LOG.info("Omni IO bind: operator={}, direction=in, recordsRef={}, bytesRef={}, counterClass={}",
+                    operatorName, nativeRef, nativeBytesRef, bytesInCounter.getClass().getName());
 
-                if (chainedConfig.isChainStart()) {
-                    operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
-                    SimpleCounter taskBytesInCounter =
-                            (SimpleCounter) metrics.getIOMetricGroup().getNumBytesInCounter();
-                    taskBytesInCounter.setNativeRef(nativeBytesRef);
-                    nativeBackedCounters.add(taskBytesInCounter);
-                }
+            if (chainedConfig.isChainStart()) {
+                operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
+                SimpleCounter taskBytesInCounter =
+                        (SimpleCounter) metrics.getIOMetricGroup().getNumBytesInCounter();
+                taskBytesInCounter.setNativeRef(nativeBytesRef);
+                nativeBackedCounters.add(taskBytesInCounter);
             }
         }
         return nativeBackedCounters;
+    }
+
+    static long createNativeIoCounter(long taskMetricGroupRef, String scope, String identifier) {
+        return createNativeSimpleCounter(taskMetricGroupRef, scope, identifier);
+    }
+
+    static void registerOutputByteRate(InternalOperatorIOMetricGroup ioMetrics) {
+        ioMetrics.meter(MetricNames.IO_NUM_BYTES_OUT_RATE, new MeterView(ioMetrics.getNumBytesOutCounter()));
     }
 
     private static String getMetricsMapKey(String operatorName, OperatorID operatorID) {

@@ -211,7 +211,9 @@ public class OmniTaskIOMetricGroup extends OmniMetricGroup {
      * @param numRecordsOutCounter numRecordsOut counter
      */
     public void reuseRecordsOutputCounter(Counter numRecordsOutCounter) {
-        this.numRecordsOut.addCounter(numRecordsOutCounter);
+        if (this.numRecordsOut != null) {
+            this.numRecordsOut.addCounter(numRecordsOutCounter);
+        }
     }
 
     /**
@@ -220,7 +222,9 @@ public class OmniTaskIOMetricGroup extends OmniMetricGroup {
      * @param numRecordsInCounter numRecordsIn counter
      */
     public void reuseRecordsInputCounter(Counter numRecordsInCounter) {
-        this.numRecordsIn.addCounter(numRecordsInCounter);
+        if (this.numRecordsIn != null) {
+            this.numRecordsIn.addCounter(numRecordsInCounter);
+        }
     }
 
     /**
