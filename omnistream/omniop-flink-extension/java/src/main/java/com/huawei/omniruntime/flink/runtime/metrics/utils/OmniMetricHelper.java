@@ -25,6 +25,7 @@ import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.Meter;
+import org.apache.flink.metrics.MeterView;
 import org.apache.flink.metrics.Metric;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.metrics.MetricNames;
@@ -226,7 +227,8 @@ public class OmniMetricHelper {
             String scope, String identifier);
 
     /**
-     * Registers Omni metrics.
+     * Registers native execution, memory and keyed-state metrics. Record/byte metrics remain bound to Flink counters
+     * by {@link #registerNativeMetrics(TaskMetricGroup, long, Collection)}.
      *
      * @param metrics The TaskMetricGroup to register the metrics with.
      * @param nativeRefTaskMetricGroupRef The reference to the native task metric group.
@@ -235,22 +237,13 @@ public class OmniMetricHelper {
     public static OmniTaskMetricGroup registerOmniMetrics(TaskMetricGroup metrics, long nativeRefTaskMetricGroupRef,
             long nativeTaskRef, Map<String, OperatorID> operatorNameToId) {
         OmniTaskMetricGroup omniTaskMetricGroup = new OmniTaskMetricGroup();
-        // the Omni metrics below replace Flink's inside the MetricQueryService, so the group needs
-        // the Flink group to undo that at close()
+        // Keep the original Flink IO counters: task records reuse the chain boundary counters,
+        // and replacing operator IO groups here would create a second set of native counters.
+        // Native partitions still need the task timers: SetMetricGroup obtains the hard
+        // backpressure timer from the native task IO group before requesting buffer memory.
         omniTaskMetricGroup.setFlinkTaskMetricGroup(metrics);
-        OmniTaskIOMetricGroup omniTaskIOMetricGroup = registerTaskIOMetrics(metrics, nativeRefTaskMetricGroupRef);
-        List<OmniInternalOperatorIOMetricGroup> omniInternalOperatorIOMetricGroups =
-                registerInternalOperatorMetric(metrics, nativeRefTaskMetricGroupRef);
-        for (OmniInternalOperatorIOMetricGroup omniInternalOperatorIOMetricGroup : omniInternalOperatorIOMetricGroups) {
-            omniTaskIOMetricGroup.reuseRecordsInputCounter(omniInternalOperatorIOMetricGroup.getNumRecordsInCounter());
-            omniTaskIOMetricGroup.reuseRecordsOutputCounter
-                    (omniInternalOperatorIOMetricGroup.getNumRecordsOutCounter());
-        }
-        omniTaskMetricGroup.setOmniTaskIOMetricGroup(omniTaskIOMetricGroup);
-        for (OmniInternalOperatorIOMetricGroup omniInternalOperatorIOMetricGroup : omniInternalOperatorIOMetricGroups) {
-            omniTaskMetricGroup.addOperator(omniInternalOperatorIOMetricGroup.getMetricGroupName(),
-                    omniInternalOperatorIOMetricGroup);
-        }
+        omniTaskMetricGroup.setOmniTaskIOMetricGroup(
+                registerTaskRuntimeMetrics(metrics, nativeRefTaskMetricGroupRef));
         //create OmniNettyBufferMetricGroup. Both groups read through the raw nativeTaskRef, so they
         //are handed to omniTaskMetricGroup and closed with it, before the native task can be deleted.
         OmniTaskLocalNettyBufferMetricGroup omniTaskLocalNettyBufferMetricGroup = new OmniTaskLocalNettyBufferMetricGroup(metrics,nativeRefTaskMetricGroupRef,nativeTaskRef);
@@ -333,6 +326,9 @@ public class OmniMetricHelper {
                         (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumBytesInCounter();
                 bytesInCounter.setNativeRef(nativeBytesRef);
                 nativeBackedCounters.add(bytesInCounter);
+                // Keep the byte rate on the original Java counter, alongside the record meters.
+                operatorMetricGroup.getIOMetricGroup().meter(
+                        MetricNames.IO_NUM_BYTES_IN_RATE, new MeterView(bytesInCounter));
 
                 if (chainedConfig.isChainStart()) {
                     operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
@@ -640,12 +636,32 @@ public class OmniMetricHelper {
      */
     public static OmniTaskIOMetricGroup registerTaskIOMetrics(TaskMetricGroup metrics,
             long nativeRefTaskMetricGroupRef) {
+        return registerTaskIOMetrics(metrics, nativeRefTaskMetricGroupRef, true);
+    }
+
+    static OmniTaskIOMetricGroup registerTaskRuntimeMetrics(TaskMetricGroup metrics,
+            long nativeRefTaskMetricGroupRef) {
+        return registerTaskIOMetrics(metrics, nativeRefTaskMetricGroupRef, false);
+    }
+
+    private static OmniTaskIOMetricGroup registerTaskIOMetrics(TaskMetricGroup metrics,
+            long nativeRefTaskMetricGroupRef, boolean registerRecordAndByteMetrics) {
         TaskIOMetricGroup taskIOMetricGroup = metrics.getIOMetricGroup();
         Map<String, Metric> originalMetricMap = getMetricMapFromProxyMetricGroup(taskIOMetricGroup,
                 TaskIOMetricGroup.class);
         originalMetricMap.remove("numMailsProcessed");
+        OmniTaskIOMetricGroup omniTaskIoMetricGroup =
+                new OmniTaskIOMetricGroup(nativeRefTaskMetricGroupRef, registerRecordAndByteMetrics);
+        if (!registerRecordAndByteMetrics) {
+            // Only wait for and replace runtime metrics, keeping the existing IO counters
+            // and their MeterViews (already connected to native counters) untouched.
+            List<String> runtimeFields = new ArrayList<>();
+            for (Metric metric : omniTaskIoMetricGroup.getRegisteredMetrics().values()) {
+                getMetricFieldName(omniTaskIoMetricGroup, metric).ifPresent(runtimeFields::add);
+            }
+            originalMetricMap.keySet().retainAll(runtimeFields);
+        }
         waitMetricRegisteredInMetricQueryService(metrics, originalMetricMap);
-        OmniTaskIOMetricGroup omniTaskIoMetricGroup = new OmniTaskIOMetricGroup(nativeRefTaskMetricGroupRef);
         updateOmniMetricsOnMetricQueryService(metrics, omniTaskIoMetricGroup, originalMetricMap,
                 omniTaskIoMetricGroup.getRegisteredMetrics());
         return omniTaskIoMetricGroup;
