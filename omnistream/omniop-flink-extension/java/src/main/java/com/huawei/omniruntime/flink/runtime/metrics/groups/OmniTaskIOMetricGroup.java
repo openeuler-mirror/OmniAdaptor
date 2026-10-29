@@ -63,14 +63,21 @@ public class OmniTaskIOMetricGroup extends OmniMetricGroup {
     private long taskStartTime;
 
     public OmniTaskIOMetricGroup(long omniTaskMetricRef) {
+        this(omniTaskMetricRef, true);
+    }
+
+    public OmniTaskIOMetricGroup(long omniTaskMetricRef, boolean registerRecordAndByteMetrics) {
         super(omniTaskMetricRef, "OmniTaskIOMetricGroup");
-        createOmniMetricsInstance();
+        if (registerRecordAndByteMetrics) {
+            createRecordAndByteMetrics();
+        }
+        createRuntimeMetrics();
     }
 
     /**
      * create omni metrics instance and register metrics.
      */
-    private void createOmniMetricsInstance() {
+    private void createRecordAndByteMetrics() {
         this.numBytesIn = createOmniSimpleCounter(this.omniTaskMetricRef, this.metricGroupName,
                 MetricNames.IO_NUM_BYTES_IN);
         registerMetric(MetricNames.IO_NUM_BYTES_IN, numBytesIn);
@@ -96,7 +103,9 @@ public class OmniTaskIOMetricGroup extends OmniMetricGroup {
 
         this.numRecordsOutRate = new MeterView(numRecordsOut);
         registerMetric(MetricNames.IO_NUM_RECORDS_OUT_RATE, numRecordsOutRate);
+    }
 
+    private void createRuntimeMetrics() {
         this.numBuffersOut = createOmniSimpleCounter(this.omniTaskMetricRef, this.metricGroupName,
                 MetricNames.IO_NUM_BUFFERS_OUT);
         registerMetric(MetricNames.IO_NUM_BUFFERS_OUT, numBuffersOut);
@@ -202,7 +211,9 @@ public class OmniTaskIOMetricGroup extends OmniMetricGroup {
      * @param numRecordsOutCounter numRecordsOut counter
      */
     public void reuseRecordsOutputCounter(Counter numRecordsOutCounter) {
-        this.numRecordsOut.addCounter(numRecordsOutCounter);
+        if (this.numRecordsOut != null) {
+            this.numRecordsOut.addCounter(numRecordsOutCounter);
+        }
     }
 
     /**
@@ -211,7 +222,9 @@ public class OmniTaskIOMetricGroup extends OmniMetricGroup {
      * @param numRecordsInCounter numRecordsIn counter
      */
     public void reuseRecordsInputCounter(Counter numRecordsInCounter) {
-        this.numRecordsIn.addCounter(numRecordsInCounter);
+        if (this.numRecordsIn != null) {
+            this.numRecordsIn.addCounter(numRecordsInCounter);
+        }
     }
 
     /**
