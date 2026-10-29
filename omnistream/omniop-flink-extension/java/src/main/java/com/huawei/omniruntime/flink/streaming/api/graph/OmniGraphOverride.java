@@ -16,6 +16,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.AbstractValidateOperatorStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateCalcOPStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateOperatorStrategyFactory;
+import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateValuesOPStrategy;
 import com.huawei.omniruntime.flink.utils.DescriptionUtil;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 
@@ -261,32 +262,6 @@ public final class OmniGraphOverride {
     private static boolean isIntervalOutputType(String type) {
         return type != null && type.matches("^INTERVAL(?: |_).*$");
     }
-
-    // 原生时间类型是 int64 毫秒，因此只能表示精度 <= 3。VALUES 源只放行白名单内的
-    // 字面量类型（LogicalType.toString() 形式，含可选的 " NOT NULL" 后缀）；FLOAT、
-    // INTERVAL、复杂 ROW/ARRAY/MAP、精度>3 的 TIME/TIMESTAMP、BINARY/VARBINARY 一律回退 Flink，
-    // 以保证与原生 Flink 输出严格一致。
-    private static final Set<String> VALUES_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
-            "BIGINT",
-            "INT",
-            "DOUBLE",
-            "DATE",
-            "BOOLEAN",
-            "TIME(0)",
-            "TIME(1)",
-            "TIME(2)",
-            "TIME(3)",
-            "TIMESTAMP(0)",
-            "TIMESTAMP(1)",
-            "TIMESTAMP(2)",
-            "TIMESTAMP(3)",
-            "TIMESTAMP(0) WITH LOCAL TIME ZONE",
-            "TIMESTAMP(1) WITH LOCAL TIME ZONE",
-            "TIMESTAMP(2) WITH LOCAL TIME ZONE",
-            "TIMESTAMP(3) WITH LOCAL TIME ZONE",
-            "VARCHAR",
-            "CHAR",
-            "DECIMAL"));
 
     /**
      * setStateBackend
@@ -912,7 +887,8 @@ public final class OmniGraphOverride {
         // They are executed natively only when the description is complete and every output type is
         // within the native VALUES whitelist; otherwise fall back to Flink.
         if (operatorFactory instanceof SimpleInputFormatOperatorFactory) {
-            return validateValuesSource(operatorDescription);
+            Map<String, Object> jsonMap = toJsonMap(operatorDescription);
+            return jsonMap != null && new ValidateValuesOPStrategy().executeValidateOperator(jsonMap);
         }
         if (!operatorDescription.contains("originDescription")) {
             return true;
@@ -935,61 +911,6 @@ public final class OmniGraphOverride {
         }
         return jsonMap.containsKey("watermarkStrategy") && (jsonMap.get("watermarkStrategy") instanceof String)
                 && !((String) jsonMap.get("watermarkStrategy")).isEmpty();
-    }
-
-    private static boolean validateValuesSource(String operatorDescription) {
-        Map<String, Object> jsonMap = toJsonMap(operatorDescription);
-        if (jsonMap == null) {
-            LOG.info("validateSource: VALUES source description is not valid JSON, fall back to Flink.");
-            return false;
-        }
-        if (!"values".equals(jsonMap.get("format"))) {
-            LOG.info("validateSource: VALUES source description missing format=values, fall back to Flink.");
-            return false;
-        }
-        Object tuplesObj = jsonMap.get("tuples");
-        if (!(tuplesObj instanceof List)) {
-            LOG.info("validateSource: VALUES source description missing tuples, fall back to Flink.");
-            return false;
-        }
-        Object outputTypesObj = jsonMap.get("outputTypes");
-        if (!(outputTypesObj instanceof List) || ((List<?>) outputTypesObj).isEmpty()) {
-            LOG.info("validateSource: VALUES source description missing outputTypes, fall back to Flink.");
-            return false;
-        }
-        List<?> outputTypes = (List<?>) outputTypesObj;
-        for (Object outputType : outputTypes) {
-            if (!(outputType instanceof String) || !isValuesNativeSupportedType((String) outputType)) {
-                LOG.info("validateSource: VALUES source output type '{}' is not supported for native execution, "
-                        + "fall back to Flink.", outputType);
-                return false;
-            }
-        }
-        for (Object rowObj : (List<?>) tuplesObj) {
-            if (!(rowObj instanceof List) || ((List<?>) rowObj).size() != outputTypes.size()) {
-                LOG.info("validateSource: VALUES source tuples row width mismatch, fall back to Flink.");
-                return false;
-            }
-        }
-        LOG.info("validateSource: VALUES source is suitable for native execution.");
-        return true;
-    }
-
-    private static boolean isValuesNativeSupportedType(String type) {
-        String stripped = AbstractValidateOperatorStrategy.stripNotNull(type);
-        if (stripped == null) {
-            return false;
-        }
-        stripped = stripped.trim();
-        // VARCHAR(n) / CHAR(n)
-        if (stripped.startsWith("VARCHAR(") || stripped.startsWith("CHAR(")) {
-            return true;
-        }
-        // DECIMAL(p, s) with 1 <= p <= 38, Flink already validates the decimal range.
-        if (stripped.startsWith("DECIMAL")) {
-            return true;
-        }
-        return VALUES_SUPPORT_DATA_TYPE.contains(stripped);
     }
 
     /**
@@ -1016,7 +937,11 @@ public final class OmniGraphOverride {
      */
     private static boolean chainContainsBinaryOrVarbinaryOutput(List<StreamNode> chainedNode) {
         for (StreamNode node : chainedNode) {
-            Map<String, Object> jsonMap = toJsonMap(node.getOperatorDescription());
+            String operatorDescription = node.getOperatorDescription();
+            if (operatorDescription == null || operatorDescription.trim().isEmpty()) {
+                continue;
+            }
+            Map<String, Object> jsonMap = toJsonMap(operatorDescription);
             if (jsonMap == null || !(jsonMap.get("outputTypes") instanceof List)) {
                 continue;
             }

@@ -117,8 +117,19 @@ public abstract class CommonExecValues extends ExecNodeBase<RowData>
     /**
      * Build the native VALUES source description consumed by the C++ ValuesSourceFunction:
      * {format:"values", tuples:[["..."|null,...],...], outputTypes:[...], outputNames:[...],
-     * batch:true}. outputTypes use Flink's {@link org.apache.flink.table.types.logical.LogicalType}
-     * summary strings, which are parsed by C++ LogicalType::flinkTypeToOmniTypeId.
+     * batch:true}.
+     *
+     * <p>outputTypes intentionally use Flink's {@code LogicalType.toString()} (= asSummaryString)
+     * summary dialect, e.g. "DECIMAL(38, 2)", "TIMESTAMP_LTZ(3)", "VARCHAR(10)", with an optional
+     * " NOT NULL" suffix for non-nullable fields. The C++ side parses this via
+     * LogicalType::flinkTypeToOmniTypeId (classification) and
+     * LogicalType::parseDecimalPrecisionScale (decimal precision/scale); the latter only extracts
+     * precision/scale from the "DECIMAL(p, s)" summary form.
+     *
+     * <p>Do NOT switch this list to DescriptionUtil.getFieldType(...) for consistency with other
+     * operators: DescriptionUtil emits the "DECIMAL64(p,s)" / "DECIMAL128(p,s)" prefix form, which
+     * the C++ parser tolerates only for type-id classification and would parse the decimal
+     * precision/scale incorrectly (silent precision loss / spurious nulls in native VALUES source).
      */
     private String buildNativeDescription(RowType outputType) throws JsonProcessingException {
         Map<String, Object> description = new LinkedHashMap<>();
