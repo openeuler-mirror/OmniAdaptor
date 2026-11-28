@@ -434,7 +434,7 @@ public class ParquetColumnarBatchScanReader {
                 vecList[i] = new LongVec(vecNativeIds[nativeGetId]);
                 tryToAdjustTimestampVec((LongVec) vecList[i], rtn, i);
             } else {
-                throw new RuntimeException("Unsupport type for ColumnarFileScan: " + type.typeName());
+                throw new RuntimeException("Unsupported type for ColumnarFileScan: " + type.typeName());
             }
             nativeGetId++;
         }

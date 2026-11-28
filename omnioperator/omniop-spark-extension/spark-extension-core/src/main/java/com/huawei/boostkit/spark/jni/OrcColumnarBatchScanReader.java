@@ -305,7 +305,7 @@ public class OrcColumnarBatchScanReader {
                     break;
                 }
                 default: {
-                    throw new RuntimeException("UnSupport type for ColumnarFileScan:" +
+                    throw new RuntimeException("Unsupported type for ColumnarFileScan:" +
                         DataType.DataTypeId.values()[typeIds[i]]);
                 }
             }
